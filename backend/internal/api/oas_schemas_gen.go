@@ -107,6 +107,7 @@ func (*Error) getMeRes()                 {}
 func (*Error) getPendingOrgsRes()        {}
 func (*Error) listGithubWebhooksRes()    {}
 func (*Error) listInvitationsRes()       {}
+func (*Error) listMembersRes()           {}
 func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
 func (*Error) verifyEmailRes()           {}
@@ -265,6 +266,101 @@ func (s *InvitationResponse) SetExpiresAt(val OptString) {
 }
 
 func (*InvitationResponse) createInvitationRes() {}
+
+// A list of members for the active organization.
+// Ref: #/components/schemas/MemberListResponse
+type MemberListResponse struct {
+	Members []MemberResponse `json:"members"`
+}
+
+// GetMembers returns the value of Members.
+func (s *MemberListResponse) GetMembers() []MemberResponse {
+	return s.Members
+}
+
+// SetMembers sets the value of Members.
+func (s *MemberListResponse) SetMembers(val []MemberResponse) {
+	s.Members = val
+}
+
+func (*MemberListResponse) listMembersRes() {}
+
+// A member of the active organization (a WorkOS organization membership).
+// Ref: #/components/schemas/MemberResponse
+type MemberResponse struct {
+	// The WorkOS organization membership ID.
+	ID string `json:"id"`
+	// The WorkOS user ID of the member.
+	UserId string `json:"userId"`
+	// The member's email address.
+	Email string `json:"email"`
+	// The member's first name, if set.
+	FirstName OptString `json:"firstName"`
+	// The member's last name, if set.
+	LastName OptString `json:"lastName"`
+	// The member's role slug within the organization, if any.
+	Role OptString `json:"role"`
+}
+
+// GetID returns the value of ID.
+func (s *MemberResponse) GetID() string {
+	return s.ID
+}
+
+// GetUserId returns the value of UserId.
+func (s *MemberResponse) GetUserId() string {
+	return s.UserId
+}
+
+// GetEmail returns the value of Email.
+func (s *MemberResponse) GetEmail() string {
+	return s.Email
+}
+
+// GetFirstName returns the value of FirstName.
+func (s *MemberResponse) GetFirstName() OptString {
+	return s.FirstName
+}
+
+// GetLastName returns the value of LastName.
+func (s *MemberResponse) GetLastName() OptString {
+	return s.LastName
+}
+
+// GetRole returns the value of Role.
+func (s *MemberResponse) GetRole() OptString {
+	return s.Role
+}
+
+// SetID sets the value of ID.
+func (s *MemberResponse) SetID(val string) {
+	s.ID = val
+}
+
+// SetUserId sets the value of UserId.
+func (s *MemberResponse) SetUserId(val string) {
+	s.UserId = val
+}
+
+// SetEmail sets the value of Email.
+func (s *MemberResponse) SetEmail(val string) {
+	s.Email = val
+}
+
+// SetFirstName sets the value of FirstName.
+func (s *MemberResponse) SetFirstName(val OptString) {
+	s.FirstName = val
+}
+
+// SetLastName sets the value of LastName.
+func (s *MemberResponse) SetLastName(val OptString) {
+	s.LastName = val
+}
+
+// SetRole sets the value of Role.
+func (s *MemberResponse) SetRole(val OptString) {
+	s.Role = val
+}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {

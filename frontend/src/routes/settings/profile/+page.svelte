@@ -2,7 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { Button } from '$lib/components/ui/button';
-	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { userStore, signIn, signOut, displayName, initials } from '$lib/user.svelte';
@@ -13,9 +13,41 @@
 
 <div class="w-full">
 	{#if user === undefined}
-		<p class="text-muted-foreground flex items-center gap-2 text-sm">
-			<LoaderIcon class="animate-spin" /> Loading your profile…
-		</p>
+		<!-- Skeleton mirroring the profile + session cards. -->
+		<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-2">
+				<Skeleton class="h-7 w-32" />
+				<Skeleton class="h-4 w-56" />
+			</div>
+			<Card.Root>
+				<Card.Header class="flex-row items-center gap-4">
+					<Skeleton class="size-14 rounded-full" />
+					<div class="flex flex-1 flex-col gap-2">
+						<Skeleton class="h-5 w-40" />
+						<Skeleton class="h-4 w-52" />
+					</div>
+				</Card.Header>
+				<Card.Content>
+					<div class="flex flex-col gap-3">
+						{#each [0, 1, 2, 3, 4] as i (i)}
+							<div class="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
+								<Skeleton class="h-4 w-24" />
+								<Skeleton class="h-4 w-40" />
+							</div>
+						{/each}
+					</div>
+				</Card.Content>
+			</Card.Root>
+			<Card.Root>
+				<Card.Header>
+					<Skeleton class="h-4 w-20" />
+					<Skeleton class="h-4 w-64" />
+				</Card.Header>
+				<Card.Content>
+					<Skeleton class="h-9 w-24" />
+				</Card.Content>
+			</Card.Root>
+		</div>
 	{:else if user === null}
 		<Card.Root>
 			<Card.Header>

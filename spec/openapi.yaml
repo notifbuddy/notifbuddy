@@ -193,6 +193,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /members:
+    get:
+      operationId: listMembers
+      summary: List the active organization's members
+      description: |
+        Returns the active members of the caller's active organization, resolved
+        from WorkOS organization memberships. Requires a session scoped to an
+        organization.
+      responses:
+        "200":
+          description: The organization's members.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberListResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /integrations/status:
     get:
       operationId: getIntegrationStatus
@@ -406,6 +427,48 @@ components:
             $ref: "#/components/schemas/InvitationResponse"
       required:
         - invitations
+    MemberResponse:
+      type: object
+      description: A member of the active organization (a WorkOS organization membership).
+      properties:
+        id:
+          type: string
+          description: The WorkOS organization membership ID.
+          example: om_01H...
+        userId:
+          type: string
+          description: The WorkOS user ID of the member.
+          example: user_01H...
+        email:
+          type: string
+          description: The member's email address.
+          example: jane@example.com
+        firstName:
+          type: string
+          description: The member's first name, if set.
+          example: Jane
+        lastName:
+          type: string
+          description: The member's last name, if set.
+          example: Doe
+        role:
+          type: string
+          description: The member's role slug within the organization, if any.
+          example: admin
+      required:
+        - id
+        - userId
+        - email
+    MemberListResponse:
+      type: object
+      description: A list of members for the active organization.
+      properties:
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberResponse"
+      required:
+        - members
     IntegrationStatus:
       type: object
       description: The connection state of a single integration provider.

@@ -88,6 +88,16 @@ func (UnimplementedHandler) ListInvitations(ctx context.Context) (r ListInvitati
 	return r, ht.ErrNotImplemented
 }
 
+// ListMembers implements listMembers operation.
+//
+// Returns the active members of the caller's active organization, resolved from WorkOS organization
+// memberships. Requires a session scoped to an organization.
+//
+// GET /members
+func (UnimplementedHandler) ListMembers(ctx context.Context) (r ListMembersRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // Ping implements ping operation.
 //
 // Returns a pong message. Requires an authenticated session — the request must carry a valid

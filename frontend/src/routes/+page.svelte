@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import SendIcon from '@lucide/svelte/icons/send';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
@@ -343,11 +344,11 @@
 					<p class="text-destructive text-sm">{selectOrgError}</p>
 				{/if}
 			{:else if user === undefined}
-				<!-- Still checking the session. -->
-				<p class="text-muted-foreground flex items-center gap-2 text-sm">
-					<LoaderIcon class="animate-spin" />
-					Checking session…
-				</p>
+				<!-- Still checking the session: skeleton in place of the action. -->
+				<div class="flex flex-col gap-3">
+					<Skeleton class="h-4 w-40" />
+					<Skeleton class="h-9 w-full" />
+				</div>
 			{:else}
 				<!-- Signed out (or store cleared after a failed request). -->
 				<Button onclick={signIn}>

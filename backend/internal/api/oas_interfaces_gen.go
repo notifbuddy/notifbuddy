@@ -29,6 +29,10 @@ type ListInvitationsRes interface {
 	listInvitationsRes()
 }
 
+type ListMembersRes interface {
+	listMembersRes()
+}
+
 type PingRes interface {
 	pingRes()
 }

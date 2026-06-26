@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CheckIcon from '@lucide/svelte/icons/circle-check-big';
 	import GithubIcon from '@lucide/svelte/icons/git-branch';
 	import SlackIcon from '@lucide/svelte/icons/message-square';
@@ -49,9 +49,20 @@
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
 			{#if intg === undefined}
-				<p class="text-muted-foreground flex items-center gap-2 text-sm">
-					<LoaderIcon class="animate-spin" /> Loading…
-				</p>
+				<!-- Skeleton mirroring the two onboarding step rows. -->
+				{#each [0, 1] as i (i)}
+					<div class="flex items-start gap-3 rounded-lg border p-3">
+						<Skeleton class="mt-0.5 size-5 shrink-0 rounded-md" />
+						<div class="flex flex-1 flex-col gap-2">
+							<div class="flex items-center justify-between">
+								<Skeleton class="h-4 w-24" />
+								<Skeleton class="h-4 w-20" />
+							</div>
+							<Skeleton class="h-3.5 w-full max-w-56" />
+							<Skeleton class="h-8 w-24" />
+						</div>
+					</div>
+				{/each}
 			{:else if intg === null}
 				<p class="text-destructive text-sm">Please sign in first.</p>
 				<Button href="/">Go to sign in</Button>

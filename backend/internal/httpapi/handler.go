@@ -128,6 +128,31 @@ func (h Handler) ListInvitations(ctx context.Context) (api.ListInvitationsRes, e
 	return resp, nil
 }
 
+// memberListLimit caps how many members GET /members returns.
+const memberListLimit = 200
+
+// ListMembers implements `listMembers`: GET /members.
+// Lists the active members of the caller's active organization. Requires a
+// session scoped to an organization.
+func (h Handler) ListMembers(ctx context.Context) (api.ListMembersRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	if user.OrgID == "" {
+		return &api.MemberListResponse{}, nil
+	}
+	members, err := h.auth.ListOrganizationMembers(ctx, user.OrgID, memberListLimit)
+	if err != nil {
+		return &api.Error{Message: "failed to list members"}, nil
+	}
+	resp := &api.MemberListResponse{}
+	for _, m := range members {
+		resp.Members = append(resp.Members, toMemberResponse(m))
+	}
+	return resp, nil
+}
+
 // CreateInvitation implements `createInvitation`: POST /invitations.
 // Invites an email to the caller's active organization. Any signed-in member of
 // an organization may invite (demo-simple authorization).
@@ -260,6 +285,20 @@ func toInvitationResponse(inv auth.Invitation) api.InvitationResponse {
 	r := api.InvitationResponse{ID: inv.ID, Email: inv.Email, State: inv.State}
 	if inv.ExpiresAt != "" {
 		r.ExpiresAt = api.NewOptString(inv.ExpiresAt)
+	}
+	return r
+}
+
+func toMemberResponse(m auth.Member) api.MemberResponse {
+	r := api.MemberResponse{ID: m.ID, UserId: m.UserID, Email: m.Email}
+	if m.FirstName != "" {
+		r.FirstName = api.NewOptString(m.FirstName)
+	}
+	if m.LastName != "" {
+		r.LastName = api.NewOptString(m.LastName)
+	}
+	if m.Role != "" {
+		r.Role = api.NewOptString(m.Role)
 	}
 	return r
 }

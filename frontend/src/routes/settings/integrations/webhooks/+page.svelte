@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import RefreshIcon from '@lucide/svelte/icons/refresh-cw';
 	import { fetchGithubWebhooks, type WebhookEvent } from '$lib/integrations';
@@ -59,9 +60,18 @@
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-3">
 			{#if events === undefined}
-				<p class="text-muted-foreground flex items-center gap-2 text-sm">
-					<LoaderIcon class="animate-spin" /> Loading…
-				</p>
+				<!-- Skeleton mirroring the delivery rows. -->
+				<ul class="flex flex-col divide-y">
+					{#each [0, 1, 2, 3] as i (i)}
+						<li class="flex items-center justify-between gap-3 py-2">
+							<div class="flex items-center gap-2">
+								<Skeleton class="h-5 w-28" />
+								<Skeleton class="h-4 w-16" />
+							</div>
+							<Skeleton class="h-4 w-32 shrink-0" />
+						</li>
+					{/each}
+				</ul>
 			{:else if events === null}
 				<p class="text-destructive text-sm">Please sign in first.</p>
 				<Button href="/">Go to sign in</Button>
