@@ -1,0 +1,17 @@
+# Backend
+backend/bin/
+backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.svelte-kit/
+frontend/.env.local
+
+# OS / editor
+.DS_Store
+
+# Tooling / agent scaffolding (not app source)
+.agents/
+.claude/
+.playwright-mcp/

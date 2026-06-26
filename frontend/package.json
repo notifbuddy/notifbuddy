@@ -1,0 +1,37 @@
+{
+	"name": "frontend",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"generate": "openapi-typescript ../spec/openapi.yaml -o src/lib/api/schema.d.ts",
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@fontsource-variable/inter": "^5.2.8",
+		"@lucide/svelte": "^1.21.0",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/vite": "^4.3.0",
+		"clsx": "^2.1.1",
+		"openapi-typescript": "^7.13.0",
+		"shadcn-svelte": "^1.3.0",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"tailwind-merge": "^3.6.0",
+		"tailwind-variants": "^3.2.2",
+		"tailwindcss": "^4.3.0",
+		"tw-animate-css": "^1.4.0",
+		"typescript": "^5.9.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"openapi-fetch": "^0.17.0"
+	}
+}
