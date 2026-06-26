@@ -13,6 +13,17 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CreateInvitation implements createInvitation operation.
+//
+// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
+// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
+// creates their membership.
+//
+// POST /invitations
+func (UnimplementedHandler) CreateInvitation(ctx context.Context, req *CreateInvitationRequest) (r CreateInvitationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetMe implements getMe operation.
 //
 // Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -24,6 +35,27 @@ func (UnimplementedHandler) GetMe(ctx context.Context) (r GetMeRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
+// GetPendingOrgs implements getPendingOrgs operation.
+//
+// During the org-selection step the SPA calls this to read the organizations the user may choose
+// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
+// there is no pending selection.
+//
+// GET /auth/pending-orgs
+func (UnimplementedHandler) GetPendingOrgs(ctx context.Context) (r GetPendingOrgsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListInvitations implements listInvitations operation.
+//
+// Returns the invitations for the caller's active organization. Requires a session scoped to an
+// organization.
+//
+// GET /invitations
+func (UnimplementedHandler) ListInvitations(ctx context.Context) (r ListInvitationsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // Ping implements ping operation.
 //
 // Returns a pong message. Requires an authenticated session — the request must carry a valid
@@ -31,6 +63,16 @@ func (UnimplementedHandler) GetMe(ctx context.Context) (r GetMeRes, _ error) {
 //
 // GET /ping
 func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SelectOrg implements selectOrg operation.
+//
+// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
+// the stashed pending token for a session, sets the session cookie, and returns the user.
+//
+// POST /auth/select-org
+func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest) (r SelectOrgRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

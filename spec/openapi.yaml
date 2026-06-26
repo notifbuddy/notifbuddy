@@ -91,6 +91,108 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /auth/pending-orgs:
+    get:
+      operationId: getPendingOrgs
+      summary: List organizations awaiting selection
+      description: |
+        During the org-selection step the SPA calls this to read the organizations
+        the user may choose between. The choices were stashed by `/auth/callback`
+        in a short-lived sealed cookie. Returns 401 if there is no pending
+        selection.
+      responses:
+        "200":
+          description: The organizations to choose from.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingOrganizations"
+        "401":
+          description: No pending organization selection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/select-org:
+    post:
+      operationId: selectOrg
+      summary: Complete login by choosing an organization
+      description: |
+        Finishes a login that WorkOS gated on organization selection. Exchanges
+        the chosen organization plus the stashed pending token for a session,
+        sets the session cookie, and returns the user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectOrgRequest"
+      responses:
+        "200":
+          description: Selection succeeded; the session cookie is now set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          description: No pending selection, or an invalid/expired pending token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /invitations:
+    get:
+      operationId: listInvitations
+      summary: List the active organization's invitations
+      description: |
+        Returns the invitations for the caller's active organization. Requires a
+        session scoped to an organization.
+      responses:
+        "200":
+          description: The organization's invitations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationListResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: createInvitation
+      summary: Invite an email to the active organization
+      description: |
+        Sends a WorkOS invitation for the given email to the caller's active
+        organization (optionally with a role). WorkOS emails the invitee a link;
+        accepting it (by logging in with the invitation token) creates their
+        membership.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "200":
+          description: The created invitation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+        "400":
+          description: The request was invalid (e.g. no active organization).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     PongResponse:
@@ -105,7 +207,7 @@ components:
         - message
     UserResponse:
       type: object
-      description: The authenticated WorkOS user.
+      description: The authenticated WorkOS user and their active organization context.
       properties:
         id:
           type: string
@@ -123,9 +225,41 @@ components:
           type: string
           description: The user's last name, if set.
           example: Doe
+        organizationId:
+          type: string
+          description: The ID of the organization the current session is scoped to, if any.
+          example: org_01H...
+        role:
+          type: string
+          description: The user's role within the active organization, if any.
+          example: admin
+        organizations:
+          type: array
+          description: All organizations the user is a member of.
+          items:
+            $ref: "#/components/schemas/Organization"
       required:
         - id
         - email
+    Organization:
+      type: object
+      description: A WorkOS organization the user belongs to.
+      properties:
+        id:
+          type: string
+          description: The WorkOS organization ID.
+          example: org_01H...
+        name:
+          type: string
+          description: The organization's display name.
+          example: Acme Inc
+        role:
+          type: string
+          description: The user's role in this organization, if known.
+          example: member
+      required:
+        - id
+        - name
     VerifyEmailRequest:
       type: object
       description: The verification code the user received by email.
@@ -136,6 +270,72 @@ components:
           example: "123456"
       required:
         - code
+    SelectOrgRequest:
+      type: object
+      description: The organization the user chose during the org-selection step.
+      properties:
+        organizationId:
+          type: string
+          description: The ID of the organization to authenticate into.
+          example: org_01H...
+      required:
+        - organizationId
+    PendingOrganizations:
+      type: object
+      description: The organizations a user may choose between during org selection.
+      properties:
+        organizations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Organization"
+      required:
+        - organizations
+    CreateInvitationRequest:
+      type: object
+      description: Invite an email address to the caller's active organization.
+      properties:
+        email:
+          type: string
+          description: The email address to invite.
+          example: newteammate@example.com
+        role:
+          type: string
+          description: Optional role slug to grant the invitee on acceptance.
+          example: member
+      required:
+        - email
+    InvitationResponse:
+      type: object
+      description: A WorkOS organization invitation.
+      properties:
+        id:
+          type: string
+          example: invitation_01H...
+        email:
+          type: string
+          example: newteammate@example.com
+        state:
+          type: string
+          description: The invitation state (pending, accepted, expired, revoked).
+          example: pending
+        expiresAt:
+          type: string
+          description: ISO 8601 expiry timestamp.
+          example: "2026-07-03T00:00:00Z"
+      required:
+        - id
+        - email
+        - state
+    InvitationListResponse:
+      type: object
+      description: A list of invitations for the active organization.
+      properties:
+        invitations:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationResponse"
+      required:
+        - invitations
     Error:
       type: object
       description: A generic error response.

@@ -45,8 +45,9 @@ spec/openapi.yaml  ──┬──▶  ogen                ──▶  backend/in
 redirect routes — `GET /auth/login`, `GET /auth/callback`, `GET /auth/logout` —
 are plain `net/http` handlers, **not** in the spec. They are 302 redirects that
 set/clear the session cookie, not JSON operations, which ogen does not model
-cleanly. Everything else (`/ping`, `/me`, `POST /auth/verify-email`) stays fully
-spec-driven.
+cleanly. Everything else — `/ping`, `/me`, `POST /auth/verify-email`,
+`GET /auth/pending-orgs`, `POST /auth/select-org`, and the `/invitations`
+endpoints — stays fully spec-driven.
 
 ## Prerequisites
 
@@ -130,6 +131,22 @@ SPA ─▶ POST /auth/verify-email {code} ─▶ AuthenticateWithEmailVerificati
         ─▶ seal session ─▶ Set-Cookie wos_session, clear wos_pending ─▶ 200 user
 ```
 
+**Organization-selection branch** (user belongs to more than one organization):
+
+```
+GET /auth/callback ─▶ AuthenticateWithCode ─▶ WorkOS: organization_selection_required
+        ─▶ seal {pending token, org list} in wos_org_select cookie
+        ─302▶ SPA at /?select-org=1
+SPA ─▶ GET /auth/pending-orgs        → the orgs to choose from
+SPA ─▶ POST /auth/select-org {organizationId}
+        ─▶ AuthenticateWithOrganizationSelection ─▶ seal session
+        ─▶ Set-Cookie wos_session, clear wos_org_select ─▶ 200 user
+```
+
+The session token carries the active `org_id` + `role` (read from the JWT
+claims); `GET /me` returns them plus the full list of organizations the user
+belongs to.
+
 - The `wos_session` cookie is **HttpOnly + Secure + SameSite=Lax** and holds the
   WorkOS *sealed* session (access + refresh tokens, encrypted with
   `WORKOS_COOKIE_PASSWORD`). JavaScript never reads it. The short-lived
@@ -144,6 +161,37 @@ SPA ─▶ POST /auth/verify-email {code} ─▶ AuthenticateWithEmailVerificati
 - `POST /auth/verify-email` **is** in the spec (JSON in/out, ogen-generated);
   only the three browser-redirect routes (`/auth/login`, `/auth/callback`,
   `/auth/logout`) stay outside it.
+
+## Organizations & invitations
+
+WorkOS provides multi-tenancy (Organizations), memberships, and roles — this app
+uses them rather than modelling tenants itself. WorkOS owns identity, org
+records, and the membership/role graph; an app would key its own domain data on
+the WorkOS `organization_id`.
+
+- **Active org in the session.** After login, the session JWT carries `org_id`
+  and `role`. `GET /me` returns `organizationId`, `role`, and `organizations`
+  (every org the user belongs to, via `OrganizationMembership.List`). The SPA
+  shows the active org + role when signed in.
+- **Invitations** (spec-driven JSON endpoints):
+  - `POST /invitations {email, role?}` — invite an email to the caller's active
+    organization (`SendInvitation`). WorkOS emails the invitee a link.
+  - `GET /invitations` — list the active organization's invitations.
+  - **Accept-on-login:** an invitee who logs in with an invitation token
+    (`/auth/login?invitation_token=…`, round-tripped via AuthKit `state`, or a
+    WorkOS invitation link landing on `/auth/callback?invitation_token=…`) has
+    the token passed to `AuthenticateWithCode`, which creates their membership.
+- **Authorization** is demo-simple: any signed-in member of an org may invite.
+  To gate on a role, check `userFromContext(ctx).Role` in `CreateInvitation`.
+
+### Dashboard prerequisites for orgs/invitations
+
+In the WorkOS dashboard (Staging):
+
+1. Create at least one **Organization** and add your user as a member (otherwise
+   the session has no `org_id`, and `/invitations` has nothing to target).
+2. To assign roles on invite, define the **role** (e.g. `member`) under Roles and
+   pass its slug as `role`.
 
 ## Configuration
 

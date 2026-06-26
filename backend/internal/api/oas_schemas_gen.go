@@ -2,6 +2,43 @@
 
 package api
 
+type CreateInvitationBadRequest Error
+
+func (*CreateInvitationBadRequest) createInvitationRes() {}
+
+// Invite an email address to the caller's active organization.
+// Ref: #/components/schemas/CreateInvitationRequest
+type CreateInvitationRequest struct {
+	// The email address to invite.
+	Email string `json:"email"`
+	// Optional role slug to grant the invitee on acceptance.
+	Role OptString `json:"role"`
+}
+
+// GetEmail returns the value of Email.
+func (s *CreateInvitationRequest) GetEmail() string {
+	return s.Email
+}
+
+// GetRole returns the value of Role.
+func (s *CreateInvitationRequest) GetRole() OptString {
+	return s.Role
+}
+
+// SetEmail sets the value of Email.
+func (s *CreateInvitationRequest) SetEmail(val string) {
+	s.Email = val
+}
+
+// SetRole sets the value of Role.
+func (s *CreateInvitationRequest) SetRole(val OptString) {
+	s.Role = val
+}
+
+type CreateInvitationUnauthorized Error
+
+func (*CreateInvitationUnauthorized) createInvitationRes() {}
+
 // A generic error response.
 // Ref: #/components/schemas/Error
 type Error struct {
@@ -19,9 +56,83 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*Error) getMeRes()       {}
-func (*Error) pingRes()        {}
-func (*Error) verifyEmailRes() {}
+func (*Error) getMeRes()           {}
+func (*Error) getPendingOrgsRes()  {}
+func (*Error) listInvitationsRes() {}
+func (*Error) pingRes()            {}
+func (*Error) selectOrgRes()       {}
+func (*Error) verifyEmailRes()     {}
+
+// A list of invitations for the active organization.
+// Ref: #/components/schemas/InvitationListResponse
+type InvitationListResponse struct {
+	Invitations []InvitationResponse `json:"invitations"`
+}
+
+// GetInvitations returns the value of Invitations.
+func (s *InvitationListResponse) GetInvitations() []InvitationResponse {
+	return s.Invitations
+}
+
+// SetInvitations sets the value of Invitations.
+func (s *InvitationListResponse) SetInvitations(val []InvitationResponse) {
+	s.Invitations = val
+}
+
+func (*InvitationListResponse) listInvitationsRes() {}
+
+// A WorkOS organization invitation.
+// Ref: #/components/schemas/InvitationResponse
+type InvitationResponse struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	// The invitation state (pending, accepted, expired, revoked).
+	State string `json:"state"`
+	// ISO 8601 expiry timestamp.
+	ExpiresAt OptString `json:"expiresAt"`
+}
+
+// GetID returns the value of ID.
+func (s *InvitationResponse) GetID() string {
+	return s.ID
+}
+
+// GetEmail returns the value of Email.
+func (s *InvitationResponse) GetEmail() string {
+	return s.Email
+}
+
+// GetState returns the value of State.
+func (s *InvitationResponse) GetState() string {
+	return s.State
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *InvitationResponse) GetExpiresAt() OptString {
+	return s.ExpiresAt
+}
+
+// SetID sets the value of ID.
+func (s *InvitationResponse) SetID(val string) {
+	s.ID = val
+}
+
+// SetEmail sets the value of Email.
+func (s *InvitationResponse) SetEmail(val string) {
+	s.Email = val
+}
+
+// SetState sets the value of State.
+func (s *InvitationResponse) SetState(val string) {
+	s.State = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *InvitationResponse) SetExpiresAt(val OptString) {
+	s.ExpiresAt = val
+}
+
+func (*InvitationResponse) createInvitationRes() {}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
@@ -69,6 +180,65 @@ func (o OptString) Or(d string) string {
 	return d
 }
 
+// A WorkOS organization the user belongs to.
+// Ref: #/components/schemas/Organization
+type Organization struct {
+	// The WorkOS organization ID.
+	ID string `json:"id"`
+	// The organization's display name.
+	Name string `json:"name"`
+	// The user's role in this organization, if known.
+	Role OptString `json:"role"`
+}
+
+// GetID returns the value of ID.
+func (s *Organization) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *Organization) GetName() string {
+	return s.Name
+}
+
+// GetRole returns the value of Role.
+func (s *Organization) GetRole() OptString {
+	return s.Role
+}
+
+// SetID sets the value of ID.
+func (s *Organization) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *Organization) SetName(val string) {
+	s.Name = val
+}
+
+// SetRole sets the value of Role.
+func (s *Organization) SetRole(val OptString) {
+	s.Role = val
+}
+
+// The organizations a user may choose between during org selection.
+// Ref: #/components/schemas/PendingOrganizations
+type PendingOrganizations struct {
+	Organizations []Organization `json:"organizations"`
+}
+
+// GetOrganizations returns the value of Organizations.
+func (s *PendingOrganizations) GetOrganizations() []Organization {
+	return s.Organizations
+}
+
+// SetOrganizations sets the value of Organizations.
+func (s *PendingOrganizations) SetOrganizations(val []Organization) {
+	s.Organizations = val
+}
+
+func (*PendingOrganizations) getPendingOrgsRes() {}
+
 // The response returned by the ping endpoint.
 // Ref: #/components/schemas/PongResponse
 type PongResponse struct {
@@ -88,7 +258,24 @@ func (s *PongResponse) SetMessage(val string) {
 
 func (*PongResponse) pingRes() {}
 
-// The authenticated WorkOS user.
+// The organization the user chose during the org-selection step.
+// Ref: #/components/schemas/SelectOrgRequest
+type SelectOrgRequest struct {
+	// The ID of the organization to authenticate into.
+	OrganizationId string `json:"organizationId"`
+}
+
+// GetOrganizationId returns the value of OrganizationId.
+func (s *SelectOrgRequest) GetOrganizationId() string {
+	return s.OrganizationId
+}
+
+// SetOrganizationId sets the value of OrganizationId.
+func (s *SelectOrgRequest) SetOrganizationId(val string) {
+	s.OrganizationId = val
+}
+
+// The authenticated WorkOS user and their active organization context.
 // Ref: #/components/schemas/UserResponse
 type UserResponse struct {
 	// The WorkOS user ID.
@@ -99,6 +286,12 @@ type UserResponse struct {
 	FirstName OptString `json:"firstName"`
 	// The user's last name, if set.
 	LastName OptString `json:"lastName"`
+	// The ID of the organization the current session is scoped to, if any.
+	OrganizationId OptString `json:"organizationId"`
+	// The user's role within the active organization, if any.
+	Role OptString `json:"role"`
+	// All organizations the user is a member of.
+	Organizations []Organization `json:"organizations"`
 }
 
 // GetID returns the value of ID.
@@ -121,6 +314,21 @@ func (s *UserResponse) GetLastName() OptString {
 	return s.LastName
 }
 
+// GetOrganizationId returns the value of OrganizationId.
+func (s *UserResponse) GetOrganizationId() OptString {
+	return s.OrganizationId
+}
+
+// GetRole returns the value of Role.
+func (s *UserResponse) GetRole() OptString {
+	return s.Role
+}
+
+// GetOrganizations returns the value of Organizations.
+func (s *UserResponse) GetOrganizations() []Organization {
+	return s.Organizations
+}
+
 // SetID sets the value of ID.
 func (s *UserResponse) SetID(val string) {
 	s.ID = val
@@ -141,7 +349,23 @@ func (s *UserResponse) SetLastName(val OptString) {
 	s.LastName = val
 }
 
+// SetOrganizationId sets the value of OrganizationId.
+func (s *UserResponse) SetOrganizationId(val OptString) {
+	s.OrganizationId = val
+}
+
+// SetRole sets the value of Role.
+func (s *UserResponse) SetRole(val OptString) {
+	s.Role = val
+}
+
+// SetOrganizations sets the value of Organizations.
+func (s *UserResponse) SetOrganizations(val []Organization) {
+	s.Organizations = val
+}
+
 func (*UserResponse) getMeRes()       {}
+func (*UserResponse) selectOrgRes()   {}
 func (*UserResponse) verifyEmailRes() {}
 
 // The verification code the user received by email.

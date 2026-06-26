@@ -27,6 +27,14 @@ func trimTrailingSlashes(u *url.URL) {
 
 // Invoker invokes operations described by OpenAPI v3 specification.
 type Invoker interface {
+	// CreateInvitation invokes createInvitation operation.
+	//
+	// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
+	// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
+	// creates their membership.
+	//
+	// POST /invitations
+	CreateInvitation(ctx context.Context, request *CreateInvitationRequest) (CreateInvitationRes, error)
 	// GetMe invokes getMe operation.
 	//
 	// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -35,6 +43,21 @@ type Invoker interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// GetPendingOrgs invokes getPendingOrgs operation.
+	//
+	// During the org-selection step the SPA calls this to read the organizations the user may choose
+	// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
+	// there is no pending selection.
+	//
+	// GET /auth/pending-orgs
+	GetPendingOrgs(ctx context.Context) (GetPendingOrgsRes, error)
+	// ListInvitations invokes listInvitations operation.
+	//
+	// Returns the invitations for the caller's active organization. Requires a session scoped to an
+	// organization.
+	//
+	// GET /invitations
+	ListInvitations(ctx context.Context) (ListInvitationsRes, error)
 	// Ping invokes ping operation.
 	//
 	// Returns a pong message. Requires an authenticated session — the request must carry a valid
@@ -42,6 +65,13 @@ type Invoker interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// SelectOrg invokes selectOrg operation.
+	//
+	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
+	// the stashed pending token for a session, sets the session cookie, and returns the user.
+	//
+	// POST /auth/select-org
+	SelectOrg(ctx context.Context, request *SelectOrgRequest) (SelectOrgRes, error)
 	// VerifyEmail invokes verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
@@ -91,6 +121,91 @@ func (c *Client) requestURL(ctx context.Context) *url.URL {
 		return c.serverURL
 	}
 	return u
+}
+
+// CreateInvitation invokes createInvitation operation.
+//
+// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
+// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
+// creates their membership.
+//
+// POST /invitations
+func (c *Client) CreateInvitation(ctx context.Context, request *CreateInvitationRequest) (CreateInvitationRes, error) {
+	res, err := c.sendCreateInvitation(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendCreateInvitation(ctx context.Context, request *CreateInvitationRequest) (res CreateInvitationRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("createInvitation"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/invitations"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, CreateInvitationOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/invitations"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeCreateInvitationRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeCreateInvitationResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
 }
 
 // GetMe invokes getMe operation.
@@ -175,6 +290,169 @@ func (c *Client) sendGetMe(ctx context.Context) (res GetMeRes, err error) {
 	return result, nil
 }
 
+// GetPendingOrgs invokes getPendingOrgs operation.
+//
+// During the org-selection step the SPA calls this to read the organizations the user may choose
+// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
+// there is no pending selection.
+//
+// GET /auth/pending-orgs
+func (c *Client) GetPendingOrgs(ctx context.Context) (GetPendingOrgsRes, error) {
+	res, err := c.sendGetPendingOrgs(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetPendingOrgs(ctx context.Context) (res GetPendingOrgsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getPendingOrgs"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/auth/pending-orgs"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetPendingOrgsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/auth/pending-orgs"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetPendingOrgsResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// ListInvitations invokes listInvitations operation.
+//
+// Returns the invitations for the caller's active organization. Requires a session scoped to an
+// organization.
+//
+// GET /invitations
+func (c *Client) ListInvitations(ctx context.Context) (ListInvitationsRes, error) {
+	res, err := c.sendListInvitations(ctx)
+	return res, err
+}
+
+func (c *Client) sendListInvitations(ctx context.Context) (res ListInvitationsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("listInvitations"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/invitations"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, ListInvitationsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/invitations"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeListInvitationsResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // Ping invokes ping operation.
 //
 // Returns a pong message. Requires an authenticated session — the request must carry a valid
@@ -249,6 +527,90 @@ func (c *Client) sendPing(ctx context.Context) (res PingRes, err error) {
 
 	stage = "DecodeResponse"
 	result, err := decodePingResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// SelectOrg invokes selectOrg operation.
+//
+// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
+// the stashed pending token for a session, sets the session cookie, and returns the user.
+//
+// POST /auth/select-org
+func (c *Client) SelectOrg(ctx context.Context, request *SelectOrgRequest) (SelectOrgRes, error) {
+	res, err := c.sendSelectOrg(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendSelectOrg(ctx context.Context, request *SelectOrgRequest) (res SelectOrgRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("selectOrg"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/auth/select-org"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, SelectOrgOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/auth/select-org"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeSelectOrgRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeSelectOrgResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

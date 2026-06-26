@@ -8,6 +8,14 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateInvitation implements createInvitation operation.
+	//
+	// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
+	// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
+	// creates their membership.
+	//
+	// POST /invitations
+	CreateInvitation(ctx context.Context, req *CreateInvitationRequest) (CreateInvitationRes, error)
 	// GetMe implements getMe operation.
 	//
 	// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -16,6 +24,21 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// GetPendingOrgs implements getPendingOrgs operation.
+	//
+	// During the org-selection step the SPA calls this to read the organizations the user may choose
+	// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
+	// there is no pending selection.
+	//
+	// GET /auth/pending-orgs
+	GetPendingOrgs(ctx context.Context) (GetPendingOrgsRes, error)
+	// ListInvitations implements listInvitations operation.
+	//
+	// Returns the invitations for the caller's active organization. Requires a session scoped to an
+	// organization.
+	//
+	// GET /invitations
+	ListInvitations(ctx context.Context) (ListInvitationsRes, error)
 	// Ping implements ping operation.
 	//
 	// Returns a pong message. Requires an authenticated session — the request must carry a valid
@@ -23,6 +46,13 @@ type Handler interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// SelectOrg implements selectOrg operation.
+	//
+	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
+	// the stashed pending token for a session, sets the session cookie, and returns the user.
+	//
+	// POST /auth/select-org
+	SelectOrg(ctx context.Context, req *SelectOrgRequest) (SelectOrgRes, error)
 	// VerifyEmail implements verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires

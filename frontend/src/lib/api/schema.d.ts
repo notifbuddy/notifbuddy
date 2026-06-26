@@ -74,6 +74,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/pending-orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List organizations awaiting selection
+         * @description During the org-selection step the SPA calls this to read the organizations
+         *     the user may choose between. The choices were stashed by `/auth/callback`
+         *     in a short-lived sealed cookie. Returns 401 if there is no pending
+         *     selection.
+         */
+        get: operations["getPendingOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/select-org": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete login by choosing an organization
+         * @description Finishes a login that WorkOS gated on organization selection. Exchanges
+         *     the chosen organization plus the stashed pending token for a session,
+         *     sets the session cookie, and returns the user.
+         */
+        post: operations["selectOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the active organization's invitations
+         * @description Returns the invitations for the caller's active organization. Requires a
+         *     session scoped to an organization.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Invite an email to the active organization
+         * @description Sends a WorkOS invitation for the given email to the caller's active
+         *     organization (optionally with a role). WorkOS emails the invitee a link;
+         *     accepting it (by logging in with the invitation token) creates their
+         *     membership.
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -86,7 +159,7 @@ export interface components {
              */
             message: string;
         };
-        /** @description The authenticated WorkOS user. */
+        /** @description The authenticated WorkOS user and their active organization context. */
         UserResponse: {
             /**
              * @description The WorkOS user ID.
@@ -108,6 +181,36 @@ export interface components {
              * @example Doe
              */
             lastName?: string;
+            /**
+             * @description The ID of the organization the current session is scoped to, if any.
+             * @example org_01H...
+             */
+            organizationId?: string;
+            /**
+             * @description The user's role within the active organization, if any.
+             * @example admin
+             */
+            role?: string;
+            /** @description All organizations the user is a member of. */
+            organizations?: components["schemas"]["Organization"][];
+        };
+        /** @description A WorkOS organization the user belongs to. */
+        Organization: {
+            /**
+             * @description The WorkOS organization ID.
+             * @example org_01H...
+             */
+            id: string;
+            /**
+             * @description The organization's display name.
+             * @example Acme Inc
+             */
+            name: string;
+            /**
+             * @description The user's role in this organization, if known.
+             * @example member
+             */
+            role?: string;
         };
         /** @description The verification code the user received by email. */
         VerifyEmailRequest: {
@@ -116,6 +219,52 @@ export interface components {
              * @example 123456
              */
             code: string;
+        };
+        /** @description The organization the user chose during the org-selection step. */
+        SelectOrgRequest: {
+            /**
+             * @description The ID of the organization to authenticate into.
+             * @example org_01H...
+             */
+            organizationId: string;
+        };
+        /** @description The organizations a user may choose between during org selection. */
+        PendingOrganizations: {
+            organizations: components["schemas"]["Organization"][];
+        };
+        /** @description Invite an email address to the caller's active organization. */
+        CreateInvitationRequest: {
+            /**
+             * @description The email address to invite.
+             * @example newteammate@example.com
+             */
+            email: string;
+            /**
+             * @description Optional role slug to grant the invitee on acceptance.
+             * @example member
+             */
+            role?: string;
+        };
+        /** @description A WorkOS organization invitation. */
+        InvitationResponse: {
+            /** @example invitation_01H... */
+            id: string;
+            /** @example newteammate@example.com */
+            email: string;
+            /**
+             * @description The invitation state (pending, accepted, expired, revoked).
+             * @example pending
+             */
+            state: string;
+            /**
+             * @description ISO 8601 expiry timestamp.
+             * @example 2026-07-03T00:00:00Z
+             */
+            expiresAt?: string;
+        };
+        /** @description A list of invitations for the active organization. */
+        InvitationListResponse: {
+            invitations: components["schemas"]["InvitationResponse"][];
         };
         /** @description A generic error response. */
         Error: {
@@ -218,6 +367,139 @@ export interface operations {
                 };
             };
             /** @description No valid session — the caller is not authenticated. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPendingOrgs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organizations to choose from. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingOrganizations"];
+                };
+            };
+            /** @description No pending organization selection. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    selectOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectOrgRequest"];
+            };
+        };
+        responses: {
+            /** @description Selection succeeded; the session cookie is now set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description No pending selection, or an invalid/expired pending token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's invitations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description The created invitation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description The request was invalid (e.g. no active organization). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
             401: {
                 headers: {
                     [name: string]: unknown;

@@ -11,7 +11,13 @@ import (
 )
 
 var (
-	rn4AllowedHeaders = map[string]string{
+	rn7AllowedHeaders = map[string]string{
+		"POST": "Content-Type",
+	}
+	rn8AllowedHeaders = map[string]string{
+		"POST": "Content-Type",
+	}
+	rn1AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
 )
@@ -66,9 +72,98 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			switch elem[0] {
-			case 'a': // Prefix: "auth/verify-email"
+			case 'a': // Prefix: "auth/"
 
-				if l := len("auth/verify-email"); len(elem) >= l && elem[0:l] == "auth/verify-email" {
+				if l := len("auth/"); len(elem) >= l && elem[0:l] == "auth/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'p': // Prefix: "pending-orgs"
+
+					if l := len("pending-orgs"); len(elem) >= l && elem[0:l] == "pending-orgs" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "GET":
+							s.handleGetPendingOrgsRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "GET",
+								allowedHeaders: nil,
+								acceptPost:     "",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				case 's': // Prefix: "select-org"
+
+					if l := len("select-org"); len(elem) >= l && elem[0:l] == "select-org" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleSelectOrgRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn7AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				case 'v': // Prefix: "verify-email"
+
+					if l := len("verify-email"); len(elem) >= l && elem[0:l] == "verify-email" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleVerifyEmailRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn8AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				}
+
+			case 'i': // Prefix: "invitations"
+
+				if l := len("invitations"); len(elem) >= l && elem[0:l] == "invitations" {
 					elem = elem[l:]
 				} else {
 					break
@@ -77,12 +172,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if len(elem) == 0 {
 					// Leaf node.
 					switch r.Method {
+					case "GET":
+						s.handleListInvitationsRequest([0]string{}, elemIsEscaped, w, r)
 					case "POST":
-						s.handleVerifyEmailRequest([0]string{}, elemIsEscaped, w, r)
+						s.handleCreateInvitationRequest([0]string{}, elemIsEscaped, w, r)
 					default:
 						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "POST",
-							allowedHeaders: rn4AllowedHeaders,
+							allowedMethods: "GET,POST",
+							allowedHeaders: rn1AllowedHeaders,
 							acceptPost:     "application/json",
 							acceptPatch:    "",
 						})
@@ -241,9 +338,98 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				break
 			}
 			switch elem[0] {
-			case 'a': // Prefix: "auth/verify-email"
+			case 'a': // Prefix: "auth/"
 
-				if l := len("auth/verify-email"); len(elem) >= l && elem[0:l] == "auth/verify-email" {
+				if l := len("auth/"); len(elem) >= l && elem[0:l] == "auth/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'p': // Prefix: "pending-orgs"
+
+					if l := len("pending-orgs"); len(elem) >= l && elem[0:l] == "pending-orgs" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "GET":
+							r.name = GetPendingOrgsOperation
+							r.summary = "List organizations awaiting selection"
+							r.operationID = "getPendingOrgs"
+							r.operationGroup = ""
+							r.pathPattern = "/auth/pending-orgs"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				case 's': // Prefix: "select-org"
+
+					if l := len("select-org"); len(elem) >= l && elem[0:l] == "select-org" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = SelectOrgOperation
+							r.summary = "Complete login by choosing an organization"
+							r.operationID = "selectOrg"
+							r.operationGroup = ""
+							r.pathPattern = "/auth/select-org"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				case 'v': // Prefix: "verify-email"
+
+					if l := len("verify-email"); len(elem) >= l && elem[0:l] == "verify-email" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = VerifyEmailOperation
+							r.summary = "Complete email-verification during login"
+							r.operationID = "verifyEmail"
+							r.operationGroup = ""
+							r.pathPattern = "/auth/verify-email"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				}
+
+			case 'i': // Prefix: "invitations"
+
+				if l := len("invitations"); len(elem) >= l && elem[0:l] == "invitations" {
 					elem = elem[l:]
 				} else {
 					break
@@ -252,12 +438,21 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				if len(elem) == 0 {
 					// Leaf node.
 					switch method {
-					case "POST":
-						r.name = VerifyEmailOperation
-						r.summary = "Complete email-verification during login"
-						r.operationID = "verifyEmail"
+					case "GET":
+						r.name = ListInvitationsOperation
+						r.summary = "List the active organization's invitations"
+						r.operationID = "listInvitations"
 						r.operationGroup = ""
-						r.pathPattern = "/auth/verify-email"
+						r.pathPattern = "/invitations"
+						r.args = args
+						r.count = 0
+						return r, true
+					case "POST":
+						r.name = CreateInvitationOperation
+						r.summary = "Invite an email to the active organization"
+						r.operationID = "createInvitation"
+						r.operationGroup = ""
+						r.pathPattern = "/invitations"
 						r.args = args
 						r.count = 0
 						return r, true

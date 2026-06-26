@@ -5,35 +5,77 @@
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import { api, apiBaseUrl } from '$lib/api/client';
 
-	type User = { id: string; email: string; firstName?: string; lastName?: string };
+	type Org = { id: string; name: string; role?: string };
+	type User = {
+		id: string;
+		email: string;
+		firstName?: string;
+		lastName?: string;
+		organizationId?: string;
+		role?: string;
+		organizations?: Org[];
+	};
+	type Invitation = { id: string; email: string; state: string; expiresAt?: string };
 
 	// null = unknown (still checking), then either a User or false (signed out).
 	let user = $state<User | null | false>(null);
 
-	let pinging = $state(false);
-	let result = $state<string | null>(null);
-	let error = $state<string | null>(null);
+	// Which mid-login step (if any) the callback bounced us into.
+	const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+	const startInVerify = params?.has('verify') ?? false;
+	const startInSelectOrg = params?.has('select-org') ?? false;
 
-	// Email-verification step. The callback redirects here with ?verify=1 when
-	// WorkOS gated login on email verification (e.g. GitHub OAuth). We show a
-	// code-entry form instead of the normal signed-out UI.
-	const startInVerify =
-		typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('verify');
+	// ---- Email verification step ----
 	let needsVerify = $state(startInVerify);
 	let verifyCode = $state('');
 	let verifying = $state(false);
 	let verifyError = $state<string | null>(null);
 
-	// On load, ask the API who we are — unless we're mid email-verification, in
-	// which case there's no session yet. The session cookie (if any) rides along
-	// via credentials: 'include'. A 401 means signed out.
+	// ---- Organization selection step ----
+	let needsSelectOrg = $state(startInSelectOrg);
+	let pendingOrgs = $state<Org[]>([]);
+	let selectingOrgId = $state<string | null>(null);
+	let selectOrgError = $state<string | null>(null);
+
+	// ---- Ping ----
+	let pinging = $state(false);
+	let result = $state<string | null>(null);
+	let error = $state<string | null>(null);
+
+	// ---- Invitations ----
+	let inviteEmail = $state('');
+	let inviteRole = $state('');
+	let inviting = $state(false);
+	let inviteMsg = $state<string | null>(null);
+	let invitations = $state<Invitation[]>([]);
+
+	// Boot: pick the right entry path. If a step is in progress there's no session
+	// yet, so we don't call /me.
+	if (startInSelectOrg) {
+		loadPendingOrgs();
+	} else if (!startInVerify) {
+		loadUser();
+	}
+
 	async function loadUser() {
 		const { data, error: reqError } = await api.GET('/me');
 		user = reqError || !data ? false : (data as User);
+		if (user) loadInvitations();
 	}
-	if (!startInVerify) loadUser();
+
+	async function loadPendingOrgs() {
+		const { data, error: reqError } = await api.GET('/auth/pending-orgs');
+		if (reqError || !data) {
+			// No pending selection (expired?) — fall back to the normal flow.
+			needsSelectOrg = false;
+			loadUser();
+			return;
+		}
+		pendingOrgs = (data.organizations ?? []) as Org[];
+	}
 
 	async function submitVerifyCode(e: SubmitEvent) {
 		e.preventDefault();
@@ -47,15 +89,34 @@
 			verifyError = 'That code was not accepted. Check the code and try again.';
 			return;
 		}
-		// Verified — session cookie is now set. Drop the ?verify flag and show the
-		// signed-in UI.
+		finishLogin(data as User);
+	}
+
+	async function chooseOrg(orgId: string) {
+		selectingOrgId = orgId;
+		selectOrgError = null;
+		const { data, error: reqError } = await api.POST('/auth/select-org', {
+			body: { organizationId: orgId }
+		});
+		selectingOrgId = null;
+		if (reqError || !data) {
+			selectOrgError = 'Could not select that organization. Please try signing in again.';
+			return;
+		}
+		finishLogin(data as User);
+	}
+
+	// Common tail for verify / select-org: session cookie is now set; show the
+	// signed-in UI and clean the URL.
+	function finishLogin(u: User) {
 		needsVerify = false;
-		user = data as User;
+		needsSelectOrg = false;
+		user = u;
 		history.replaceState(null, '', window.location.pathname);
+		loadInvitations();
 	}
 
 	function signIn() {
-		// Full-page navigation to the backend's AuthKit redirect route.
 		window.location.href = `${apiBaseUrl}/auth/login`;
 	}
 
@@ -67,17 +128,44 @@
 		pinging = true;
 		result = null;
 		error = null;
-		// `data` and `error` are fully typed from the generated OpenAPI schema.
 		const { data, error: reqError } = await api.GET('/ping');
 		pinging = false;
 		if (reqError || !data) {
-			// 401 here means the session expired since page load — reflect that.
 			error = 'Request failed — you may need to sign in again.';
 			user = false;
 			return;
 		}
 		result = data.message;
 	}
+
+	async function loadInvitations() {
+		const { data } = await api.GET('/invitations');
+		invitations = data ? ((data.invitations ?? []) as Invitation[]) : [];
+	}
+
+	async function sendInvite(e: SubmitEvent) {
+		e.preventDefault();
+		inviting = true;
+		inviteMsg = null;
+		const { data, error: reqError } = await api.POST('/invitations', {
+			body: { email: inviteEmail.trim(), ...(inviteRole.trim() ? { role: inviteRole.trim() } : {}) }
+		});
+		inviting = false;
+		if (reqError || !data) {
+			inviteMsg = 'Could not send the invitation.';
+			return;
+		}
+		inviteMsg = `Invited ${data.email}.`;
+		inviteEmail = '';
+		inviteRole = '';
+		loadInvitations();
+	}
+
+	const activeOrg = $derived.by(() => {
+		if (!user) return undefined;
+		const u = user;
+		return u.organizations?.find((o) => o.id === u.organizationId);
+	});
 </script>
 
 <main class="flex min-h-svh items-center justify-center p-6">
@@ -87,6 +175,8 @@
 			<Card.Description>
 				{#if needsVerify}
 					Enter the verification code we emailed you to finish signing in.
+				{:else if needsSelectOrg}
+					Choose an organization to sign in to.
 				{:else if user}
 					Signed in. <code>GET /ping</code> is authenticated with your session.
 				{:else}
@@ -120,6 +210,32 @@
 				{#if verifyError}
 					<p class="text-destructive text-sm">{verifyError}</p>
 				{/if}
+			{:else if needsSelectOrg}
+				<!-- Organization selection step (user belongs to multiple orgs). -->
+				{#if pendingOrgs.length === 0}
+					<p class="text-muted-foreground flex items-center gap-2 text-sm">
+						<LoaderIcon class="animate-spin" />
+						Loading organizations…
+					</p>
+				{:else}
+					<div class="flex flex-col gap-2">
+						{#each pendingOrgs as org (org.id)}
+							<Button
+								variant="outline"
+								onclick={() => chooseOrg(org.id)}
+								disabled={selectingOrgId !== null}
+							>
+								{#if selectingOrgId === org.id}
+									<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								{/if}
+								{org.name}
+							</Button>
+						{/each}
+					</div>
+				{/if}
+				{#if selectOrgError}
+					<p class="text-destructive text-sm">{selectOrgError}</p>
+				{/if}
 			{:else if user === null}
 				<!-- Still checking the session. -->
 				<p class="text-muted-foreground flex items-center gap-2 text-sm">
@@ -135,8 +251,14 @@
 			{:else}
 				<!-- Signed in. -->
 				<p class="text-sm">
-					Signed in as <span class="font-semibold text-primary">{user.email}</span>
+					Signed in as <span class="text-primary font-semibold">{user.email}</span>
 				</p>
+				{#if activeOrg}
+					<p class="text-muted-foreground text-sm">
+						Organization: <span class="text-foreground font-medium">{activeOrg.name}</span>
+						{#if user.role}<span class="text-muted-foreground"> · {user.role}</span>{/if}
+					</p>
+				{/if}
 
 				<Button onclick={ping} disabled={pinging}>
 					{#if pinging}
@@ -150,10 +272,57 @@
 
 				{#if result}
 					<p class="text-sm">
-						Server replied: <span class="font-semibold text-primary">{result}</span>
+						Server replied: <span class="text-primary font-semibold">{result}</span>
 					</p>
 				{:else if error}
 					<p class="text-destructive text-sm">{error}</p>
+				{/if}
+
+				{#if user.organizationId}
+					<!-- Invite teammates to the active organization. -->
+					<div class="flex flex-col gap-2 border-t pt-3">
+						<p class="text-sm font-medium">Invite a teammate</p>
+						<form class="flex flex-col gap-2" onsubmit={sendInvite}>
+							<input
+								class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+								type="email"
+								placeholder="teammate@example.com"
+								bind:value={inviteEmail}
+								disabled={inviting}
+								required
+							/>
+							<input
+								class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+								type="text"
+								placeholder="role slug (optional, e.g. member)"
+								bind:value={inviteRole}
+								disabled={inviting}
+							/>
+							<Button type="submit" variant="secondary" disabled={inviting || inviteEmail.trim() === ''}>
+								{#if inviting}
+									<LoaderIcon data-icon="inline-start" class="animate-spin" />
+									Sending…
+								{:else}
+									<UserPlusIcon data-icon="inline-start" />
+									Send invite
+								{/if}
+							</Button>
+						</form>
+						{#if inviteMsg}
+							<p class="text-muted-foreground text-sm">{inviteMsg}</p>
+						{/if}
+
+						{#if invitations.length > 0}
+							<ul class="text-muted-foreground mt-1 flex flex-col gap-1 text-xs">
+								{#each invitations as inv (inv.id)}
+									<li class="flex justify-between gap-2">
+										<span class="truncate">{inv.email}</span>
+										<span class="shrink-0">{inv.state}</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
 				{/if}
 
 				<Button variant="outline" onclick={signOut}>

@@ -6,7 +6,11 @@ package api
 type OperationName = string
 
 const (
-	GetMeOperation       OperationName = "GetMe"
-	PingOperation        OperationName = "Ping"
-	VerifyEmailOperation OperationName = "VerifyEmail"
+	CreateInvitationOperation OperationName = "CreateInvitation"
+	GetMeOperation            OperationName = "GetMe"
+	GetPendingOrgsOperation   OperationName = "GetPendingOrgs"
+	ListInvitationsOperation  OperationName = "ListInvitations"
+	PingOperation             OperationName = "Ping"
+	SelectOrgOperation        OperationName = "SelectOrg"
+	VerifyEmailOperation      OperationName = "VerifyEmail"
 )
