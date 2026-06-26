@@ -4,30 +4,20 @@
 	import SendIcon from '@lucide/svelte/icons/send';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
-	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import PlugIcon from '@lucide/svelte/icons/plug';
-	import { api, apiBaseUrl } from '$lib/api/client';
+	import { api } from '$lib/api/client';
+	import { userStore, signIn, type User, type Organization as Org } from '$lib/user.svelte';
 	import {
 		fetchIntegrationStatus,
 		statusOf,
 		type IntegrationState
 	} from '$lib/integrations';
 
-	type Org = { id: string; name: string; role?: string };
-	type User = {
-		id: string;
-		email: string;
-		firstName?: string;
-		lastName?: string;
-		organizationId?: string;
-		role?: string;
-		organizations?: Org[];
-	};
 	type Invitation = { id: string; email: string; state: string; expiresAt?: string };
 
-	// null = unknown (still checking), then either a User or false (signed out).
-	let user = $state<User | null | false>(null);
+	// Shared auth state: undefined = still checking, null = signed out, else User.
+	const user = $derived(userStore.user);
 
 	// Which mid-login step (if any) the callback bounced us into.
 	const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -70,9 +60,8 @@
 	}
 
 	async function loadUser() {
-		const { data, error: reqError } = await api.GET('/me');
-		user = reqError || !data ? false : (data as User);
-		if (user) {
+		const u = await userStore.load();
+		if (u) {
 			loadInvitations();
 			loadIntegrations();
 		}
@@ -127,17 +116,10 @@
 	function finishLogin(u: User) {
 		needsVerify = false;
 		needsSelectOrg = false;
-		user = u;
+		userStore.user = u;
 		history.replaceState(null, '', window.location.pathname);
 		loadInvitations();
-	}
-
-	function signIn() {
-		window.location.href = `${apiBaseUrl}/auth/login`;
-	}
-
-	function signOut() {
-		window.location.href = `${apiBaseUrl}/auth/logout`;
+		loadIntegrations();
 	}
 
 	async function ping() {
@@ -148,7 +130,7 @@
 		pinging = false;
 		if (reqError || !data) {
 			error = 'Request failed — you may need to sign in again.';
-			user = false;
+			userStore.user = null;
 			return;
 		}
 		result = data.message;
@@ -177,35 +159,139 @@
 		loadInvitations();
 	}
 
-	const activeOrg = $derived.by(() => {
-		if (!user) return undefined;
-		const u = user;
-		return u.organizations?.find((o) => o.id === u.organizationId);
-	});
+	const activeOrg = $derived(userStore.activeOrg);
 
 	const ghConnected = $derived(!!statusOf(integrations, 'github')?.connected);
 	const slackConnected = $derived(!!statusOf(integrations, 'slack')?.connected);
 	const integrationsComplete = $derived(ghConnected && slackConnected);
 </script>
 
-<main class="flex min-h-svh items-center justify-center p-6">
-	<Card.Root class="w-full max-w-sm">
-		<Card.Header>
-			<Card.Title>Ping / Pong</Card.Title>
-			<Card.Description>
-				{#if needsVerify}
-					Enter the verification code we emailed you to finish signing in.
-				{:else if needsSelectOrg}
-					Choose an organization to sign in to.
-				{:else if user}
-					Signed in. <code>GET /ping</code> is authenticated with your session.
-				{:else}
-					Sign in with WorkOS to call the protected <code>GET /ping</code> endpoint.
+{#if user}
+	<!-- Signed in: dashboard content rendered inside the app shell's content area. -->
+	<div class="flex flex-col gap-1">
+		<h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+		<p class="text-muted-foreground text-sm">
+			Signed in as <span class="text-foreground font-medium">{user.email}</span>
+			{#if activeOrg}
+				· {activeOrg.name}{#if user.role}<span class="text-muted-foreground"> · {user.role}</span>{/if}
+			{/if}
+		</p>
+	</div>
+
+	<div class="grid auto-rows-min gap-4 md:grid-cols-2 xl:grid-cols-3">
+		<!-- Ping card. -->
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">Ping / Pong</Card.Title>
+				<Card.Description><code>GET /ping</code> is authenticated with your session.</Card.Description>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-3">
+				<Button onclick={ping} disabled={pinging}>
+					{#if pinging}
+						<LoaderIcon data-icon="inline-start" class="animate-spin" />
+						Pinging…
+					{:else}
+						<SendIcon data-icon="inline-start" />
+						Send ping
+					{/if}
+				</Button>
+				{#if result}
+					<p class="text-sm">Server replied: <span class="text-primary font-semibold">{result}</span></p>
+				{:else if error}
+					<p class="text-destructive text-sm">{error}</p>
 				{/if}
-			</Card.Description>
-		</Card.Header>
-		<Card.Content class="flex flex-col gap-4">
-			{#if needsVerify}
+			</Card.Content>
+		</Card.Root>
+
+		<!-- Integrations summary card. -->
+		{#if integrations && integrations.configured}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title class="flex items-center gap-2 text-base">
+						<PlugIcon class="size-4" /> Integrations
+					</Card.Title>
+					<Card.Description>
+						GitHub: <span class="text-foreground">{ghConnected ? 'connected' : 'not connected'}</span>
+						· Slack: <span class="text-foreground">{slackConnected ? 'connected' : 'not connected'}</span>
+					</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					{#if integrationsComplete}
+						<Button variant="outline" size="sm" href="/settings/integrations">Manage integrations</Button>
+					{:else}
+						<Button size="sm" href="/onboarding">Finish setup</Button>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
+		<!-- Invite teammate card. -->
+		{#if user.organizationId}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title class="text-base">Invite a teammate</Card.Title>
+					<Card.Description>Add someone to {activeOrg?.name ?? 'your organization'}.</Card.Description>
+				</Card.Header>
+				<Card.Content class="flex flex-col gap-2">
+					<form class="flex flex-col gap-2" onsubmit={sendInvite}>
+						<input
+							class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+							type="email"
+							placeholder="teammate@example.com"
+							bind:value={inviteEmail}
+							disabled={inviting}
+							required
+						/>
+						<input
+							class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+							type="text"
+							placeholder="role slug (optional, e.g. member)"
+							bind:value={inviteRole}
+							disabled={inviting}
+						/>
+						<Button type="submit" variant="secondary" disabled={inviting || inviteEmail.trim() === ''}>
+							{#if inviting}
+								<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								Sending…
+							{:else}
+								<UserPlusIcon data-icon="inline-start" />
+								Send invite
+							{/if}
+						</Button>
+					</form>
+					{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
+					{#if invitations.length > 0}
+						<ul class="text-muted-foreground mt-1 flex flex-col gap-1 text-xs">
+							{#each invitations as inv (inv.id)}
+								<li class="flex justify-between gap-2">
+									<span class="truncate">{inv.email}</span>
+									<span class="shrink-0">{inv.state}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{/if}
+	</div>
+{:else}
+	<!-- Signed out / mid-login: centered login card (rendered bare, no app shell). -->
+	<main class="flex min-h-svh items-center justify-center p-6">
+		<Card.Root class="w-full max-w-sm">
+			<Card.Header>
+				<Card.Title>Sign in</Card.Title>
+				<Card.Description>
+					{#if needsVerify}
+						Enter the verification code we emailed you to finish signing in.
+					{:else if needsSelectOrg}
+						Choose an organization to sign in to.
+					{:else}
+						Sign in with WorkOS to access your dashboard.
+					{/if}
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-4">
+				{#if needsVerify}
 				<!-- Email verification step (e.g. first GitHub OAuth login). -->
 				<form class="flex flex-col gap-3" onsubmit={submitVerifyCode}>
 					<input
@@ -256,121 +342,20 @@
 				{#if selectOrgError}
 					<p class="text-destructive text-sm">{selectOrgError}</p>
 				{/if}
-			{:else if user === null}
+			{:else if user === undefined}
 				<!-- Still checking the session. -->
 				<p class="text-muted-foreground flex items-center gap-2 text-sm">
 					<LoaderIcon class="animate-spin" />
 					Checking session…
 				</p>
-			{:else if user === false}
-				<!-- Signed out. -->
+			{:else}
+				<!-- Signed out (or store cleared after a failed request). -->
 				<Button onclick={signIn}>
 					<LogInIcon data-icon="inline-start" />
 					Sign in with WorkOS
 				</Button>
-			{:else}
-				<!-- Signed in. -->
-				<p class="text-sm">
-					Signed in as <span class="text-primary font-semibold">{user.email}</span>
-				</p>
-				{#if activeOrg}
-					<p class="text-muted-foreground text-sm">
-						Organization: <span class="text-foreground font-medium">{activeOrg.name}</span>
-						{#if user.role}<span class="text-muted-foreground"> · {user.role}</span>{/if}
-					</p>
-				{/if}
-
-				<Button onclick={ping} disabled={pinging}>
-					{#if pinging}
-						<LoaderIcon data-icon="inline-start" class="animate-spin" />
-						Pinging…
-					{:else}
-						<SendIcon data-icon="inline-start" />
-						Send ping
-					{/if}
-				</Button>
-
-				{#if result}
-					<p class="text-sm">
-						Server replied: <span class="text-primary font-semibold">{result}</span>
-					</p>
-				{:else if error}
-					<p class="text-destructive text-sm">{error}</p>
-				{/if}
-
-				{#if user.organizationId}
-					<!-- Invite teammates to the active organization. -->
-					<div class="flex flex-col gap-2 border-t pt-3">
-						<p class="text-sm font-medium">Invite a teammate</p>
-						<form class="flex flex-col gap-2" onsubmit={sendInvite}>
-							<input
-								class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-								type="email"
-								placeholder="teammate@example.com"
-								bind:value={inviteEmail}
-								disabled={inviting}
-								required
-							/>
-							<input
-								class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-								type="text"
-								placeholder="role slug (optional, e.g. member)"
-								bind:value={inviteRole}
-								disabled={inviting}
-							/>
-							<Button type="submit" variant="secondary" disabled={inviting || inviteEmail.trim() === ''}>
-								{#if inviting}
-									<LoaderIcon data-icon="inline-start" class="animate-spin" />
-									Sending…
-								{:else}
-									<UserPlusIcon data-icon="inline-start" />
-									Send invite
-								{/if}
-							</Button>
-						</form>
-						{#if inviteMsg}
-							<p class="text-muted-foreground text-sm">{inviteMsg}</p>
-						{/if}
-
-						{#if invitations.length > 0}
-							<ul class="text-muted-foreground mt-1 flex flex-col gap-1 text-xs">
-								{#each invitations as inv (inv.id)}
-									<li class="flex justify-between gap-2">
-										<span class="truncate">{inv.email}</span>
-										<span class="shrink-0">{inv.state}</span>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
-				{/if}
-
-				{#if integrations && integrations.configured}
-					<!-- Integrations summary + links to onboarding / settings. -->
-					<div class="flex flex-col gap-2 border-t pt-3">
-						<div class="flex items-center gap-2">
-							<PlugIcon class="size-4" />
-							<span class="text-sm font-medium">Integrations</span>
-						</div>
-						<p class="text-muted-foreground text-sm">
-							GitHub: <span class="text-foreground">{ghConnected ? 'connected' : 'not connected'}</span>
-							· Slack: <span class="text-foreground">{slackConnected ? 'connected' : 'not connected'}</span>
-						</p>
-						{#if integrationsComplete}
-							<Button variant="outline" size="sm" href="/settings/integrations">
-								Manage integrations
-							</Button>
-						{:else}
-							<Button size="sm" href="/onboarding">Finish setup</Button>
-						{/if}
-					</div>
-				{/if}
-
-				<Button variant="outline" onclick={signOut}>
-					<LogOutIcon data-icon="inline-start" />
-					Log out
-				</Button>
 			{/if}
 		</Card.Content>
 	</Card.Root>
-</main>
+	</main>
+{/if}
