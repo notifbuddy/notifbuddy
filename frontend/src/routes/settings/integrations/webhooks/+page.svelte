@@ -39,8 +39,8 @@
 	}
 </script>
 
-<main class="flex min-h-svh items-start justify-center p-6">
-	<Card.Root class="w-full max-w-2xl">
+<div class="w-full">
+	<Card.Root class="w-full">
 		<Card.Header>
 			<div class="flex items-center justify-between">
 				<div>
@@ -103,4 +103,4 @@
 			<Button variant="ghost" href="/settings/integrations">Back to integrations</Button>
 		</Card.Content>
 	</Card.Root>
-</main>
+</div>
