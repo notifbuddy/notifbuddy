@@ -5,7 +5,7 @@
 	import { useSidebar } from '$lib/components/ui/sidebar';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import UserIcon from '@lucide/svelte/icons/user';
-	import UsersIcon from '@lucide/svelte/icons/users';
+	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { userStore, signOut, displayName, initials } from '$lib/user.svelte';
 
@@ -69,7 +69,7 @@
 						<DropdownMenu.Item>
 							{#snippet child({ props })}
 								<a href="/settings/organization" {...props}>
-									<UsersIcon />
+									<BuildingIcon />
 									Organization
 								</a>
 							{/snippet}
