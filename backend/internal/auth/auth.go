@@ -559,7 +559,14 @@ func (a *Service) loadUser(w http.ResponseWriter, r *http.Request) *SessionUser 
 	if result.NeedsRefresh {
 		refreshed, err := a.client.RefreshSession(r.Context(), c.Value, a.cookiePassword)
 		if err != nil || !refreshed.Authenticated {
-			a.clearSessionCookie(w)
+			// Refresh failed. This is commonly a *concurrent-refresh race*: the SPA
+			// fires several requests at once, the first rotates the WorkOS refresh
+			// token and rewrites the cookie, and the rest arrive carrying the now-
+			// stale sealed cookie so their refresh hits invalid_grant. We must NOT
+			// clear the cookie here — a sibling request may have just set a valid
+			// one. Treat this single request as unauthenticated (401); the browser
+			// retries and picks up the fresh cookie. Only an explicit logout clears
+			// the session.
 			return nil
 		}
 		a.setSessionCookie(w, refreshed.SealedSession)

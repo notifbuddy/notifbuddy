@@ -241,6 +241,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /integrations/github/webhooks:
+    get:
+      operationId: listGithubWebhooks
+      summary: Recent GitHub webhook deliveries for the active organization
+      description: |
+        Returns the GitHub webhook events we have received and stored for the
+        caller's active organization, newest first. Events are stored when GitHub
+        delivers them to POST /integrations/github/webhook (a browser-external
+        redirect-style route, not part of this JSON spec).
+      responses:
+        "200":
+          description: Recent webhook events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     PongResponse:
@@ -420,6 +442,43 @@ components:
       required:
         - integrations
         - configured
+    WebhookEvent:
+      type: object
+      description: A stored GitHub webhook delivery.
+      properties:
+        deliveryId:
+          type: string
+          description: The X-GitHub-Delivery id (unique per delivery).
+          example: 12345678-1234-1234-1234-123456789012
+        eventType:
+          type: string
+          description: The X-GitHub-Event type.
+          example: push
+        action:
+          type: string
+          description: The payload action, when present.
+          example: opened
+        receivedAt:
+          type: string
+          description: ISO 8601 timestamp when we received it.
+          example: "2026-06-26T12:00:00Z"
+        payload:
+          type: string
+          description: The raw webhook JSON payload (as a string).
+      required:
+        - deliveryId
+        - eventType
+        - receivedAt
+    WebhookListResponse:
+      type: object
+      description: Recent webhook events for the active organization.
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+      required:
+        - events
     Error:
       type: object
       description: A generic error response.

@@ -21,6 +21,10 @@ type GetPendingOrgsRes interface {
 	getPendingOrgsRes()
 }
 
+type ListGithubWebhooksRes interface {
+	listGithubWebhooksRes()
+}
+
 type ListInvitationsRes interface {
 	listInvitationsRes()
 }

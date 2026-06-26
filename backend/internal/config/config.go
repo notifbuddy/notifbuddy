@@ -25,6 +25,7 @@ type Config struct {
 	App        AppConfig        `yaml:"app"`
 	Database   DatabaseConfig   `yaml:"database"`
 	Encryption EncryptionConfig `yaml:"encryption"`
+	PubSub     PubSubConfig     `yaml:"pubsub"`
 	GitHub     GitHubConfig     `yaml:"github"`
 	Slack      SlackConfig      `yaml:"slack"`
 }
@@ -77,6 +78,15 @@ type EncryptionConfig struct {
 	KMSKeyID string `yaml:"kms_key_id"`
 }
 
+type PubSubConfig struct {
+	// Provider selects the publish backend: "memory" (in-process bus for local
+	// dev) or "sns" (AWS SNS for production).
+	Provider string `yaml:"provider"`
+	// SNSTopicARN is the SNS topic ARN for the GitHub webhook event topic when
+	// Provider=sns.
+	SNSTopicARN string `yaml:"sns_topic_arn"`
+}
+
 type GitHubConfig struct {
 	// AppSlug is the GitHub App's URL slug (github.com/apps/<slug>).
 	AppSlug string `yaml:"app_slug"`
@@ -89,6 +99,9 @@ type GitHubConfig struct {
 	// PrivateKey is the App's PEM private key, used to mint installation tokens.
 	// SECRET — env ref (the PEM contents, or a $VAR holding them).
 	PrivateKey string `yaml:"private_key"`
+	// WebhookSecret verifies incoming webhook HMAC signatures
+	// (X-Hub-Signature-256). SECRET — env ref. Empty disables verification.
+	WebhookSecret string `yaml:"webhook_secret"`
 	// CallbackURL is where GitHub redirects after install/authorize.
 	CallbackURL string `yaml:"callback_url"`
 }
@@ -98,8 +111,8 @@ type SlackConfig struct {
 	// ClientSecret is SECRET — env ref.
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
-	// Scopes is the space- or comma-separated bot scope list requested at OAuth.
-	Scopes string `yaml:"scopes"`
+	// Scopes is the list of bot scopes requested at OAuth.
+	Scopes []string `yaml:"scopes"`
 	// CallbackURL is where Slack redirects after authorize.
 	CallbackURL string `yaml:"callback_url"`
 }
@@ -113,6 +126,7 @@ func defaultConfig() Config {
 		WorkOS: WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:    AppConfig{PostLoginURL: "http://localhost:5173"},
 		Encryption: EncryptionConfig{Provider: "local"},
+		PubSub:     PubSubConfig{Provider: "memory"},
 		GitHub: GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
 		Slack:  SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
 	}

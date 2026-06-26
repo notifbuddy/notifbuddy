@@ -248,16 +248,98 @@ The backend **auto-migrates** on startup (embedded SQL in `internal/store/migrat
 If `DATABASE_URL` is unset, the server still runs but integration endpoints report
 `configured: false`.
 
+### GitHub webhooks + pub/sub
+
+Incoming GitHub webhooks are handled as **two deliberately separate operations**:
+
+```
+POST /integrations/github/webhook
+  1. verify X-Hub-Signature-256 HMAC (github.webhook_secret)
+  2. STORE the delivery in github_webhook_events  ← source of truth, idempotent on delivery id
+  3. PUBLISH integrations.github.webhook_event     ← separate notification, best-effort
+  → 202 Accepted   (200 on a redelivery, which is not re-published)
+```
+
+Storing and publishing are never merged: the stored row is the durable record
+the webhooks view reads; the published event is a notification. If publishing
+fails, the handler logs it and still returns 202 — the event is already stored,
+so GitHub should not redeliver. A redelivery (same `X-GitHub-Delivery`) is
+ack'd without re-storing or re-publishing.
+
+**Pub/sub is provider-agnostic** (`internal/pubsub`): callers depend only on
+`pubsub.Publisher` + `pubsub.Message` — no AWS or channel types leak. Backends:
+
+- `memory` (local dev) — in-process bus with subscriber fan-out; a logging
+  subscriber prints each published event so the path is visible.
+- `sns` (production) — `pubsub.NewSNSPublisher` behind an `SNSClient` seam (like
+  the crypto KMS seam); wire your AWS SNS client in `buildPublisher`. Until then
+  it falls back to a no-op publisher with a warning.
+
+Select the backend with `pubsub.provider` in `config.yaml`. The
+**`/settings/integrations/webhooks`** view lists an org's recent deliveries
+(event type, action, time) with expandable payloads, served by the spec-driven
+`GET /integrations/github/webhooks`.
+
 ### Dashboard prerequisites for integrations
 
 - **GitHub App** ([create one](https://github.com/settings/apps/new)): set the
   callback + setup URL to `http://localhost:8080/integrations/github/callback`,
-  generate a private key, and note the App ID, slug, and OAuth client id/secret.
-  Put `app_slug`/`app_id` in `config.yaml` and the secrets in `.env`.
-- **Slack app** ([create one](https://api.slack.com/apps)): add redirect URL
-  `http://localhost:8080/integrations/slack/callback`, set the bot scopes (the
-  `slack.scopes` list in `config.yaml` is a broad starting set — trim to what you
-  need), and put the client id/secret in `.env`.
+  set the **webhook URL** to `http://localhost:8080/integrations/github/webhook`
+  with a webhook **secret** (→ `GITHUB_WEBHOOK_SECRET`), generate a private key,
+  and note the App ID, slug, and OAuth client id/secret. Put `app_slug`/`app_id`
+  in `config.yaml` and the secrets in `.env`. (For local webhook delivery,
+  expose `:8080` with a tunnel like ngrok and use that URL.)
+- **Slack app**: the fastest path is **Create from manifest**. Go to
+  [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a
+  manifest** → pick your workspace → paste the YAML below → Create. Then on the
+  app's **Basic Information** page copy the **Client ID** and **Client Secret**
+  into `.env` (`SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`). The manifest already
+  sets the OAuth redirect URL and the bot scopes (matching `slack.scopes` in
+  `config.yaml` — trim there and in the manifest to what you actually need).
+
+```yaml
+_metadata:
+  major_version: 2
+  minor_version: 1
+display_information:
+  name: NotifBuddy
+  description: Integrations demo — connects a Slack workspace to your org.
+features:
+  bot_user:
+    display_name: notifbuddy
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://localhost:8080/integrations/slack/callback
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:manage
+      - channels:history
+      - channels:read
+      - commands
+      - groups:history
+      - groups:write
+      - reactions:write
+      - chat:write
+      - chat:write.public
+      - im:history
+      - im:read
+      - im:write
+      - users:read
+      - reactions:read
+      - emoji:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+
+  Note: Slack requires **https** redirect URLs even for localhost, so the
+  manifest uses `https://localhost:8080/...`. For the OAuth callback to actually
+  resolve in local dev, either run the backend behind a tunnel (ngrok) and use
+  that https URL here and in `slack.callback_url`, or terminate TLS in front of
+  `:8080`. Plain `http://localhost` works for GitHub but **not** Slack.
 
 ## Configuration
 
@@ -299,10 +381,13 @@ app:
 | `database.url`                 | `DATABASE_URL`                 | ✅        | Postgres connection string (empty disables integrations) |
 | `encryption.provider`          | —                              |           | `local` (AES-GCM) or `kms`                           |
 | `encryption.local_key`         | `INTEGRATION_ENC_KEY`          | ✅        | base64 32-byte key for `local` (empty = ephemeral dev key) |
+| `pubsub.provider`              | —                              |           | `memory` (local) or `sns` (wire a client in buildPublisher) |
+| `pubsub.sns_topic_arn`         | —                              |           | SNS topic ARN when `provider=sns`                    |
 | `github.app_slug` / `app_id`   | —                              |           | GitHub App slug + numeric ID                         |
 | `github.client_id`             | `GITHUB_APP_CLIENT_ID`         |           | GitHub App OAuth client id                           |
 | `github.client_secret`         | `GITHUB_APP_CLIENT_SECRET`     | ✅        | GitHub App OAuth client secret                       |
 | `github.private_key`           | `GITHUB_APP_PRIVATE_KEY`       | ✅        | App PEM key (mints installation tokens)              |
+| `github.webhook_secret`        | `GITHUB_WEBHOOK_SECRET`        | ✅        | Verifies webhook HMAC (empty disables verification)  |
 | `slack.client_id`              | `SLACK_CLIENT_ID`              |           | Slack app client id                                  |
 | `slack.client_secret`          | `SLACK_CLIENT_SECRET`          | ✅        | Slack app client secret                              |
 | `slack.scopes`                 | —                              |           | Requested bot scopes (space/comma separated)         |
@@ -332,7 +417,8 @@ xolo/
 │       ├── config/              # YAML + $VAR env-ref loader
 │       ├── store/                # pgx pool + migrations + repository
 │       ├── crypto/               # Encryptor (local AES-GCM + KMS seam)
-│       └── integrations/         # GitHub App + Slack OAuth flows
+│       ├── pubsub/               # provider-agnostic Publisher (memory + SNS seam)
+│       └── integrations/         # GitHub App + Slack OAuth + webhook receiver
 ├── frontend/                     # SvelteKit SPA
 │   └── src/
 │       ├── lib/                  # api/client.ts (+ GENERATED schema.d.ts), integrations.ts

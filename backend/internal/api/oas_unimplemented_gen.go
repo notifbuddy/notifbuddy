@@ -67,6 +67,17 @@ func (UnimplementedHandler) GetPendingOrgs(ctx context.Context) (r GetPendingOrg
 	return r, ht.ErrNotImplemented
 }
 
+// ListGithubWebhooks implements listGithubWebhooks operation.
+//
+// Returns the GitHub webhook events we have received and stored for the caller's active organization,
+// newest first. Events are stored when GitHub delivers them to POST /integrations/github/webhook (a
+// browser-external redirect-style route, not part of this JSON spec).
+//
+// GET /integrations/github/webhooks
+func (UnimplementedHandler) ListGithubWebhooks(ctx context.Context) (r ListGithubWebhooksRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListInvitations implements listInvitations operation.
 //
 // Returns the invitations for the caller's active organization. Requires a session scoped to an

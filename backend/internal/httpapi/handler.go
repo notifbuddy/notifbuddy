@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"log"
 
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
@@ -180,6 +181,35 @@ func (h Handler) DisconnectIntegration(ctx context.Context, params api.Disconnec
 		return &api.Error{Message: "failed to read integration status"}, nil
 	}
 	return integrationStatusResponse(h.integrations.Enabled(), statuses), nil
+}
+
+// webhookListLimit caps how many webhook events the list endpoint returns.
+const webhookListLimit = 100
+
+// ListGithubWebhooks implements `listGithubWebhooks`: GET /integrations/github/webhooks.
+// Returns the active organization's recent stored GitHub webhook deliveries.
+func (h Handler) ListGithubWebhooks(ctx context.Context) (api.ListGithubWebhooksRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	events, err := h.integrations.ListGitHubWebhooks(ctx, user.OrgID, webhookListLimit)
+	if err != nil {
+		log.Printf("httpapi: list github webhooks for org %s: %v", user.OrgID, err)
+		return &api.Error{Message: "failed to list webhooks"}, nil
+	}
+	resp := &api.WebhookListResponse{}
+	for _, e := range events {
+		item := api.WebhookEvent{DeliveryId: e.DeliveryID, EventType: e.EventType, ReceivedAt: e.ReceivedAt}
+		if e.Action != "" {
+			item.Action = api.NewOptString(e.Action)
+		}
+		if len(e.Payload) > 0 {
+			item.Payload = api.NewOptString(string(e.Payload))
+		}
+		resp.Events = append(resp.Events, item)
+	}
+	return resp, nil
 }
 
 // integrationStatusResponse maps the service's status slice to the generated type.

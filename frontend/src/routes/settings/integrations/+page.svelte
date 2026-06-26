@@ -98,6 +98,9 @@
 					</div>
 				{/each}
 
+				<Button variant="outline" size="sm" href="/settings/integrations/webhooks">
+					View received GitHub webhooks
+				</Button>
 				<Button variant="ghost" href="/">Back to dashboard</Button>
 			{/if}
 		</Card.Content>

@@ -16,6 +16,7 @@ import (
 	"xolo/backend/internal/crypto"
 	"xolo/backend/internal/httpapi"
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/store"
 )
 
@@ -62,10 +63,15 @@ func main() {
 	// Auth (WorkOS): redirect handlers + the session-loading middleware.
 	authSvc := auth.New(cfg)
 
+	// Pub/sub: provider-agnostic publisher for integration events. Local dev uses
+	// an in-memory bus (with a logging subscriber so published events are
+	// visible); production selects SNS. Callers only see pubsub.Publisher.
+	publisher := buildPublisher(cfg)
+
 	// Integrations (GitHub/Slack): reads the caller's org/user from the session
 	// via auth.OrgUserFromRequest. Runs with a nil store when no DB is configured
 	// (Enabled() == false), in which case the endpoints report "not configured".
-	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest)
+	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
 
 	// API handler (implements the ogen interface) + the generated server.
 	apiHandler := httpapi.New(authSvc, intgSvc)
@@ -86,6 +92,7 @@ func main() {
 	mux.HandleFunc("GET /auth/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /integrations/github/connect", intgSvc.HandleGitHubConnect)
 	mux.HandleFunc("GET /integrations/github/callback", intgSvc.HandleGitHubCallback)
+	mux.HandleFunc("POST /integrations/github/webhook", intgSvc.HandleGitHubWebhook)
 	mux.HandleFunc("GET /integrations/slack/connect", intgSvc.HandleSlackConnect)
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
 	mux.Handle("/", srv)
@@ -120,6 +127,32 @@ func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, e
 		return nil, errWrap("encryption.provider=kms requires a KMS client to be wired into buildEncryptor")
 	default:
 		return nil, errWrap("unknown encryption.provider: " + cfg.Encryption.Provider)
+	}
+}
+
+// buildPublisher constructs the pub/sub Publisher from config. "memory" builds
+// an in-process bus and registers a logging subscriber on the GitHub webhook
+// topic so published events are visible in dev. "sns" needs an AWS SNS client
+// wired into pubsub.NewSNSPublisher — until then it falls back to Nop with a
+// warning so the app still runs.
+func buildPublisher(cfg config.Config) pubsub.Publisher {
+	switch cfg.PubSub.Provider {
+	case "", "memory":
+		bus := pubsub.NewMemoryBus()
+		bus.Subscribe(integrations.GitHubWebhookTopic, func(_ context.Context, msg pubsub.Message) {
+			log.Printf("pubsub(memory): %s %s", msg.Topic, string(msg.Payload))
+		})
+		return bus
+	case "sns":
+		// Wire your AWS SNS client here, e.g.:
+		//   client := awssns.New(...)
+		//   resolver := func(string) (string, bool) { return cfg.PubSub.SNSTopicARN, cfg.PubSub.SNSTopicARN != "" }
+		//   pub, err := pubsub.NewSNSPublisher(client, resolver)
+		log.Printf("warning: pubsub.provider=sns but no SNS client is wired — publishing disabled (Nop). See buildPublisher.")
+		return pubsub.Nop
+	default:
+		log.Printf("warning: unknown pubsub.provider %q — publishing disabled (Nop)", cfg.PubSub.Provider)
+		return pubsub.Nop
 	}
 }
 

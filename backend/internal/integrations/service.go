@@ -18,6 +18,7 @@ import (
 
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
+	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/store"
 )
 
@@ -34,12 +35,17 @@ type Service struct {
 	enc     crypto.Encryptor
 	cfg     config.Config
 	resolve SessionResolver
+	pub     pubsub.Publisher
 }
 
 // New builds the integrations service. store/enc may be nil when the app runs
-// without a database; in that case Enabled() returns false.
-func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve SessionResolver) *Service {
-	return &Service{store: st, enc: enc, cfg: cfg, resolve: resolve}
+// without a database; in that case Enabled() returns false. pub is the
+// provider-agnostic publisher for integration events; pass pubsub.Nop to disable.
+func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve SessionResolver, pub pubsub.Publisher) *Service {
+	if pub == nil {
+		pub = pubsub.Nop
+	}
+	return &Service{store: st, enc: enc, cfg: cfg, resolve: resolve, pub: pub}
 }
 
 // Enabled reports whether persistence (and thus integrations) is available.

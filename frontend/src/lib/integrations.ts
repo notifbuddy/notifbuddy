@@ -43,3 +43,19 @@ export async function disconnect(provider: string): Promise<IntegrationState | n
 export function statusOf(state: IntegrationState | null, provider: string): IntegrationStatus | undefined {
 	return state?.integrations.find((i) => i.provider === provider);
 }
+
+export type WebhookEvent = {
+	deliveryId: string;
+	eventType: string;
+	action?: string;
+	receivedAt: string;
+	payload?: string;
+};
+
+// Fetch recent GitHub webhook deliveries for the active org. Returns null when
+// unauthenticated.
+export async function fetchGithubWebhooks(): Promise<WebhookEvent[] | null> {
+	const { data, error } = await api.GET('/integrations/github/webhooks');
+	if (error || !data) return null;
+	return (data.events ?? []) as WebhookEvent[];
+}

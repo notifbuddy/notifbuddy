@@ -37,7 +37,7 @@ func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	q := url.Values{}
 	q.Set("client_id", s.cfg.Slack.ClientID)
-	q.Set("scope", normalizeScopes(s.cfg.Slack.Scopes))
+	q.Set("scope", strings.Join(s.cfg.Slack.Scopes, " "))
 	q.Set("redirect_uri", s.cfg.Slack.CallbackURL)
 	q.Set("state", state)
 	http.Redirect(w, r, "https://slack.com/oauth/v2/authorize?"+q.Encode(), http.StatusFound)
@@ -151,11 +151,4 @@ func (s *Service) SlackBotToken(ctx context.Context, orgID string) (string, erro
 		return "", err
 	}
 	return string(tok), nil
-}
-
-// normalizeScopes accepts a comma- or space-separated scope list and returns the
-// space-separated form Slack expects.
-func normalizeScopes(raw string) string {
-	fields := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
-	return strings.Join(fields, " ")
 }

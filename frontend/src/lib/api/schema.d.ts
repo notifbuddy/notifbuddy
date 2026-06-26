@@ -191,6 +191,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/github/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent GitHub webhook deliveries for the active organization
+         * @description Returns the GitHub webhook events we have received and stored for the
+         *     caller's active organization, newest first. Events are stored when GitHub
+         *     delivers them to POST /integrations/github/webhook (a browser-external
+         *     redirect-style route, not part of this JSON spec).
+         */
+        get: operations["listGithubWebhooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -335,6 +358,35 @@ export interface components {
             integrations: components["schemas"]["IntegrationStatus"][];
             /** @description Whether the integration service is configured (database available) on the server. */
             configured: boolean;
+        };
+        /** @description A stored GitHub webhook delivery. */
+        WebhookEvent: {
+            /**
+             * @description The X-GitHub-Delivery id (unique per delivery).
+             * @example 12345678-1234-1234-1234-123456789012
+             */
+            deliveryId: string;
+            /**
+             * @description The X-GitHub-Event type.
+             * @example push
+             */
+            eventType: string;
+            /**
+             * @description The payload action, when present.
+             * @example opened
+             */
+            action?: string;
+            /**
+             * @description ISO 8601 timestamp when we received it.
+             * @example 2026-06-26T12:00:00Z
+             */
+            receivedAt: string;
+            /** @description The raw webhook JSON payload (as a string). */
+            payload?: string;
+        };
+        /** @description Recent webhook events for the active organization. */
+        WebhookListResponse: {
+            events: components["schemas"]["WebhookEvent"][];
         };
         /** @description A generic error response. */
         Error: {
@@ -627,6 +679,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationStatusResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listGithubWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent webhook events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookListResponse"];
                 };
             };
             /** @description No valid session. */

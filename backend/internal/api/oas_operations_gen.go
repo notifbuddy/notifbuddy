@@ -11,6 +11,7 @@ const (
 	GetIntegrationStatusOperation  OperationName = "GetIntegrationStatus"
 	GetMeOperation                 OperationName = "GetMe"
 	GetPendingOrgsOperation        OperationName = "GetPendingOrgs"
+	ListGithubWebhooksOperation    OperationName = "ListGithubWebhooks"
 	ListInvitationsOperation       OperationName = "ListInvitations"
 	PingOperation                  OperationName = "Ping"
 	SelectOrgOperation             OperationName = "SelectOrg"

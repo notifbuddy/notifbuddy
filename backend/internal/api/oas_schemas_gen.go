@@ -105,6 +105,7 @@ func (*Error) disconnectIntegrationRes() {}
 func (*Error) getIntegrationStatusRes()  {}
 func (*Error) getMeRes()                 {}
 func (*Error) getPendingOrgsRes()        {}
+func (*Error) listGithubWebhooksRes()    {}
 func (*Error) listInvitationsRes()       {}
 func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
@@ -515,3 +516,86 @@ func (s *VerifyEmailRequest) GetCode() string {
 func (s *VerifyEmailRequest) SetCode(val string) {
 	s.Code = val
 }
+
+// A stored GitHub webhook delivery.
+// Ref: #/components/schemas/WebhookEvent
+type WebhookEvent struct {
+	// The X-GitHub-Delivery id (unique per delivery).
+	DeliveryId string `json:"deliveryId"`
+	// The X-GitHub-Event type.
+	EventType string `json:"eventType"`
+	// The payload action, when present.
+	Action OptString `json:"action"`
+	// ISO 8601 timestamp when we received it.
+	ReceivedAt string `json:"receivedAt"`
+	// The raw webhook JSON payload (as a string).
+	Payload OptString `json:"payload"`
+}
+
+// GetDeliveryId returns the value of DeliveryId.
+func (s *WebhookEvent) GetDeliveryId() string {
+	return s.DeliveryId
+}
+
+// GetEventType returns the value of EventType.
+func (s *WebhookEvent) GetEventType() string {
+	return s.EventType
+}
+
+// GetAction returns the value of Action.
+func (s *WebhookEvent) GetAction() OptString {
+	return s.Action
+}
+
+// GetReceivedAt returns the value of ReceivedAt.
+func (s *WebhookEvent) GetReceivedAt() string {
+	return s.ReceivedAt
+}
+
+// GetPayload returns the value of Payload.
+func (s *WebhookEvent) GetPayload() OptString {
+	return s.Payload
+}
+
+// SetDeliveryId sets the value of DeliveryId.
+func (s *WebhookEvent) SetDeliveryId(val string) {
+	s.DeliveryId = val
+}
+
+// SetEventType sets the value of EventType.
+func (s *WebhookEvent) SetEventType(val string) {
+	s.EventType = val
+}
+
+// SetAction sets the value of Action.
+func (s *WebhookEvent) SetAction(val OptString) {
+	s.Action = val
+}
+
+// SetReceivedAt sets the value of ReceivedAt.
+func (s *WebhookEvent) SetReceivedAt(val string) {
+	s.ReceivedAt = val
+}
+
+// SetPayload sets the value of Payload.
+func (s *WebhookEvent) SetPayload(val OptString) {
+	s.Payload = val
+}
+
+// Recent webhook events for the active organization.
+// Ref: #/components/schemas/WebhookListResponse
+type WebhookListResponse struct {
+	Events []WebhookEvent `json:"events"`
+}
+
+// GetEvents returns the value of Events.
+func (s *WebhookListResponse) GetEvents() []WebhookEvent {
+	return s.Events
+}
+
+// SetEvents sets the value of Events.
+func (s *WebhookListResponse) SetEvents(val []WebhookEvent) {
+	s.Events = val
+}
+
+func (*WebhookListResponse) listGithubWebhooksRes() {}
