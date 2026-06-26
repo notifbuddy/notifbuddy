@@ -8,8 +8,8 @@ re-fetches the installed UI components (`button`, `card`, `avatar`,
 
 | Preset code  | Status   | Notes                                          |
 | ------------ | -------- | ---------------------------------------------- |
-| `b5Jz95vQJ`  | Applied  | `lyra` style — sharp corners, compact, mono accents |
-| `b4hZXSieQ`  | Backup   | Alternative to compare against                 |
+| `b4hZXSieQ`  | Applied  | `mira` style — green primary, rounded, Instrument Sans (mono for code) |
+| `b5Jz95vQJ`  | Backup   | `lyra` style — sharp corners, compact, mono accents |
 
 ## Switch to a preset
 

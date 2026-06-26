@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { HTMLAttributes } from "svelte/elements";
 	import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
-	import MoreHorizontalIcon from '@lucide/svelte/icons/more-horizontal';
+	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThree';
 
 	let {
 		ref = $bindable(null),
@@ -15,9 +15,9 @@
 	data-slot="breadcrumb-ellipsis"
 	role="presentation"
 	aria-hidden="true"
-	class={cn("size-5 [&>svg]:size-4 flex items-center justify-center", className)}
+	class={cn("size-4 [&>svg]:size-3.5 flex items-center justify-center", className)}
 	{...restProps}
 >
-	<MoreHorizontalIcon  />
+	<DotsThreeIcon  />
 	<span class="sr-only">More</span>
 </span>

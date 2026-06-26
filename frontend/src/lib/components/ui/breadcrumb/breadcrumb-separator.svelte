@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { HTMLLiAttributes } from "svelte/elements";
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 
 	let {
 		ref = $bindable(null),
@@ -22,6 +22,6 @@
 	{#if children}
 		{@render children?.()}
 	{:else}
-		<ChevronRightIcon  />
+		<CaretRightIcon  />
 	{/if}
 </li>
