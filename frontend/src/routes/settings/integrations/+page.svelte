@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import GithubIcon from '@lucide/svelte/icons/git-branch';
 	import SlackIcon from '@lucide/svelte/icons/message-square';
+	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import {
 		fetchIntegrationStatus,
 		connect,
@@ -40,9 +44,25 @@
 	</div>
 
 	{#if intg === undefined}
-		<p class="text-muted-foreground flex items-center gap-2 text-sm">
-			<LoaderIcon class="animate-spin" /> Loading…
-		</p>
+		<!-- Skeleton mirroring the connection list. -->
+		<Card.Root class="gap-0 divide-y py-0">
+			{#each [0, 1] as i (i)}
+				<div class="flex flex-wrap items-center gap-4 p-4">
+					<Skeleton class="size-5 shrink-0 rounded-md" />
+					<div class="flex min-w-0 flex-1 flex-col gap-2">
+						<div class="flex items-center gap-2">
+							<Skeleton class="h-4 w-20" />
+							<Skeleton class="h-5 w-24" />
+						</div>
+						<Skeleton class="h-3.5 w-64 max-w-full" />
+					</div>
+					<div class="flex shrink-0 items-center gap-2">
+						<Skeleton class="h-8 w-24" />
+						<Skeleton class="h-8 w-24" />
+					</div>
+				</div>
+			{/each}
+		</Card.Root>
 	{:else if intg === null}
 		<div class="flex flex-col items-start gap-2">
 			<p class="text-destructive text-sm">Please sign in first.</p>
@@ -51,55 +71,55 @@
 	{:else if intg.configured === false}
 		<p class="text-muted-foreground text-sm">Integrations aren't configured on the server yet.</p>
 	{:else}
-		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+		<Card.Root class="gap-0 divide-y py-0">
 			{#each PROVIDERS as p (p.key)}
 				{@const s = statusOf(intg, p.key)}
 				{@const Icon = icon(p.key)}
-				<div class="flex items-start gap-3 rounded-lg border p-4">
-					<Icon class="mt-0.5 size-5 shrink-0" />
-					<div class="flex flex-1 flex-col gap-2">
-						<div class="flex items-center justify-between">
+				<div class="flex flex-wrap items-center gap-4 p-4">
+					<Icon class="size-5 shrink-0" />
+					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+						<div class="flex items-center gap-2">
 							<span class="font-medium">{p.label}</span>
 							{#if s?.connected}
-								<span class="text-primary text-sm">Connected</span>
+								<Badge variant="secondary">Connected</Badge>
 							{:else}
-								<span class="text-muted-foreground text-sm">Not connected</span>
+								<Badge variant="outline">Not connected</Badge>
 							{/if}
 						</div>
-						<p class="text-muted-foreground text-sm">
+						<p class="text-muted-foreground truncate text-sm">
 							{#if s?.connected}
 								{s.account ? `Connected to ${s.account}.` : 'Connected.'}
 							{:else}
 								{p.blurb}
 							{/if}
 						</p>
-						<div class="flex gap-2">
-							{#if s?.connected}
-								<Button variant="outline" size="sm" onclick={() => connect(p.key)}>
-									Reconnect
-								</Button>
-								<Button
-									variant="destructive"
-									size="sm"
-									disabled={busy === p.key}
-									onclick={() => doDisconnect(p.key)}
-								>
-									{#if busy === p.key}
-										<LoaderIcon data-icon="inline-start" class="animate-spin" />
-									{/if}
-									Disconnect
-								</Button>
-							{:else}
-								<Button size="sm" onclick={() => connect(p.key)}>Connect</Button>
-							{/if}
-						</div>
+					</div>
+					<div class="flex shrink-0 items-center gap-2">
+						{#if p.key === 'github' && s?.connected}
+							<Button variant="ghost" size="sm" href="/settings/integrations/webhooks">
+								<WebhookIcon data-icon="inline-start" />
+								Webhooks
+							</Button>
+						{/if}
+						{#if s?.connected}
+							<Button variant="outline" size="sm" onclick={() => connect(p.key)}>Reconnect</Button>
+							<Button
+								variant="destructive"
+								size="sm"
+								disabled={busy === p.key}
+								onclick={() => doDisconnect(p.key)}
+							>
+								{#if busy === p.key}
+									<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								{/if}
+								Disconnect
+							</Button>
+						{:else}
+							<Button size="sm" onclick={() => connect(p.key)}>Connect</Button>
+						{/if}
 					</div>
 				</div>
 			{/each}
-		</div>
-
-		<Button variant="outline" size="sm" href="/settings/integrations/webhooks" class="self-start">
-			View received GitHub webhooks
-		</Button>
+		</Card.Root>
 	{/if}
 </div>

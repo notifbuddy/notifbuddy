@@ -62,6 +62,13 @@ type Handler interface {
 	//
 	// GET /invitations
 	ListInvitations(ctx context.Context) (ListInvitationsRes, error)
+	// ListMembers implements listMembers operation.
+	//
+	// Returns the active members of the caller's active organization, resolved from WorkOS organization
+	// memberships. Requires a session scoped to an organization.
+	//
+	// GET /members
+	ListMembers(ctx context.Context) (ListMembersRes, error)
 	// Ping implements ping operation.
 	//
 	// Returns a pong message. Requires an authenticated session — the request must carry a valid

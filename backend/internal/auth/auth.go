@@ -441,6 +441,52 @@ func (a *Service) ListUserOrganizations(ctx context.Context, userID string, limi
 	return out
 }
 
+// Member is the trimmed view of one organization member the handlers return.
+// It joins a WorkOS organization membership (id, role) with the underlying
+// user's identity (email, name).
+type Member struct {
+	ID        string
+	UserID    string
+	Email     string
+	FirstName string
+	LastName  string
+	Role      string
+}
+
+// ListOrganizationMembers returns the active members of an organization (up to
+// `limit`). Each WorkOS membership only carries the user ID and role, so we
+// resolve each member's identity (email, name) with a follow-up user lookup.
+// Best-effort per member: a failed user lookup still yields a row with the IDs
+// and role we already have.
+func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, limit int) ([]Member, error) {
+	status := workos.UserManagementOrganizationMembershipStatuses("active")
+	it := a.client.OrganizationMembership().List(ctx, &workos.OrganizationMembershipListParams{
+		OrganizationID: &orgID,
+		Statuses:       []workos.UserManagementOrganizationMembershipStatuses{status},
+	})
+	var out []Member
+	for it.Next() && len(out) < limit {
+		m := it.Current()
+		member := Member{ID: m.ID, UserID: m.UserID}
+		if m.Role != nil {
+			member.Role = m.Role.Slug
+		}
+		if u, err := a.client.UserManagement().Get(ctx, m.UserID); err != nil {
+			log.Printf("auth: resolve member user %q failed: %v", m.UserID, err)
+		} else {
+			member.Email = u.Email
+			member.FirstName = deref(u.FirstName)
+			member.LastName = deref(u.LastName)
+		}
+		out = append(out, member)
+	}
+	if err := it.Err(); err != nil {
+		log.Printf("auth: list organization members failed: %v", err)
+		return nil, err
+	}
+	return out, nil
+}
+
 // Invitation is the trimmed Invitation shape the handlers return.
 type Invitation struct {
 	ID        string

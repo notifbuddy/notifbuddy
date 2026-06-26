@@ -147,6 +147,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the active organization's members
+         * @description Returns the active members of the caller's active organization, resolved
+         *     from WorkOS organization memberships. Requires a session scoped to an
+         *     organization.
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/status": {
         parameters: {
             query?: never;
@@ -332,6 +354,43 @@ export interface components {
         /** @description A list of invitations for the active organization. */
         InvitationListResponse: {
             invitations: components["schemas"]["InvitationResponse"][];
+        };
+        /** @description A member of the active organization (a WorkOS organization membership). */
+        MemberResponse: {
+            /**
+             * @description The WorkOS organization membership ID.
+             * @example om_01H...
+             */
+            id: string;
+            /**
+             * @description The WorkOS user ID of the member.
+             * @example user_01H...
+             */
+            userId: string;
+            /**
+             * @description The member's email address.
+             * @example jane@example.com
+             */
+            email: string;
+            /**
+             * @description The member's first name, if set.
+             * @example Jane
+             */
+            firstName?: string;
+            /**
+             * @description The member's last name, if set.
+             * @example Doe
+             */
+            lastName?: string;
+            /**
+             * @description The member's role slug within the organization, if any.
+             * @example admin
+             */
+            role?: string;
+        };
+        /** @description A list of members for the active organization. */
+        MemberListResponse: {
+            members: components["schemas"]["MemberResponse"][];
         };
         /** @description The connection state of a single integration provider. */
         IntegrationStatus: {
@@ -619,6 +678,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's members. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberListResponse"];
                 };
             };
             /** @description No valid session. */
