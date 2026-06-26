@@ -6,11 +6,13 @@ package api
 type OperationName = string
 
 const (
-	CreateInvitationOperation OperationName = "CreateInvitation"
-	GetMeOperation            OperationName = "GetMe"
-	GetPendingOrgsOperation   OperationName = "GetPendingOrgs"
-	ListInvitationsOperation  OperationName = "ListInvitations"
-	PingOperation             OperationName = "Ping"
-	SelectOrgOperation        OperationName = "SelectOrg"
-	VerifyEmailOperation      OperationName = "VerifyEmail"
+	CreateInvitationOperation      OperationName = "CreateInvitation"
+	DisconnectIntegrationOperation OperationName = "DisconnectIntegration"
+	GetIntegrationStatusOperation  OperationName = "GetIntegrationStatus"
+	GetMeOperation                 OperationName = "GetMe"
+	GetPendingOrgsOperation        OperationName = "GetPendingOrgs"
+	ListInvitationsOperation       OperationName = "ListInvitations"
+	PingOperation                  OperationName = "Ping"
+	SelectOrgOperation             OperationName = "SelectOrg"
+	VerifyEmailOperation           OperationName = "VerifyEmail"
 )

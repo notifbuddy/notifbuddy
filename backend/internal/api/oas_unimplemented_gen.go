@@ -24,6 +24,27 @@ func (UnimplementedHandler) CreateInvitation(ctx context.Context, req *CreateInv
 	return r, ht.ErrNotImplemented
 }
 
+// DisconnectIntegration implements disconnectIntegration operation.
+//
+// Removes the stored installation/token for the given provider.
+//
+// POST /integrations/{provider}/disconnect
+func (UnimplementedHandler) DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (r DisconnectIntegrationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetIntegrationStatus implements getIntegrationStatus operation.
+//
+// Returns the connection state of each supported integration (GitHub, Slack) for the caller's active
+// organization. Drives both the onboarding wizard and the integrations settings view. The actual
+// connect/callback flows are browser redirects (GET /integrations/{provider}/connect) and are not part
+// of this JSON spec.
+//
+// GET /integrations/status
+func (UnimplementedHandler) GetIntegrationStatus(ctx context.Context) (r GetIntegrationStatusRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetMe implements getMe operation.
 //
 // Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns

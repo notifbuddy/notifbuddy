@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	rn7AllowedHeaders = map[string]string{
+	rn12AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn8AllowedHeaders = map[string]string{
+	rn13AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
 	rn1AllowedHeaders = map[string]string{
@@ -52,6 +52,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
+	args := [1]string{}
 
 	// Static code generated router with unwrapped path search.
 	switch {
@@ -125,7 +126,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn7AllowedHeaders,
+								allowedHeaders: rn12AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -150,7 +151,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn8AllowedHeaders,
+								allowedHeaders: rn13AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -161,31 +162,126 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 				}
 
-			case 'i': // Prefix: "invitations"
+			case 'i': // Prefix: "in"
 
-				if l := len("invitations"); len(elem) >= l && elem[0:l] == "invitations" {
+				if l := len("in"); len(elem) >= l && elem[0:l] == "in" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
-					switch r.Method {
-					case "GET":
-						s.handleListInvitationsRequest([0]string{}, elemIsEscaped, w, r)
-					case "POST":
-						s.handleCreateInvitationRequest([0]string{}, elemIsEscaped, w, r)
-					default:
-						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "GET,POST",
-							allowedHeaders: rn1AllowedHeaders,
-							acceptPost:     "application/json",
-							acceptPatch:    "",
-						})
+					break
+				}
+				switch elem[0] {
+				case 't': // Prefix: "tegrations/"
+
+					if l := len("tegrations/"); len(elem) >= l && elem[0:l] == "tegrations/" {
+						elem = elem[l:]
+					} else {
+						break
 					}
 
-					return
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 's': // Prefix: "status"
+						origElem := elem
+						if l := len("status"); len(elem) >= l && elem[0:l] == "status" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "GET":
+								s.handleGetIntegrationStatusRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "GET",
+									allowedHeaders: nil,
+									acceptPost:     "",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+						elem = origElem
+					}
+					// Param: "provider"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/disconnect"
+
+						if l := len("/disconnect"); len(elem) >= l && elem[0:l] == "/disconnect" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "POST":
+								s.handleDisconnectIntegrationRequest([1]string{
+									args[0],
+								}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: nil,
+									acceptPost:     "",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					}
+
+				case 'v': // Prefix: "vitations"
+
+					if l := len("vitations"); len(elem) >= l && elem[0:l] == "vitations" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "GET":
+							s.handleListInvitationsRequest([0]string{}, elemIsEscaped, w, r)
+						case "POST":
+							s.handleCreateInvitationRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "GET,POST",
+								allowedHeaders: rn1AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
 				}
 
 			case 'm': // Prefix: "me"
@@ -253,7 +349,7 @@ type Route struct {
 	operationGroup string
 	pathPattern    string
 	count          int
-	args           [0]string
+	args           [1]string
 }
 
 // Name returns ogen operation name.
@@ -427,38 +523,131 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 
 				}
 
-			case 'i': // Prefix: "invitations"
+			case 'i': // Prefix: "in"
 
-				if l := len("invitations"); len(elem) >= l && elem[0:l] == "invitations" {
+				if l := len("in"); len(elem) >= l && elem[0:l] == "in" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
-					switch method {
-					case "GET":
-						r.name = ListInvitationsOperation
-						r.summary = "List the active organization's invitations"
-						r.operationID = "listInvitations"
-						r.operationGroup = ""
-						r.pathPattern = "/invitations"
-						r.args = args
-						r.count = 0
-						return r, true
-					case "POST":
-						r.name = CreateInvitationOperation
-						r.summary = "Invite an email to the active organization"
-						r.operationID = "createInvitation"
-						r.operationGroup = ""
-						r.pathPattern = "/invitations"
-						r.args = args
-						r.count = 0
-						return r, true
-					default:
-						return
+					break
+				}
+				switch elem[0] {
+				case 't': // Prefix: "tegrations/"
+
+					if l := len("tegrations/"); len(elem) >= l && elem[0:l] == "tegrations/" {
+						elem = elem[l:]
+					} else {
+						break
 					}
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 's': // Prefix: "status"
+						origElem := elem
+						if l := len("status"); len(elem) >= l && elem[0:l] == "status" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "GET":
+								r.name = GetIntegrationStatusOperation
+								r.summary = "Integration connection status for the active organization"
+								r.operationID = "getIntegrationStatus"
+								r.operationGroup = ""
+								r.pathPattern = "/integrations/status"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+						elem = origElem
+					}
+					// Param: "provider"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/disconnect"
+
+						if l := len("/disconnect"); len(elem) >= l && elem[0:l] == "/disconnect" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "POST":
+								r.name = DisconnectIntegrationOperation
+								r.summary = "Disconnect an integration from the active organization"
+								r.operationID = "disconnectIntegration"
+								r.operationGroup = ""
+								r.pathPattern = "/integrations/{provider}/disconnect"
+								r.args = args
+								r.count = 1
+								return r, true
+							default:
+								return
+							}
+						}
+
+					}
+
+				case 'v': // Prefix: "vitations"
+
+					if l := len("vitations"); len(elem) >= l && elem[0:l] == "vitations" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "GET":
+							r.name = ListInvitationsOperation
+							r.summary = "List the active organization's invitations"
+							r.operationID = "listInvitations"
+							r.operationGroup = ""
+							r.pathPattern = "/invitations"
+							r.args = args
+							r.count = 0
+							return r, true
+						case "POST":
+							r.name = CreateInvitationOperation
+							r.summary = "Invite an email to the active organization"
+							r.operationID = "createInvitation"
+							r.operationGroup = ""
+							r.pathPattern = "/invitations"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
 				}
 
 			case 'm': // Prefix: "me"

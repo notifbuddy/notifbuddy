@@ -1,0 +1,19 @@
+# Optional local Postgres for xolo. Use this if you don't already have a local
+# Postgres — otherwise just create a `xolo` database in your existing server and
+# point DATABASE_URL at it. The backend auto-migrates on startup.
+#
+#   docker compose up -d postgres
+#   DATABASE_URL=postgres://xolo:xolo@localhost:5432/xolo?sslmode=disable
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: xolo
+      POSTGRES_PASSWORD: xolo
+      POSTGRES_DB: xolo
+    ports:
+      - "5432:5432"
+    volumes:
+      - xolo_pgdata:/var/lib/postgresql/data
+volumes:
+  xolo_pgdata:

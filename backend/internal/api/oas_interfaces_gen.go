@@ -5,6 +5,14 @@ type CreateInvitationRes interface {
 	createInvitationRes()
 }
 
+type DisconnectIntegrationRes interface {
+	disconnectIntegrationRes()
+}
+
+type GetIntegrationStatusRes interface {
+	getIntegrationStatusRes()
+}
+
 type GetMeRes interface {
 	getMeRes()
 }

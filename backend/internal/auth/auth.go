@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	workos "github.com/workos/workos-go/v9"
+
+	"xolo/backend/internal/config"
 )
 
 // sessionCookieName is the name of the HttpOnly cookie holding the sealed
@@ -29,8 +31,8 @@ const pendingCookieMaxAge = 15 * 60 // seconds
 // organizations the user may choose between) while they pick an organization.
 const orgSelectCookieName = "wos_org_select"
 
-// orgChoice is one selectable organization, surfaced to the SPA's picker.
-type orgChoice struct {
+// OrgChoice is one selectable organization, surfaced to the SPA's picker.
+type OrgChoice struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
@@ -39,11 +41,11 @@ type orgChoice struct {
 // token plus the organizations to choose from.
 type orgSelectState struct {
 	PendingToken  string      `json:"pending_token"`
-	Organizations []orgChoice `json:"organizations"`
+	Organizations []OrgChoice `json:"organizations"`
 }
 
-// authConfig holds everything the auth flow needs, resolved once at startup.
-type authConfig struct {
+// Service holds everything the auth flow needs, resolved once at startup.
+type Service struct {
 	client         *workos.Client
 	redirectURI    string // WORKOS_REDIRECT_URI — must match the dashboard
 	cookiePassword string // ≥32 chars; seals/unseals the session cookie
@@ -63,21 +65,21 @@ type ctxKey struct{}
 
 // httpCtxKey keys the raw HTTP writer/request pair in the context. Some ogen
 // handlers (VerifyEmail) need to read a cookie and set the session cookie, but
-// ogen only hands handlers a context — so withSession stashes the HTTP objects
-// here for those handlers to retrieve via httpFromContext.
+// ogen only hands handlers a context — so WithSession stashes the HTTP objects
+// here for those handlers to retrieve via HTTPFromContext.
 type httpCtxKey struct{}
 
-// httpPair bundles the writer and request for handlers that need raw HTTP access.
-type httpPair struct {
-	w http.ResponseWriter
-	r *http.Request
+// HTTPPair bundles the writer and request for handlers that need raw HTTP access.
+type HTTPPair struct {
+	W http.ResponseWriter
+	R *http.Request
 }
 
-// sessionUser is the minimal user info the JSON handlers need. It is nil in the
+// SessionUser is the minimal user info the JSON handlers need. It is nil in the
 // context when the request is unauthenticated. OrgID/Role describe the
 // organization the current session is scoped to (empty when the user has no
 // active organization).
-type sessionUser struct {
+type SessionUser struct {
 	ID        string
 	Email     string
 	FirstName string
@@ -86,11 +88,11 @@ type sessionUser struct {
 	Role      string
 }
 
-// newAuthConfig builds the WorkOS client from the loaded Config. Secret fields
+// New builds the WorkOS client from the loaded Config. Secret fields
 // (API key, cookie password) have already been resolved from their env
 // references during config load.
-func newAuthConfig(cfg Config) *authConfig {
-	return &authConfig{
+func New(cfg config.Config) *Service {
+	return &Service{
 		client:         workos.NewClient(cfg.WorkOS.APIKey, workos.WithClientID(cfg.WorkOS.ClientID)),
 		redirectURI:    cfg.WorkOS.RedirectURI,
 		cookiePassword: cfg.WorkOS.CookiePassword,
@@ -103,10 +105,10 @@ func newAuthConfig(cfg Config) *authConfig {
 	}
 }
 
-// handleLogin redirects the browser to the WorkOS AuthKit hosted login page.
+// HandleLogin redirects the browser to the WorkOS AuthKit hosted login page.
 // AuthKit owns the login screen (email/password, social, SSO — configured in
 // the WorkOS dashboard); we only kick off the flow.
-func (a *authConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	params := workos.AuthKitAuthorizationURLParams{
 		RedirectURI: a.redirectURI,
 	}
@@ -115,7 +117,7 @@ func (a *authConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if a.loginProvider != "" {
 		params.Provider = &a.loginProvider
 	}
-	// Accept-on-login: if the user came from an invitation link, carry the token
+	// Accept-on-login: if the user came from an Invitation link, carry the token
 	// through AuthKit's `state` so it round-trips to our callback, which feeds it
 	// into AuthenticateWithCode to attach the invited organization.
 	if invToken := r.URL.Query().Get("invitation_token"); invToken != "" {
@@ -130,10 +132,10 @@ func (a *authConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-// handleCallback is the WORKOS_REDIRECT_URI target. AuthKit redirects here with
+// HandleCallback is the WORKOS_REDIRECT_URI target. AuthKit redirects here with
 // a `code` query param after the user signs in. We exchange it for tokens, seal
 // them into the session cookie, and bounce the browser back to the SPA.
-func (a *authConfig) handleCallback(w http.ResponseWriter, r *http.Request) {
+func (a *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		// AuthKit returns error/error_description on failure (e.g. user cancelled).
@@ -145,8 +147,8 @@ func (a *authConfig) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := &workos.UserManagementAuthenticateWithCodeParams{Code: code}
-	// Accept-on-login: the invitation token arrives either directly as
-	// ?invitation_token= (WorkOS invitation links) or echoed back in ?state=
+	// Accept-on-login: the Invitation token arrives either directly as
+	// ?invitation_token= (WorkOS Invitation links) or echoed back in ?state=
 	// (when we kicked off login via /auth/login?invitation_token=). Either way,
 	// passing it attaches the new session to the invited organization.
 	if invToken := r.URL.Query().Get("invitation_token"); invToken != "" {
@@ -192,7 +194,7 @@ func (a *authConfig) handleCallback(w http.ResponseWriter, r *http.Request) {
 // startEmailVerification seals the pending authentication token into a
 // short-lived cookie and redirects the browser to the SPA with ?verify=1 so it
 // shows the code-entry step. WorkOS has already emailed the code.
-func (a *authConfig) startEmailVerification(w http.ResponseWriter, r *http.Request, pendingToken string) {
+func (a *Service) startEmailVerification(w http.ResponseWriter, r *http.Request, pendingToken string) {
 	if pendingToken == "" {
 		log.Printf("auth: email_verification_required but no pending token returned")
 		http.Error(w, "authentication failed", http.StatusUnauthorized)
@@ -222,7 +224,7 @@ func (a *authConfig) startEmailVerification(w http.ResponseWriter, r *http.Reque
 // org-selection completions. It only sets the cookie and returns an error; the
 // caller decides how to report failure (redirect vs. JSON), so this never
 // writes to w on error.
-func (a *authConfig) establishSession(w http.ResponseWriter, resp *workos.AuthenticateResponse) (*sessionUser, error) {
+func (a *Service) establishSession(w http.ResponseWriter, resp *workos.AuthenticateResponse) (*SessionUser, error) {
 	sealed, err := workos.SealSessionFromAuthResponse(
 		resp.AccessToken, resp.RefreshToken, resp.User, resp.Impersonator, a.cookiePassword)
 	if err != nil {
@@ -241,13 +243,13 @@ func (a *authConfig) establishSession(w http.ResponseWriter, resp *workos.Authen
 	return su, nil
 }
 
-// completeEmailVerification finishes a login that was gated on email
+// CompleteEmailVerification finishes a login that was gated on email
 // verification. It reads the sealed pending token from the request cookie,
 // exchanges it plus the user-supplied code for a session, sets the session
 // cookie, clears the pending cookie, and returns the authenticated user.
 // Returns nil + an error on any failure (bad/expired code, missing pending
 // cookie) — the caller maps that to a 401.
-func (a *authConfig) completeEmailVerification(w http.ResponseWriter, r *http.Request, code string) (*sessionUser, error) {
+func (a *Service) CompleteEmailVerification(w http.ResponseWriter, r *http.Request, code string) (*SessionUser, error) {
 	c, err := r.Cookie(pendingCookieName)
 	if err != nil || c.Value == "" {
 		return nil, errors.New("no pending verification")
@@ -282,7 +284,7 @@ func (a *authConfig) completeEmailVerification(w http.ResponseWriter, r *http.Re
 }
 
 // clearPendingCookie expires the pending-verification cookie.
-func (a *authConfig) clearPendingCookie(w http.ResponseWriter) {
+func (a *Service) clearPendingCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     pendingCookieName,
 		Value:    "",
@@ -297,7 +299,7 @@ func (a *authConfig) clearPendingCookie(w http.ResponseWriter) {
 // startOrgSelection seals the pending token plus the org choices into a
 // short-lived cookie and redirects the SPA to its org-picker step. The SPA reads
 // the choices via GET /auth/pending-orgs and POSTs the pick to /auth/select-org.
-func (a *authConfig) startOrgSelection(w http.ResponseWriter, r *http.Request, pendingToken string, orgs []workos.PendingAuthenticationOrganization) {
+func (a *Service) startOrgSelection(w http.ResponseWriter, r *http.Request, pendingToken string, orgs []workos.PendingAuthenticationOrganization) {
 	if pendingToken == "" || len(orgs) == 0 {
 		log.Printf("auth: organization_selection_required but missing token/orgs")
 		http.Error(w, "authentication failed", http.StatusUnauthorized)
@@ -305,7 +307,7 @@ func (a *authConfig) startOrgSelection(w http.ResponseWriter, r *http.Request, p
 	}
 	state := orgSelectState{PendingToken: pendingToken}
 	for _, o := range orgs {
-		state.Organizations = append(state.Organizations, orgChoice{ID: o.ID, Name: o.Name})
+		state.Organizations = append(state.Organizations, OrgChoice{ID: o.ID, Name: o.Name})
 	}
 	sealed, err := workos.Seal(state, a.cookiePassword)
 	if err != nil {
@@ -325,10 +327,10 @@ func (a *authConfig) startOrgSelection(w http.ResponseWriter, r *http.Request, p
 	http.Redirect(w, r, a.postLoginURL+"/?select-org=1", http.StatusFound)
 }
 
-// pendingOrgChoices returns the organizations the user may choose between, read
+// PendingOrgChoices returns the organizations the user may choose between, read
 // from the sealed org-selection cookie. Returns nil if there's no pending
 // selection.
-func (a *authConfig) pendingOrgChoices(r *http.Request) []orgChoice {
+func (a *Service) PendingOrgChoices(r *http.Request) []OrgChoice {
 	state, ok := a.readOrgSelectState(r)
 	if !ok {
 		return nil
@@ -337,7 +339,7 @@ func (a *authConfig) pendingOrgChoices(r *http.Request) []orgChoice {
 }
 
 // readOrgSelectState unseals the org-selection cookie.
-func (a *authConfig) readOrgSelectState(r *http.Request) (orgSelectState, bool) {
+func (a *Service) readOrgSelectState(r *http.Request) (orgSelectState, bool) {
 	c, err := r.Cookie(orgSelectCookieName)
 	if err != nil || c.Value == "" {
 		return orgSelectState{}, false
@@ -349,11 +351,11 @@ func (a *authConfig) readOrgSelectState(r *http.Request) (orgSelectState, bool) 
 	return state, true
 }
 
-// completeOrgSelection finishes a login gated on org selection: it exchanges the
+// CompleteOrgSelection finishes a login gated on org selection: it exchanges the
 // chosen organization plus the stashed pending token for a session, sets the
 // session cookie, clears the selection cookie, and returns the user. Returns nil
 // + error on any failure (no pending selection, invalid token/org).
-func (a *authConfig) completeOrgSelection(w http.ResponseWriter, r *http.Request, organizationID string) (*sessionUser, error) {
+func (a *Service) CompleteOrgSelection(w http.ResponseWriter, r *http.Request, organizationID string) (*SessionUser, error) {
 	state, ok := a.readOrgSelectState(r)
 	if !ok {
 		return nil, errors.New("no pending organization selection")
@@ -395,7 +397,7 @@ func (a *authConfig) completeOrgSelection(w http.ResponseWriter, r *http.Request
 }
 
 // clearOrgSelectCookie expires the org-selection cookie.
-func (a *authConfig) clearOrgSelectCookie(w http.ResponseWriter) {
+func (a *Service) clearOrgSelectCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     orgSelectCookieName,
 		Value:    "",
@@ -407,26 +409,26 @@ func (a *authConfig) clearOrgSelectCookie(w http.ResponseWriter) {
 	})
 }
 
-// orgMembership is the trimmed view of one of a user's organizations.
-type orgMembership struct {
+// OrgMembership is the trimmed view of one of a user's organizations.
+type OrgMembership struct {
 	ID   string
 	Name string
 	Role string
 }
 
-// listUserOrganizations returns the active organizations a user belongs to (up
+// ListUserOrganizations returns the active organizations a user belongs to (up
 // to `limit`), for surfacing in /me. Best-effort: returns nil on error so /me
 // still works without the org list.
-func (a *authConfig) listUserOrganizations(ctx context.Context, userID string, limit int) []orgMembership {
+func (a *Service) ListUserOrganizations(ctx context.Context, userID string, limit int) []OrgMembership {
 	status := workos.UserManagementOrganizationMembershipStatuses("active")
 	it := a.client.OrganizationMembership().List(ctx, &workos.OrganizationMembershipListParams{
 		UserID:   &userID,
 		Statuses: []workos.UserManagementOrganizationMembershipStatuses{status},
 	})
-	var out []orgMembership
+	var out []OrgMembership
 	for it.Next() && len(out) < limit {
 		m := it.Current()
-		om := orgMembership{ID: m.OrganizationID, Name: deref(m.OrganizationName)}
+		om := OrgMembership{ID: m.OrganizationID, Name: deref(m.OrganizationName)}
 		if m.Role != nil {
 			om.Role = m.Role.Slug
 		}
@@ -439,17 +441,17 @@ func (a *authConfig) listUserOrganizations(ctx context.Context, userID string, l
 	return out
 }
 
-// invitation is the trimmed invitation shape the handlers return.
-type invitation struct {
+// Invitation is the trimmed Invitation shape the handlers return.
+type Invitation struct {
 	ID        string
 	Email     string
 	State     string
 	ExpiresAt string
 }
 
-// sendInvitation invites an email to the given organization, optionally with a
-// role, attributing the invite to the inviter. Returns the created invitation.
-func (a *authConfig) sendInvitation(ctx context.Context, email, orgID, role, inviterUserID string) (*invitation, error) {
+// SendInvitation invites an email to the given organization, optionally with a
+// role, attributing the invite to the inviter. Returns the created Invitation.
+func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, inviterUserID string) (*Invitation, error) {
 	params := &workos.UserManagementSendInvitationParams{
 		Email:          email,
 		OrganizationID: &orgID,
@@ -464,24 +466,24 @@ func (a *authConfig) sendInvitation(ctx context.Context, email, orgID, role, inv
 	if err != nil {
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("auth: send invitation failed: status=%d code=%q message=%q request_id=%q",
+			log.Printf("auth: send Invitation failed: status=%d code=%q message=%q request_id=%q",
 				apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
 		} else {
-			log.Printf("auth: send invitation failed: %v", err)
+			log.Printf("auth: send Invitation failed: %v", err)
 		}
 		return nil, err
 	}
-	return &invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt}, nil
+	return &Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt}, nil
 }
 
-// listInvitations returns up to `limit` invitations for an organization.
-func (a *authConfig) listInvitations(ctx context.Context, orgID string, limit int) ([]invitation, error) {
+// ListInvitations returns up to `limit` invitations for an organization.
+func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) ([]Invitation, error) {
 	it := a.client.UserManagement().ListInvitations(ctx,
 		&workos.UserManagementListInvitationsParams{OrganizationID: &orgID})
-	var out []invitation
+	var out []Invitation
 	for it.Next() && len(out) < limit {
 		inv := it.Current()
-		out = append(out, invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt})
+		out = append(out, Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt})
 	}
 	if err := it.Err(); err != nil {
 		log.Printf("auth: list invitations failed: %v", err)
@@ -490,10 +492,10 @@ func (a *authConfig) listInvitations(ctx context.Context, orgID string, limit in
 	return out, nil
 }
 
-// handleLogout clears the session cookie and redirects to the WorkOS logout
+// HandleLogout clears the session cookie and redirects to the WorkOS logout
 // endpoint, which ends the AuthKit session server-side and then returns the
 // browser to the SPA.
-func (a *authConfig) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (a *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	logoutURL := a.postLoginURL // fallback if we can't build the WorkOS logout URL
 
 	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
@@ -509,36 +511,36 @@ func (a *authConfig) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, logoutURL, http.StatusFound)
 }
 
-// withSession is outer net/http middleware that runs before the ogen server.
+// WithSession is outer net/http middleware that runs before the ogen server.
 // It reads the session cookie, validates (and transparently refreshes) it, and
 // stashes the resulting user in the request context. ogen derives handler ctx
-// from r.Context(), so Ping/GetMe can read the user via userFromContext.
+// from r.Context(), so Ping/GetMe can read the user via UserFromContext.
 //
 // Unauthenticated requests are passed through with a nil user — the JSON
 // handlers decide whether that's a 401. This keeps auth enforcement in one
 // place (the handlers) and cookie mechanics in another (here).
-func (a *authConfig) withSession(next http.Handler) http.Handler {
+func (a *Service) WithSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := a.loadUser(w, r)
 		ctx := context.WithValue(r.Context(), ctxKey{}, user)
 		// Also expose the raw HTTP pair so handlers that must touch cookies
 		// directly (VerifyEmail) can reach them through the ogen ctx.
-		ctx = context.WithValue(ctx, httpCtxKey{}, httpPair{w: w, r: r})
+		ctx = context.WithValue(ctx, httpCtxKey{}, HTTPPair{W: w, R: r})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// httpFromContext returns the raw HTTP writer/request stashed by withSession.
+// HTTPFromContext returns the raw HTTP writer/request stashed by WithSession.
 // ok is false if they're absent (e.g. a handler invoked outside the middleware).
-func httpFromContext(ctx context.Context) (httpPair, bool) {
-	p, ok := ctx.Value(httpCtxKey{}).(httpPair)
+func HTTPFromContext(ctx context.Context) (HTTPPair, bool) {
+	p, ok := ctx.Value(httpCtxKey{}).(HTTPPair)
 	return p, ok
 }
 
 // loadUser unseals the session cookie and returns the user, or nil if there is
 // no valid session. If the access token has expired but a refresh token is
 // present, it refreshes the session and rewrites the cookie in place.
-func (a *authConfig) loadUser(w http.ResponseWriter, r *http.Request) *sessionUser {
+func (a *Service) loadUser(w http.ResponseWriter, r *http.Request) *SessionUser {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil
@@ -574,7 +576,7 @@ func (a *authConfig) loadUser(w http.ResponseWriter, r *http.Request) *sessionUs
 // setSessionCookie writes the sealed session as an HttpOnly cookie. SameSite=Lax
 // is enough here because the post-login redirect is a top-level navigation; the
 // SPA then sends the cookie on same-site XHR with credentials: 'include'.
-func (a *authConfig) setSessionCookie(w http.ResponseWriter, sealed string) {
+func (a *Service) setSessionCookie(w http.ResponseWriter, sealed string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    sealed,
@@ -587,7 +589,7 @@ func (a *authConfig) setSessionCookie(w http.ResponseWriter, sealed string) {
 }
 
 // clearSessionCookie expires the session cookie.
-func (a *authConfig) clearSessionCookie(w http.ResponseWriter) {
+func (a *Service) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
@@ -599,21 +601,32 @@ func (a *authConfig) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// userFromContext returns the authenticated user stashed by withSession, or nil.
-func userFromContext(ctx context.Context) *sessionUser {
-	u, _ := ctx.Value(ctxKey{}).(*sessionUser)
+// UserFromContext returns the authenticated user stashed by WithSession, or nil.
+func UserFromContext(ctx context.Context) *SessionUser {
+	u, _ := ctx.Value(ctxKey{}).(*SessionUser)
 	return u
+}
+
+// OrgUserFromRequest returns the active organization id and user id for a
+// request's session (both empty if unauthenticated or org-less). It's an adapter
+// for callers — like the integrations service — that need the caller's identity
+// from a *http.Request without depending on the session internals.
+func OrgUserFromRequest(r *http.Request) (orgID, userID string) {
+	if u := UserFromContext(r.Context()); u != nil {
+		return u.OrgID, u.ID
+	}
+	return "", ""
 }
 
 // toSessionUser flattens a WorkOS user (with *string name fields) plus the
 // active organization context into our internal shape. orgID/role may be empty
 // when the session isn't scoped to an organization. Returns nil for a nil user
 // so callers stay simple.
-func toSessionUser(u *workos.User, orgID, role string) *sessionUser {
+func toSessionUser(u *workos.User, orgID, role string) *SessionUser {
 	if u == nil {
 		return nil
 	}
-	return &sessionUser{
+	return &SessionUser{
 		ID:        u.ID,
 		Email:     u.Email,
 		FirstName: deref(u.FirstName),

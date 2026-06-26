@@ -6,7 +6,13 @@
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
+	import PlugIcon from '@lucide/svelte/icons/plug';
 	import { api, apiBaseUrl } from '$lib/api/client';
+	import {
+		fetchIntegrationStatus,
+		statusOf,
+		type IntegrationState
+	} from '$lib/integrations';
 
 	type Org = { id: string; name: string; role?: string };
 	type User = {
@@ -52,6 +58,9 @@
 	let inviteMsg = $state<string | null>(null);
 	let invitations = $state<Invitation[]>([]);
 
+	// ---- Integrations summary ----
+	let integrations = $state<IntegrationState | null>(null);
+
 	// Boot: pick the right entry path. If a step is in progress there's no session
 	// yet, so we don't call /me.
 	if (startInSelectOrg) {
@@ -63,7 +72,14 @@
 	async function loadUser() {
 		const { data, error: reqError } = await api.GET('/me');
 		user = reqError || !data ? false : (data as User);
-		if (user) loadInvitations();
+		if (user) {
+			loadInvitations();
+			loadIntegrations();
+		}
+	}
+
+	async function loadIntegrations() {
+		integrations = await fetchIntegrationStatus();
 	}
 
 	async function loadPendingOrgs() {
@@ -166,6 +182,10 @@
 		const u = user;
 		return u.organizations?.find((o) => o.id === u.organizationId);
 	});
+
+	const ghConnected = $derived(!!statusOf(integrations, 'github')?.connected);
+	const slackConnected = $derived(!!statusOf(integrations, 'slack')?.connected);
+	const integrationsComplete = $derived(ghConnected && slackConnected);
 </script>
 
 <main class="flex min-h-svh items-center justify-center p-6">
@@ -321,6 +341,27 @@
 									</li>
 								{/each}
 							</ul>
+						{/if}
+					</div>
+				{/if}
+
+				{#if integrations && integrations.configured}
+					<!-- Integrations summary + links to onboarding / settings. -->
+					<div class="flex flex-col gap-2 border-t pt-3">
+						<div class="flex items-center gap-2">
+							<PlugIcon class="size-4" />
+							<span class="text-sm font-medium">Integrations</span>
+						</div>
+						<p class="text-muted-foreground text-sm">
+							GitHub: <span class="text-foreground">{ghConnected ? 'connected' : 'not connected'}</span>
+							· Slack: <span class="text-foreground">{slackConnected ? 'connected' : 'not connected'}</span>
+						</p>
+						{#if integrationsComplete}
+							<Button variant="outline" size="sm" href="/settings/integrations">
+								Manage integrations
+							</Button>
+						{:else}
+							<Button size="sm" href="/onboarding">Finish setup</Button>
 						{/if}
 					</div>
 				{/if}

@@ -1,22 +1,32 @@
-package main
+package httpapi
 
 import (
 	"context"
 
 	"xolo/backend/internal/api"
+	"xolo/backend/internal/auth"
+	"xolo/backend/internal/integrations"
 )
 
 // Handler implements the ogen-generated api.Handler interface.
-// This is the only place the server's business logic lives; everything
-// else (routing, decoding, encoding, validation) is generated from the spec.
+// This is the only place the server's HTTP business logic lives; everything
+// else (routing, decoding, encoding, validation) is generated from the spec,
+// and the actual work is delegated to injected services (auth, and soon
+// integrations).
 //
-// Auth note: the session is loaded by the outer withSession middleware (auth.go)
-// and read here via userFromContext. ogen derives each handler's ctx from the
+// Auth note: the session is loaded by auth.Service's WithSession middleware and
+// read here via auth.UserFromContext. ogen derives each handler's ctx from the
 // HTTP request context, so the user the middleware stashed is available here.
 // Handlers that must touch cookies (VerifyEmail, SelectOrg) get the raw HTTP
-// pair via httpFromContext.
+// pair via auth.HTTPFromContext.
 type Handler struct {
-	auth *authConfig
+	auth         *auth.Service
+	integrations *integrations.Service
+}
+
+// New builds the API handler with its service dependencies.
+func New(authService *auth.Service, intgService *integrations.Service) *Handler {
+	return &Handler{auth: authService, integrations: intgService}
 }
 
 // invitationListLimit caps how many invitations GET /invitations returns.
@@ -28,7 +38,7 @@ const orgListLimit = 50
 // Ping implements the `ping` operation: GET /ping.
 // Requires an authenticated session; returns 401 otherwise.
 func (Handler) Ping(ctx context.Context) (api.PingRes, error) {
-	if userFromContext(ctx) == nil {
+	if auth.UserFromContext(ctx) == nil {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
 	return &api.PongResponse{Message: "pong"}, nil
@@ -38,7 +48,7 @@ func (Handler) Ping(ctx context.Context) (api.PingRes, error) {
 // Returns the WorkOS user, their active organization context, and the list of
 // organizations they belong to. 401 when there is no valid session.
 func (h Handler) GetMe(ctx context.Context) (api.GetMeRes, error) {
-	user := userFromContext(ctx)
+	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
@@ -52,11 +62,11 @@ func (h Handler) GetMe(ctx context.Context) (api.GetMeRes, error) {
 // the stashed pending token for a session. On success the session cookie is set
 // and the user is returned; on any failure it returns 401.
 func (h Handler) VerifyEmail(ctx context.Context, req *api.VerifyEmailRequest) (api.VerifyEmailRes, error) {
-	p, ok := httpFromContext(ctx)
+	p, ok := auth.HTTPFromContext(ctx)
 	if !ok {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
-	user, err := h.auth.completeEmailVerification(p.w, p.r, req.Code)
+	user, err := h.auth.CompleteEmailVerification(p.W, p.R, req.Code)
 	if err != nil {
 		return &api.Error{Message: "verification failed"}, nil
 	}
@@ -66,11 +76,11 @@ func (h Handler) VerifyEmail(ctx context.Context, req *api.VerifyEmailRequest) (
 // GetPendingOrgs implements `getPendingOrgs`: GET /auth/pending-orgs.
 // Returns the organizations the user may choose between during org selection.
 func (h Handler) GetPendingOrgs(ctx context.Context) (api.GetPendingOrgsRes, error) {
-	p, ok := httpFromContext(ctx)
+	p, ok := auth.HTTPFromContext(ctx)
 	if !ok {
 		return &api.Error{Message: "no pending selection"}, nil
 	}
-	choices := h.auth.pendingOrgChoices(p.r)
+	choices := h.auth.PendingOrgChoices(p.R)
 	if len(choices) == 0 {
 		return &api.Error{Message: "no pending selection"}, nil
 	}
@@ -84,11 +94,11 @@ func (h Handler) GetPendingOrgs(ctx context.Context) (api.GetPendingOrgsRes, err
 // SelectOrg implements `selectOrg`: POST /auth/select-org.
 // Completes a login gated on organization selection.
 func (h Handler) SelectOrg(ctx context.Context, req *api.SelectOrgRequest) (api.SelectOrgRes, error) {
-	p, ok := httpFromContext(ctx)
+	p, ok := auth.HTTPFromContext(ctx)
 	if !ok {
 		return &api.Error{Message: "no pending selection"}, nil
 	}
-	user, err := h.auth.completeOrgSelection(p.w, p.r, req.OrganizationId)
+	user, err := h.auth.CompleteOrgSelection(p.W, p.R, req.OrganizationId)
 	if err != nil {
 		return &api.Error{Message: "organization selection failed"}, nil
 	}
@@ -99,14 +109,14 @@ func (h Handler) SelectOrg(ctx context.Context, req *api.SelectOrgRequest) (api.
 // Lists the active organization's invitations. Requires a session scoped to an
 // organization.
 func (h Handler) ListInvitations(ctx context.Context) (api.ListInvitationsRes, error) {
-	user := userFromContext(ctx)
+	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
 	if user.OrgID == "" {
 		return &api.InvitationListResponse{}, nil
 	}
-	invites, err := h.auth.listInvitations(ctx, user.OrgID, invitationListLimit)
+	invites, err := h.auth.ListInvitations(ctx, user.OrgID, invitationListLimit)
 	if err != nil {
 		return &api.Error{Message: "failed to list invitations"}, nil
 	}
@@ -121,7 +131,7 @@ func (h Handler) ListInvitations(ctx context.Context) (api.ListInvitationsRes, e
 // Invites an email to the caller's active organization. Any signed-in member of
 // an organization may invite (demo-simple authorization).
 func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitationRequest) (api.CreateInvitationRes, error) {
-	user := userFromContext(ctx)
+	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.CreateInvitationUnauthorized{Message: "unauthorized"}, nil
 	}
@@ -132,7 +142,7 @@ func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitation
 	if r, ok := req.Role.Get(); ok {
 		role = r
 	}
-	inv, err := h.auth.sendInvitation(ctx, req.Email, user.OrgID, role, user.ID)
+	inv, err := h.auth.SendInvitation(ctx, req.Email, user.OrgID, role, user.ID)
 	if err != nil {
 		return &api.CreateInvitationBadRequest{Message: "failed to send invitation"}, nil
 	}
@@ -140,10 +150,58 @@ func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitation
 	return &r, nil
 }
 
-// toUserResponse maps our internal sessionUser to the generated UserResponse,
+// GetIntegrationStatus implements `getIntegrationStatus`: GET /integrations/status.
+// Returns per-provider connection state for the caller's active organization.
+func (h Handler) GetIntegrationStatus(ctx context.Context) (api.GetIntegrationStatusRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	statuses, err := h.integrations.Status(ctx, user.OrgID)
+	if err != nil {
+		return &api.Error{Message: "failed to read integration status"}, nil
+	}
+	return integrationStatusResponse(h.integrations.Enabled(), statuses), nil
+}
+
+// DisconnectIntegration implements `disconnectIntegration`:
+// POST /integrations/{provider}/disconnect. Removes the stored integration and
+// returns the refreshed status.
+func (h Handler) DisconnectIntegration(ctx context.Context, params api.DisconnectIntegrationParams) (api.DisconnectIntegrationRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	if err := h.integrations.Disconnect(ctx, user.OrgID, string(params.Provider)); err != nil {
+		return &api.Error{Message: "failed to disconnect"}, nil
+	}
+	statuses, err := h.integrations.Status(ctx, user.OrgID)
+	if err != nil {
+		return &api.Error{Message: "failed to read integration status"}, nil
+	}
+	return integrationStatusResponse(h.integrations.Enabled(), statuses), nil
+}
+
+// integrationStatusResponse maps the service's status slice to the generated type.
+func integrationStatusResponse(configured bool, statuses []integrations.ProviderStatus) *api.IntegrationStatusResponse {
+	resp := &api.IntegrationStatusResponse{Configured: configured}
+	for _, st := range statuses {
+		item := api.IntegrationStatus{Provider: st.Provider, Connected: st.Connected}
+		if st.Account != "" {
+			item.Account = api.NewOptString(st.Account)
+		}
+		if st.ConnectedBy != "" {
+			item.ConnectedBy = api.NewOptString(st.ConnectedBy)
+		}
+		resp.Integrations = append(resp.Integrations, item)
+	}
+	return resp
+}
+
+// toUserResponse maps our internal auth.SessionUser to the generated UserResponse,
 // including the active org/role and the list of organizations the user belongs
 // to (fetched best-effort).
-func (h Handler) toUserResponse(ctx context.Context, user *sessionUser) *api.UserResponse {
+func (h Handler) toUserResponse(ctx context.Context, user *auth.SessionUser) *api.UserResponse {
 	resp := &api.UserResponse{ID: user.ID, Email: user.Email}
 	if user.FirstName != "" {
 		resp.FirstName = api.NewOptString(user.FirstName)
@@ -157,7 +215,7 @@ func (h Handler) toUserResponse(ctx context.Context, user *sessionUser) *api.Use
 	if user.Role != "" {
 		resp.Role = api.NewOptString(user.Role)
 	}
-	for _, m := range h.auth.listUserOrganizations(ctx, user.ID, orgListLimit) {
+	for _, m := range h.auth.ListUserOrganizations(ctx, user.ID, orgListLimit) {
 		org := api.Organization{ID: m.ID, Name: m.Name}
 		if m.Role != "" {
 			org.Role = api.NewOptString(m.Role)
@@ -168,7 +226,7 @@ func (h Handler) toUserResponse(ctx context.Context, user *sessionUser) *api.Use
 }
 
 // toInvitationResponse maps our internal invitation to the generated type.
-func toInvitationResponse(inv invitation) api.InvitationResponse {
+func toInvitationResponse(inv auth.Invitation) api.InvitationResponse {
 	r := api.InvitationResponse{ID: inv.ID, Email: inv.Email, State: inv.State}
 	if inv.ExpiresAt != "" {
 		r.ExpiresAt = api.NewOptString(inv.ExpiresAt)

@@ -1,8 +1,8 @@
-package main
+package httpapi
 
 import "net/http"
 
-// withCORS wraps an http.Handler with CORS headers so the browser (served by
+// WithCORS wraps an http.Handler with CORS headers so the browser (served by
 // Vite/SvelteKit on a different origin) can call this API directly.
 //
 // This is *credentialed* CORS: the SPA sends the session cookie with
@@ -10,7 +10,7 @@ import "net/http"
 // wildcard "*" is forbidden with credentials — and (2)
 // Access-Control-Allow-Credentials: true. We therefore echo back exactly the
 // configured origin.
-func withCORS(next http.Handler, allowedOrigin string) http.Handler {
+func WithCORS(next http.Handler, allowedOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")

@@ -22,7 +22,7 @@ install: ## Install all dependencies (Go modules + npm)
 ## ---- Dev ----
 
 dev-backend: ## Run the Go API server on :8080
-	cd backend && go run .
+	cd backend && go run ./cmd/server
 
 dev-frontend: ## Run the SvelteKit dev server on :5173
 	cd frontend && npm run dev
@@ -32,7 +32,7 @@ dev-frontend: ## Run the SvelteKit dev server on :5173
 build: build-backend build-frontend ## Build backend binary and frontend static site
 
 build-backend: ## Compile the Go server to backend/bin/server
-	cd backend && go build -o bin/server .
+	cd backend && go build -o bin/server ./cmd/server
 
 build-frontend: ## Build the SvelteKit SPA to frontend/build
 	cd frontend && npm run build

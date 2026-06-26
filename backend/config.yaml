@@ -24,3 +24,26 @@ workos:
 app:
   post_login_url: "http://localhost:5173" # where the browser lands after login/logout
   insecure_cookies: false # true only for plain-HTTP testing on a non-localhost host
+
+database:
+  url: "${DATABASE_URL}" # Postgres connection string (secret-ish; from env). Empty disables integrations.
+
+encryption:
+  provider: "local" # "local" (AES-GCM) or "kms" (customer-managed key)
+  local_key: "${INTEGRATION_ENC_KEY}" # base64 32-byte key for provider=local; empty = ephemeral dev key
+  kms_key_id: "" # key ID/ARN for provider=kms (wire a KMSClient in buildEncryptor)
+
+github:
+  app_slug: "" # github.com/apps/<slug>
+  app_id: "" # numeric GitHub App ID
+  client_id: "${GITHUB_APP_CLIENT_ID}" # App OAuth client id
+  client_secret: "${GITHUB_APP_CLIENT_SECRET}" # SECRET
+  private_key: "${GITHUB_APP_PRIVATE_KEY}" # SECRET — PEM contents, used to mint installation tokens
+  callback_url: "http://localhost:8080/integrations/github/callback"
+
+slack:
+  client_id: "${SLACK_CLIENT_ID}" # Slack app client id
+  client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
+  # Comprehensive bot scope list — review/trim in the Slack app dashboard to match what you actually need.
+  scopes: "channels:read,channels:history,channels:join,groups:read,im:read,mpim:read,chat:write,chat:write.public,users:read,users:read.email,team:read,reactions:read,reactions:write,files:read,files:write,commands"
+  callback_url: "http://localhost:8080/integrations/slack/callback"

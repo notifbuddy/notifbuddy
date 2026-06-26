@@ -2,6 +2,10 @@
 
 package api
 
+import (
+	"github.com/go-faster/errors"
+)
+
 type CreateInvitationBadRequest Error
 
 func (*CreateInvitationBadRequest) createInvitationRes() {}
@@ -39,6 +43,47 @@ type CreateInvitationUnauthorized Error
 
 func (*CreateInvitationUnauthorized) createInvitationRes() {}
 
+type DisconnectIntegrationProvider string
+
+const (
+	DisconnectIntegrationProviderGithub DisconnectIntegrationProvider = "github"
+	DisconnectIntegrationProviderSlack  DisconnectIntegrationProvider = "slack"
+)
+
+// AllValues returns all DisconnectIntegrationProvider values.
+func (DisconnectIntegrationProvider) AllValues() []DisconnectIntegrationProvider {
+	return []DisconnectIntegrationProvider{
+		DisconnectIntegrationProviderGithub,
+		DisconnectIntegrationProviderSlack,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s DisconnectIntegrationProvider) MarshalText() ([]byte, error) {
+	switch s {
+	case DisconnectIntegrationProviderGithub:
+		return []byte(s), nil
+	case DisconnectIntegrationProviderSlack:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *DisconnectIntegrationProvider) UnmarshalText(data []byte) error {
+	switch DisconnectIntegrationProvider(data) {
+	case DisconnectIntegrationProviderGithub:
+		*s = DisconnectIntegrationProviderGithub
+		return nil
+	case DisconnectIntegrationProviderSlack:
+		*s = DisconnectIntegrationProviderSlack
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // A generic error response.
 // Ref: #/components/schemas/Error
 type Error struct {
@@ -56,12 +101,98 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*Error) getMeRes()           {}
-func (*Error) getPendingOrgsRes()  {}
-func (*Error) listInvitationsRes() {}
-func (*Error) pingRes()            {}
-func (*Error) selectOrgRes()       {}
-func (*Error) verifyEmailRes()     {}
+func (*Error) disconnectIntegrationRes() {}
+func (*Error) getIntegrationStatusRes()  {}
+func (*Error) getMeRes()                 {}
+func (*Error) getPendingOrgsRes()        {}
+func (*Error) listInvitationsRes()       {}
+func (*Error) pingRes()                  {}
+func (*Error) selectOrgRes()             {}
+func (*Error) verifyEmailRes()           {}
+
+// The connection state of a single integration provider.
+// Ref: #/components/schemas/IntegrationStatus
+type IntegrationStatus struct {
+	// The provider key.
+	Provider string `json:"provider"`
+	// Whether this provider is connected for the active organization.
+	Connected bool `json:"connected"`
+	// The connected account/workspace label (GitHub login, Slack team).
+	Account OptString `json:"account"`
+	// The WorkOS user id who connected it, if known.
+	ConnectedBy OptString `json:"connectedBy"`
+}
+
+// GetProvider returns the value of Provider.
+func (s *IntegrationStatus) GetProvider() string {
+	return s.Provider
+}
+
+// GetConnected returns the value of Connected.
+func (s *IntegrationStatus) GetConnected() bool {
+	return s.Connected
+}
+
+// GetAccount returns the value of Account.
+func (s *IntegrationStatus) GetAccount() OptString {
+	return s.Account
+}
+
+// GetConnectedBy returns the value of ConnectedBy.
+func (s *IntegrationStatus) GetConnectedBy() OptString {
+	return s.ConnectedBy
+}
+
+// SetProvider sets the value of Provider.
+func (s *IntegrationStatus) SetProvider(val string) {
+	s.Provider = val
+}
+
+// SetConnected sets the value of Connected.
+func (s *IntegrationStatus) SetConnected(val bool) {
+	s.Connected = val
+}
+
+// SetAccount sets the value of Account.
+func (s *IntegrationStatus) SetAccount(val OptString) {
+	s.Account = val
+}
+
+// SetConnectedBy sets the value of ConnectedBy.
+func (s *IntegrationStatus) SetConnectedBy(val OptString) {
+	s.ConnectedBy = val
+}
+
+// Connection status for every supported integration.
+// Ref: #/components/schemas/IntegrationStatusResponse
+type IntegrationStatusResponse struct {
+	Integrations []IntegrationStatus `json:"integrations"`
+	// Whether the integration service is configured (database available) on the server.
+	Configured bool `json:"configured"`
+}
+
+// GetIntegrations returns the value of Integrations.
+func (s *IntegrationStatusResponse) GetIntegrations() []IntegrationStatus {
+	return s.Integrations
+}
+
+// GetConfigured returns the value of Configured.
+func (s *IntegrationStatusResponse) GetConfigured() bool {
+	return s.Configured
+}
+
+// SetIntegrations sets the value of Integrations.
+func (s *IntegrationStatusResponse) SetIntegrations(val []IntegrationStatus) {
+	s.Integrations = val
+}
+
+// SetConfigured sets the value of Configured.
+func (s *IntegrationStatusResponse) SetConfigured(val bool) {
+	s.Configured = val
+}
+
+func (*IntegrationStatusResponse) disconnectIntegrationRes() {}
+func (*IntegrationStatusResponse) getIntegrationStatusRes()  {}
 
 // A list of invitations for the active organization.
 // Ref: #/components/schemas/InvitationListResponse

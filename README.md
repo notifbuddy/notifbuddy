@@ -22,7 +22,9 @@ spec/openapi.yaml  ──┬──▶  ogen                ──▶  backend/in
 | Backend      | Go 1.25, [ogen](https://github.com/ogen-go/ogen) (server gen) |
 | Frontend     | SvelteKit (SPA via `adapter-static`), shadcn-svelte, Tailwind v4 |
 | API client   | [openapi-typescript](https://openapi-ts.dev) + openapi-fetch  |
-| Auth         | [WorkOS AuthKit](https://workos.com/docs/authkit) via [workos-go v9](https://github.com/workos/workos-go) (hosted login, sealed-session cookie) |
+| Auth         | [WorkOS AuthKit](https://workos.com/docs/authkit) via [workos-go v9](https://github.com/workos/workos-go) (hosted login, orgs, sealed-session cookie) |
+| Integrations | GitHub App + Slack OAuth, per-organization, stored in Postgres |
+| Persistence  | Postgres via [pgx](https://github.com/jackc/pgx); auto-migrated on startup |
 | Transport    | Browser → Go directly (credentialed CORS, no proxy)           |
 
 ## What is generated vs. hand-written
@@ -32,22 +34,27 @@ spec/openapi.yaml  ──┬──▶  ogen                ──▶  backend/in
 - `backend/internal/api/*.gen.go` — router, request/response types, validation, the `Handler` interface, and a Go client. (ogen)
 - `frontend/src/lib/api/schema.d.ts` — TypeScript types for every path and schema. (openapi-typescript)
 
-**Hand-written (the only non-generated code):**
+**Hand-written (the only non-generated code):** the backend is organized into
+`internal/` packages with `cmd/server/main.go` doing the wiring:
 
-- `backend/handler.go` — implements `api.Handler` (`Ping`, `GetMe`); both require a session.
-- `backend/auth.go` — WorkOS client, the `/auth/*` redirect handlers, and the session-loading middleware.
-- `backend/config.go` — loads `config.yaml` and resolves `$VAR` secret references.
-- `backend/main.go`, `backend/cors.go` — server bootstrap (mux) + credentialed CORS.
-- `frontend/src/lib/api/client.ts` — typed `createClient<paths>()` with `credentials: 'include'`.
-- `frontend/src/routes/+page.svelte` — the UI (signed-in / signed-out states).
+- `backend/cmd/server/main.go` — wiring only: load config, build store/crypto/auth/integrations, route the mux, serve.
+- `backend/internal/httpapi/` — implements the ogen `api.Handler` (delegates to services) + credentialed CORS.
+- `backend/internal/auth/` — WorkOS client, `/auth/*` redirect handlers, session-loading middleware, org/role/invitations.
+- `backend/internal/config/` — loads `config.yaml`, resolves `$VAR` secret references (reflection-based, recursive).
+- `backend/internal/store/` — pgx pool, embedded migrations, the `org_integrations` repository.
+- `backend/internal/crypto/` — `Encryptor` interface (local AES-GCM + KMS seam) for token encryption at rest.
+- `backend/internal/integrations/` — GitHub App + Slack OAuth flows, status, disconnect.
+- `frontend/src/lib/api/client.ts`, `src/lib/integrations.ts` — typed client + integration helpers.
+- `frontend/src/routes/+page.svelte`, `routes/onboarding/`, `routes/settings/integrations/` — the UI.
 
-**Deliberate exception to "no hand-written transport":** the three browser
-redirect routes — `GET /auth/login`, `GET /auth/callback`, `GET /auth/logout` —
-are plain `net/http` handlers, **not** in the spec. They are 302 redirects that
-set/clear the session cookie, not JSON operations, which ogen does not model
-cleanly. Everything else — `/ping`, `/me`, `POST /auth/verify-email`,
-`GET /auth/pending-orgs`, `POST /auth/select-org`, and the `/invitations`
-endpoints — stays fully spec-driven.
+**Deliberate exception to "no hand-written transport":** the browser redirect
+routes — `GET /auth/{login,callback,logout}` and
+`GET /integrations/{github,slack}/{connect,callback}` — are plain `net/http`
+handlers, **not** in the spec. They are 302 redirects (OAuth/installation flows
+that set cookies), not JSON operations, which ogen does not model cleanly.
+Everything else — `/ping`, `/me`, `/auth/verify-email`, `/auth/pending-orgs`,
+`/auth/select-org`, `/invitations`, and `/integrations/status` +
+`/integrations/{provider}/disconnect` — stays fully spec-driven.
 
 ## Prerequisites
 
@@ -193,13 +200,74 @@ In the WorkOS dashboard (Staging):
 2. To assign roles on invite, define the **role** (e.g. `member`) under Roles and
    pass its slug as `role`.
 
+## Integrations (GitHub + Slack)
+
+Each WorkOS organization can connect a **GitHub App installation** and a **Slack
+workspace**. Integration records (installation id / team id, encrypted tokens,
+metadata) live in Postgres keyed by `org_id`; tokens are encrypted at rest by a
+pluggable `Encryptor` (local AES-GCM in dev, a customer KMS in prod).
+
+Two frontend surfaces share the same backend:
+
+- **Onboarding wizard** (`/onboarding`) — first-run, step-gated: connect GitHub,
+  then Slack.
+- **Integrations settings** (`/settings/integrations`) — persistent management:
+  per-provider status + **Connect / Reconnect / Disconnect**. The home card shows
+  a summary and links to whichever is relevant.
+
+```
+Connect  ─▶ GET /integrations/{provider}/connect  (session → sealed state with org+user)
+         ─302▶ GitHub App install / Slack OAuth authorize
+Callback ─▶ GET /integrations/{provider}/callback (verify state)
+   github: store installation_id (tokens minted on demand via App JWT)
+   slack:  exchange code → store team_id + ENCRYPTED bot token
+         ─302▶ SPA ?provider=&status=
+Status   ─▶ GET /integrations/status            → per-provider {connected, account}
+Disconnect ▶ POST /integrations/{provider}/disconnect
+```
+
+Authorization is demo-simple: any signed-in member of an org may connect. The
+GitHub installation is stored, not a long-lived token — short-lived installation
+tokens are minted on demand from the App JWT (the GitHub-recommended pattern).
+
+### Database setup
+
+Integrations need Postgres. Either point `DATABASE_URL` at a local server with a
+`xolo` database, or use the bundled compose file:
+
+```bash
+# Option A — existing local Postgres:
+createdb xolo   # then: DATABASE_URL=postgres://localhost:5432/xolo?sslmode=disable
+
+# Option B — Docker:
+docker compose up -d postgres
+# DATABASE_URL=postgres://xolo:xolo@localhost:5432/xolo?sslmode=disable
+```
+
+The backend **auto-migrates** on startup (embedded SQL in `internal/store/migrations`).
+If `DATABASE_URL` is unset, the server still runs but integration endpoints report
+`configured: false`.
+
+### Dashboard prerequisites for integrations
+
+- **GitHub App** ([create one](https://github.com/settings/apps/new)): set the
+  callback + setup URL to `http://localhost:8080/integrations/github/callback`,
+  generate a private key, and note the App ID, slug, and OAuth client id/secret.
+  Put `app_slug`/`app_id` in `config.yaml` and the secrets in `.env`.
+- **Slack app** ([create one](https://api.slack.com/apps)): add redirect URL
+  `http://localhost:8080/integrations/slack/callback`, set the bot scopes (the
+  `slack.scopes` list in `config.yaml` is a broad starting set — trim to what you
+  need), and put the client id/secret in `.env`.
+
 ## Configuration
 
 The backend reads a **YAML config file** (`backend/config.yaml`, override with
 `CONFIG_FILE`). Non-sensitive values are written literally; **sensitive fields
-reference an environment variable** with `$VAR` / `${VAR}`, resolved at startup.
-A referenced-but-unset variable is a hard error, so the server never starts with
-an empty secret. This keeps real secrets out of the committed file — they live
+reference an environment variable** with `$VAR` / `${VAR}`, resolved at startup
+(recursively, over every string field). Unset references expand to empty —
+optional integration fields are routinely left unconfigured — and the genuinely
+required values (the WorkOS essentials) are enforced afterward by validation with
+a precise message. This keeps real secrets out of the committed file — they live
 in `backend/.env` (auto-loaded) or the real environment.
 
 ```yaml
@@ -228,6 +296,16 @@ app:
 | `workos.login_provider`        | —                              |           | Skip the AuthKit selector → one provider (e.g. `GitHubOAuth`) |
 | `app.post_login_url`           | —                              |           | Where the browser lands after login/logout (SPA origin) |
 | `app.insecure_cookies`         | —                              |           | Drop the cookie `Secure` flag (plain-HTTP testing)   |
+| `database.url`                 | `DATABASE_URL`                 | ✅        | Postgres connection string (empty disables integrations) |
+| `encryption.provider`          | —                              |           | `local` (AES-GCM) or `kms`                           |
+| `encryption.local_key`         | `INTEGRATION_ENC_KEY`          | ✅        | base64 32-byte key for `local` (empty = ephemeral dev key) |
+| `github.app_slug` / `app_id`   | —                              |           | GitHub App slug + numeric ID                         |
+| `github.client_id`             | `GITHUB_APP_CLIENT_ID`         |           | GitHub App OAuth client id                           |
+| `github.client_secret`         | `GITHUB_APP_CLIENT_SECRET`     | ✅        | GitHub App OAuth client secret                       |
+| `github.private_key`           | `GITHUB_APP_PRIVATE_KEY`       | ✅        | App PEM key (mints installation tokens)              |
+| `slack.client_id`              | `SLACK_CLIENT_ID`              |           | Slack app client id                                  |
+| `slack.client_secret`          | `SLACK_CLIENT_SECRET`          | ✅        | Slack app client secret                              |
+| `slack.scopes`                 | —                              |           | Requested bot scopes (space/comma separated)         |
 
 Any field can pull from the environment by setting it to a `$VAR` reference; the
 secret fields above do so by default. The frontend reads one env var:
@@ -241,14 +319,23 @@ browser client calls.
 - TypeScript is pinned to v5 because `openapi-typescript@7` declares a peer range of `^5.x` (the SvelteKit template otherwise pulls TS 6).
 ```
 xolo/
-├── spec/openapi.yaml          # source of truth (/ping, /me — JSON only)
-├── backend/                   # Go (ogen + WorkOS)
-│   ├── handler.go  main.go  cors.go  generate.go
-│   ├── auth.go                # WorkOS client + /auth/* redirects + session middleware
-│   ├── config.go  config.yaml # YAML config; secrets via $VAR env refs
-│   ├── .env.example           # copy to .env and fill in WorkOS secrets
-│   └── internal/api/          # GENERATED
-├── frontend/                  # SvelteKit SPA
-│   └── src/lib/api/           # client.ts + GENERATED schema.d.ts
+├── spec/openapi.yaml             # source of truth (JSON endpoints only)
+├── docker-compose.yml            # optional local Postgres
+├── backend/                      # Go (ogen + WorkOS + integrations)
+│   ├── config.yaml  .env.example # YAML config; secrets via $VAR env refs
+│   ├── generate.go               # //go:generate ogen directive
+│   ├── cmd/server/main.go        # wiring only
+│   └── internal/
+│       ├── api/                  # GENERATED (ogen)
+│       ├── httpapi/              # implements api.Handler + CORS
+│       ├── auth/                 # WorkOS: redirects, session, orgs, invitations
+│       ├── config/              # YAML + $VAR env-ref loader
+│       ├── store/                # pgx pool + migrations + repository
+│       ├── crypto/               # Encryptor (local AES-GCM + KMS seam)
+│       └── integrations/         # GitHub App + Slack OAuth flows
+├── frontend/                     # SvelteKit SPA
+│   └── src/
+│       ├── lib/                  # api/client.ts (+ GENERATED schema.d.ts), integrations.ts
+│       └── routes/               # +page.svelte, onboarding/, settings/integrations/
 └── Makefile
 ```

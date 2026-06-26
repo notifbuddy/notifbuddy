@@ -193,6 +193,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /integrations/status:
+    get:
+      operationId: getIntegrationStatus
+      summary: Integration connection status for the active organization
+      description: |
+        Returns the connection state of each supported integration (GitHub,
+        Slack) for the caller's active organization. Drives both the onboarding
+        wizard and the integrations settings view. The actual connect/callback
+        flows are browser redirects (GET /integrations/{provider}/connect) and
+        are not part of this JSON spec.
+      responses:
+        "200":
+          description: Per-provider connection status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatusResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /integrations/{provider}/disconnect:
+    post:
+      operationId: disconnectIntegration
+      summary: Disconnect an integration from the active organization
+      description: Removes the stored installation/token for the given provider.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [github, slack]
+      responses:
+        "200":
+          description: Disconnected (or was already not connected).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatusResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     PongResponse:
@@ -336,6 +384,42 @@ components:
             $ref: "#/components/schemas/InvitationResponse"
       required:
         - invitations
+    IntegrationStatus:
+      type: object
+      description: The connection state of a single integration provider.
+      properties:
+        provider:
+          type: string
+          description: The provider key.
+          example: github
+        connected:
+          type: boolean
+          description: Whether this provider is connected for the active organization.
+        account:
+          type: string
+          description: The connected account/workspace label (GitHub login, Slack team).
+          example: acme
+        connectedBy:
+          type: string
+          description: The WorkOS user id who connected it, if known.
+          example: user_01H...
+      required:
+        - provider
+        - connected
+    IntegrationStatusResponse:
+      type: object
+      description: Connection status for every supported integration.
+      properties:
+        integrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationStatus"
+        configured:
+          type: boolean
+          description: Whether the integration service is configured (database available) on the server.
+      required:
+        - integrations
+        - configured
     Error:
       type: object
       description: A generic error response.
