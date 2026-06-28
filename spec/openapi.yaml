@@ -248,7 +248,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [github, slack]
+            enum: [github, slack, linear]
       responses:
         "200":
           description: Disconnected (or was already not connected).
@@ -270,6 +270,28 @@ paths:
         Returns the GitHub webhook events we have received and stored for the
         caller's active organization, newest first. Events are stored when GitHub
         delivers them to POST /integrations/github/webhook (a browser-external
+        redirect-style route, not part of this JSON spec).
+      responses:
+        "200":
+          description: Recent webhook events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /integrations/linear/webhooks:
+    get:
+      operationId: listLinearWebhooks
+      summary: Recent Linear webhook deliveries for the active organization
+      description: |
+        Returns the Linear webhook events we have received and stored for the
+        caller's active organization, newest first. Events are stored when Linear
+        delivers them to POST /integrations/linear/webhook (a browser-external
         redirect-style route, not part of this JSON spec).
       responses:
         "200":

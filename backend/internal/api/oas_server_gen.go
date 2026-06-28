@@ -62,6 +62,14 @@ type Handler interface {
 	//
 	// GET /invitations
 	ListInvitations(ctx context.Context) (ListInvitationsRes, error)
+	// ListLinearWebhooks implements listLinearWebhooks operation.
+	//
+	// Returns the Linear webhook events we have received and stored for the caller's active organization,
+	// newest first. Events are stored when Linear delivers them to POST /integrations/linear/webhook (a
+	// browser-external redirect-style route, not part of this JSON spec).
+	//
+	// GET /integrations/linear/webhooks
+	ListLinearWebhooks(ctx context.Context) (ListLinearWebhooksRes, error)
 	// ListMembers implements listMembers operation.
 	//
 	// Returns the active members of the caller's active organization, resolved from WorkOS organization

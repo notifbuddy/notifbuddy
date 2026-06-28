@@ -223,6 +223,26 @@ func (h Handler) ListGithubWebhooks(ctx context.Context) (api.ListGithubWebhooks
 		log.Printf("httpapi: list github webhooks for org %s: %v", user.OrgID, err)
 		return &api.Error{Message: "failed to list webhooks"}, nil
 	}
+	return webhookListResponse(events), nil
+}
+
+// ListLinearWebhooks implements `listLinearWebhooks`: GET /integrations/linear/webhooks.
+// Returns the active organization's recent stored Linear webhook deliveries.
+func (h Handler) ListLinearWebhooks(ctx context.Context) (api.ListLinearWebhooksRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	events, err := h.integrations.ListLinearWebhooks(ctx, user.OrgID, webhookListLimit)
+	if err != nil {
+		log.Printf("httpapi: list linear webhooks for org %s: %v", user.OrgID, err)
+		return &api.Error{Message: "failed to list webhooks"}, nil
+	}
+	return webhookListResponse(events), nil
+}
+
+// webhookListResponse maps a service webhook-event slice to the generated type.
+func webhookListResponse(events []integrations.WebhookEvent) *api.WebhookListResponse {
 	resp := &api.WebhookListResponse{}
 	for _, e := range events {
 		item := api.WebhookEvent{DeliveryId: e.DeliveryID, EventType: e.EventType, ReceivedAt: e.ReceivedAt}
@@ -234,7 +254,7 @@ func (h Handler) ListGithubWebhooks(ctx context.Context) (api.ListGithubWebhooks
 		}
 		resp.Events = append(resp.Events, item)
 	}
-	return resp, nil
+	return resp
 }
 
 // integrationStatusResponse maps the service's status slice to the generated type.

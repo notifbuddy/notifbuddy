@@ -48,6 +48,7 @@ type DisconnectIntegrationProvider string
 const (
 	DisconnectIntegrationProviderGithub DisconnectIntegrationProvider = "github"
 	DisconnectIntegrationProviderSlack  DisconnectIntegrationProvider = "slack"
+	DisconnectIntegrationProviderLinear DisconnectIntegrationProvider = "linear"
 )
 
 // AllValues returns all DisconnectIntegrationProvider values.
@@ -55,6 +56,7 @@ func (DisconnectIntegrationProvider) AllValues() []DisconnectIntegrationProvider
 	return []DisconnectIntegrationProvider{
 		DisconnectIntegrationProviderGithub,
 		DisconnectIntegrationProviderSlack,
+		DisconnectIntegrationProviderLinear,
 	}
 }
 
@@ -64,6 +66,8 @@ func (s DisconnectIntegrationProvider) MarshalText() ([]byte, error) {
 	case DisconnectIntegrationProviderGithub:
 		return []byte(s), nil
 	case DisconnectIntegrationProviderSlack:
+		return []byte(s), nil
+	case DisconnectIntegrationProviderLinear:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -78,6 +82,9 @@ func (s *DisconnectIntegrationProvider) UnmarshalText(data []byte) error {
 		return nil
 	case DisconnectIntegrationProviderSlack:
 		*s = DisconnectIntegrationProviderSlack
+		return nil
+	case DisconnectIntegrationProviderLinear:
+		*s = DisconnectIntegrationProviderLinear
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -107,6 +114,7 @@ func (*Error) getMeRes()                 {}
 func (*Error) getPendingOrgsRes()        {}
 func (*Error) listGithubWebhooksRes()    {}
 func (*Error) listInvitationsRes()       {}
+func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
 func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
@@ -695,3 +703,4 @@ func (s *WebhookListResponse) SetEvents(val []WebhookEvent) {
 }
 
 func (*WebhookListResponse) listGithubWebhooksRes() {}
+func (*WebhookListResponse) listLinearWebhooksRes() {}

@@ -13,6 +13,7 @@ const (
 	GetPendingOrgsOperation        OperationName = "GetPendingOrgs"
 	ListGithubWebhooksOperation    OperationName = "ListGithubWebhooks"
 	ListInvitationsOperation       OperationName = "ListInvitations"
+	ListLinearWebhooksOperation    OperationName = "ListLinearWebhooks"
 	ListMembersOperation           OperationName = "ListMembers"
 	PingOperation                  OperationName = "Ping"
 	SelectOrgOperation             OperationName = "SelectOrg"

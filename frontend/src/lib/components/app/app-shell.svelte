@@ -16,6 +16,10 @@
 			match: (p) => p === '/settings/integrations/webhooks',
 			trail: ['Integrations', 'GitHub webhooks']
 		},
+		{
+			match: (p) => p === '/settings/integrations/linear-webhooks',
+			trail: ['Integrations', 'Linear webhooks']
+		},
 		{ match: (p) => p.startsWith('/settings/integrations'), trail: ['Integrations'] },
 		{ match: (p) => p.startsWith('/settings/profile'), trail: ['Profile'] },
 		{ match: (p) => p.startsWith('/settings/organization'), trail: ['Organization'] },

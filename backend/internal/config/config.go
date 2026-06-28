@@ -28,6 +28,7 @@ type Config struct {
 	PubSub     PubSubConfig     `yaml:"pubsub"`
 	GitHub     GitHubConfig     `yaml:"github"`
 	Slack      SlackConfig      `yaml:"slack"`
+	Linear     LinearConfig     `yaml:"linear"`
 }
 
 type ServerConfig struct {
@@ -117,6 +118,20 @@ type SlackConfig struct {
 	CallbackURL string `yaml:"callback_url"`
 }
 
+type LinearConfig struct {
+	// ClientID / ClientSecret are the Linear OAuth application credentials.
+	// ClientSecret is SECRET — env ref.
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	// Scopes is the list of OAuth scopes requested (e.g. read, write).
+	Scopes []string `yaml:"scopes"`
+	// CallbackURL is where Linear redirects after authorize.
+	CallbackURL string `yaml:"callback_url"`
+	// WebhookSecret verifies incoming webhook HMAC signatures
+	// (Linear-Signature header). SECRET — env ref. Empty disables verification.
+	WebhookSecret string `yaml:"webhook_secret"`
+}
+
 // defaultConfig returns built-in defaults applied before the YAML file is
 // decoded on top. Secret/identity fields have no safe default and stay empty.
 func defaultConfig() Config {
@@ -129,6 +144,10 @@ func defaultConfig() Config {
 		PubSub:     PubSubConfig{Provider: "memory"},
 		GitHub: GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
 		Slack:  SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
+		Linear: LinearConfig{
+			CallbackURL: "http://localhost:8080/integrations/linear/callback",
+			Scopes:      []string{"read", "write"},
+		},
 	}
 }
 

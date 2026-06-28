@@ -15,7 +15,8 @@ export type IntegrationState = {
 // Provider display metadata for the UI.
 export const PROVIDERS = [
 	{ key: 'github', label: 'GitHub', blurb: 'Install the GitHub App to connect your repositories.' },
-	{ key: 'slack', label: 'Slack', blurb: 'Authorize Slack so we can post to your workspace.' }
+	{ key: 'slack', label: 'Slack', blurb: 'Authorize Slack so we can post to your workspace.' },
+	{ key: 'linear', label: 'Linear', blurb: 'Install the Linear app to sync issues in your workspace.' }
 ] as const;
 
 // Fetch the current org's integration status. Returns null when unauthenticated.
@@ -33,7 +34,7 @@ export function connect(provider: string) {
 // Disconnect a provider; returns the refreshed state (or null on failure).
 export async function disconnect(provider: string): Promise<IntegrationState | null> {
 	const { data, error } = await api.POST('/integrations/{provider}/disconnect', {
-		params: { path: { provider: provider as 'github' | 'slack' } }
+		params: { path: { provider: provider as 'github' | 'slack' | 'linear' } }
 	});
 	if (error || !data) return null;
 	return data as IntegrationState;
@@ -56,6 +57,14 @@ export type WebhookEvent = {
 // unauthenticated.
 export async function fetchGithubWebhooks(): Promise<WebhookEvent[] | null> {
 	const { data, error } = await api.GET('/integrations/github/webhooks');
+	if (error || !data) return null;
+	return (data.events ?? []) as WebhookEvent[];
+}
+
+// Fetch recent Linear webhook deliveries for the active org. Returns null when
+// unauthenticated.
+export async function fetchLinearWebhooks(): Promise<WebhookEvent[] | null> {
+	const { data, error } = await api.GET('/integrations/linear/webhooks');
 	if (error || !data) return null;
 	return (data.events ?? []) as WebhookEvent[];
 }

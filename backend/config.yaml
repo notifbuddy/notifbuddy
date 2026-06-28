@@ -68,3 +68,13 @@ slack:
     - reactions:read
     - emoji:read
   callback_url: "http://localhost:8080/integrations/slack/callback"
+
+linear:
+  client_id: "c7a330b6ba19f5ba1489ef509fa10516" # Linear OAuth application client id (public; may be inlined)
+  client_secret: "${LINEAR_CLIENT_SECRET}" # SECRET
+  # OAuth scopes. read+write lets the app view and create/update issues/comments.
+  scopes:
+    - read
+    - write
+  callback_url: "http://localhost:8080/integrations/linear/callback"
+  webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SECRET — verifies Linear-Signature HMAC; empty disables verification

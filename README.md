@@ -340,6 +340,19 @@ settings:
   resolve in local dev, either run the backend behind a tunnel (ngrok) and use
   that https URL here and in `slack.callback_url`, or terminate TLS in front of
   `:8080`. Plain `http://localhost` works for GitHub but **not** Slack.
+- **Linear OAuth app**: in Linear go to **Settings → API → OAuth applications →
+  Create**. Set the **redirect URL** to
+  `http://localhost:8080/integrations/linear/callback` (must match
+  `linear.callback_url`), and copy the **Client ID** / **Client Secret** into
+  `.env` (`LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`). The connect flow requests
+  `read,write` scopes and passes `actor=app`, so connecting installs the
+  integration into the workspace as an app (a workspace admin approves it);
+  actions are attributed to the app rather than the connecting user.
+  To receive events, enable **webhooks** on the OAuth app (or create a webhook),
+  point them at `POST /integrations/linear/webhook`, and put the signing secret
+  in `.env` (`LINEAR_WEBHOOK_SECRET`). Deliveries are HMAC-verified
+  (`Linear-Signature`), stored, and viewable per org. As with Slack/GitHub
+  webhooks in local dev, expose `:8080` with a tunnel so Linear can reach it.
 
 ## Configuration
 
@@ -391,6 +404,10 @@ app:
 | `slack.client_id`              | `SLACK_CLIENT_ID`              |           | Slack app client id                                  |
 | `slack.client_secret`          | `SLACK_CLIENT_SECRET`          | ✅        | Slack app client secret                              |
 | `slack.scopes`                 | —                              |           | Requested bot scopes (space/comma separated)         |
+| `linear.client_id`             | `LINEAR_CLIENT_ID`             |           | Linear OAuth app client id                           |
+| `linear.client_secret`         | `LINEAR_CLIENT_SECRET`         | ✅        | Linear OAuth app client secret                       |
+| `linear.scopes`                | —                              |           | Requested OAuth scopes (default: read, write)        |
+| `linear.webhook_secret`        | `LINEAR_WEBHOOK_SECRET`        | ✅        | Verifies webhook HMAC (empty disables verification)  |
 
 Any field can pull from the environment by setting it to a `$VAR` reference; the
 secret fields above do so by default. The frontend reads one env var:

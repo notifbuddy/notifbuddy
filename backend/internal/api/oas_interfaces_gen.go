@@ -29,6 +29,10 @@ type ListInvitationsRes interface {
 	listInvitationsRes()
 }
 
+type ListLinearWebhooksRes interface {
+	listLinearWebhooksRes()
+}
+
 type ListMembersRes interface {
 	listMembersRes()
 }
