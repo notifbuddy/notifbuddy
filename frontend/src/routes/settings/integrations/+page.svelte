@@ -4,9 +4,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
-	import GithubIcon from '@lucide/svelte/icons/git-branch';
-	import SlackIcon from '@lucide/svelte/icons/message-square';
-	import LinearIcon from '@lucide/svelte/icons/square-kanban';
+	import { SiGithub, SiLinear } from '@icons-pack/svelte-simple-icons';
+	import SlackIcon from '$lib/icons/slack.svelte';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import {
 		fetchIntegrationStatus,
@@ -36,7 +35,7 @@
 	}
 
 	const icon = (key: string) =>
-		key === 'github' ? GithubIcon : key === 'linear' ? LinearIcon : SlackIcon;
+		key === 'github' ? SiGithub : key === 'linear' ? SiLinear : SlackIcon;
 </script>
 
 <div class="flex flex-col gap-6">
