@@ -15,6 +15,7 @@ type Provider string
 const (
 	ProviderGitHub Provider = "github"
 	ProviderSlack  Provider = "slack"
+	ProviderLinear Provider = "linear"
 )
 
 // ErrNotFound is returned when an integration row does not exist.

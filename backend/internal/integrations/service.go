@@ -65,6 +65,7 @@ func (s *Service) Status(ctx context.Context, orgID string) ([]ProviderStatus, e
 	out := []ProviderStatus{
 		{Provider: string(store.ProviderGitHub)},
 		{Provider: string(store.ProviderSlack)},
+		{Provider: string(store.ProviderLinear)},
 	}
 	if !s.Enabled() || orgID == "" {
 		return out, nil
@@ -108,7 +109,7 @@ func (s *Service) redirectAfter(provider, status string) string {
 // accountLabel derives a human label (GitHub login / Slack team name) from the
 // stored metadata.
 func accountLabel(in store.Integration) string {
-	for _, k := range []string{"account_login", "team_name", "login", "name"} {
+	for _, k := range []string{"account_login", "team_name", "workspace_name", "login", "name"} {
 		if v, ok := in.Metadata[k].(string); ok && v != "" {
 			return v
 		}

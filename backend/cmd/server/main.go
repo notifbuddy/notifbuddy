@@ -95,6 +95,9 @@ func main() {
 	mux.HandleFunc("POST /integrations/github/webhook", intgSvc.HandleGitHubWebhook)
 	mux.HandleFunc("GET /integrations/slack/connect", intgSvc.HandleSlackConnect)
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
+	mux.HandleFunc("GET /integrations/linear/connect", intgSvc.HandleLinearConnect)
+	mux.HandleFunc("GET /integrations/linear/callback", intgSvc.HandleLinearCallback)
+	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
 	mux.Handle("/", srv)
 
 	handler := httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin)

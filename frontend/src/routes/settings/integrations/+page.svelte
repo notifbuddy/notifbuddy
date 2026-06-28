@@ -6,6 +6,7 @@
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import GithubIcon from '@lucide/svelte/icons/git-branch';
 	import SlackIcon from '@lucide/svelte/icons/message-square';
+	import LinearIcon from '@lucide/svelte/icons/square-kanban';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import {
 		fetchIntegrationStatus,
@@ -34,7 +35,8 @@
 		if (next) intg = next;
 	}
 
-	const icon = (key: string) => (key === 'github' ? GithubIcon : SlackIcon);
+	const icon = (key: string) =>
+		key === 'github' ? GithubIcon : key === 'linear' ? LinearIcon : SlackIcon;
 </script>
 
 <div class="flex flex-col gap-6">
@@ -97,6 +99,11 @@
 					<div class="flex shrink-0 items-center gap-2">
 						{#if p.key === 'github' && s?.connected}
 							<Button variant="ghost" size="sm" href="/settings/integrations/webhooks">
+								<WebhookIcon data-icon="inline-start" />
+								Webhooks
+							</Button>
+						{:else if p.key === 'linear' && s?.connected}
+							<Button variant="ghost" size="sm" href="/settings/integrations/linear-webhooks">
 								<WebhookIcon data-icon="inline-start" />
 								Webhooks
 							</Button>

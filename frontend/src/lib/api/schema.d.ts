@@ -236,6 +236,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/linear/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent Linear webhook deliveries for the active organization
+         * @description Returns the Linear webhook events we have received and stored for the
+         *     caller's active organization, newest first. Events are stored when Linear
+         *     delivers them to POST /integrations/linear/webhook (a browser-external
+         *     redirect-style route, not part of this JSON spec).
+         */
+        get: operations["listLinearWebhooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -754,7 +777,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                provider: "github" | "slack";
+                provider: "github" | "slack" | "linear";
             };
             cookie?: never;
         };
@@ -781,6 +804,35 @@ export interface operations {
         };
     };
     listGithubWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent webhook events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLinearWebhooks: {
         parameters: {
             query?: never;
             header?: never;
