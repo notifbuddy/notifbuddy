@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import { SiGithub, SiLinear } from '@icons-pack/svelte-simple-icons';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
+	import PlugIcon from '@lucide/svelte/icons/plug';
+	import UnplugIcon from '@lucide/svelte/icons/unplug';
 	import {
 		fetchIntegrationStatus,
 		connect,
@@ -72,6 +75,7 @@
 	{:else if intg.configured === false}
 		<p class="text-muted-foreground text-sm">Integrations aren't configured on the server yet.</p>
 	{:else}
+		<Tooltip.Provider delayDuration={200}>
 		<Card.Root class="gap-0 divide-y py-0">
 			{#each PROVIDERS as p (p.key)}
 				{@const s = statusOf(intg, p.key)}
@@ -95,37 +99,74 @@
 							{/if}
 						</p>
 					</div>
-					<div class="flex shrink-0 items-center gap-2">
-						{#if p.key === 'github' && s?.connected}
-							<Button variant="ghost" size="sm" href="/settings/integrations/webhooks">
-								<WebhookIcon data-icon="inline-start" />
-								Webhooks
-							</Button>
-						{:else if p.key === 'linear' && s?.connected}
-							<Button variant="ghost" size="sm" href="/settings/integrations/linear-webhooks">
-								<WebhookIcon data-icon="inline-start" />
-								Webhooks
-							</Button>
-						{/if}
+					<div class="flex shrink-0 items-center gap-1">
 						{#if s?.connected}
-							<Button variant="outline" size="sm" onclick={() => connect(p.key)}>Reconnect</Button>
-							<Button
-								variant="destructive"
-								size="sm"
-								disabled={busy === p.key}
-								onclick={() => doDisconnect(p.key)}
-							>
-								{#if busy === p.key}
-									<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								{/if}
-								Disconnect
-							</Button>
+							{@const webhooksHref =
+								p.key === 'github'
+									? '/settings/integrations/webhooks'
+									: p.key === 'linear'
+										? '/settings/integrations/linear-webhooks'
+										: ''}
+							{#if webhooksHref}
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon-sm"
+												href={webhooksHref}
+												aria-label="Webhooks"
+											>
+												<WebhookIcon />
+											</Button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>Webhooks</Tooltip.Content>
+								</Tooltip.Root>
+							{/if}
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											variant="destructive"
+											size="icon-sm"
+											disabled={busy === p.key}
+											onclick={() => doDisconnect(p.key)}
+											aria-label="Disconnect"
+										>
+											{#if busy === p.key}
+												<LoaderIcon class="animate-spin" />
+											{:else}
+												<UnplugIcon />
+											{/if}
+										</Button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>Disconnect</Tooltip.Content>
+							</Tooltip.Root>
 						{:else}
-							<Button size="sm" onclick={() => connect(p.key)}>Connect</Button>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											size="icon-sm"
+											onclick={() => connect(p.key)}
+											aria-label="Connect"
+										>
+											<PlugIcon />
+										</Button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>Connect</Tooltip.Content>
+							</Tooltip.Root>
 						{/if}
 					</div>
 				</div>
 			{/each}
 		</Card.Root>
+		</Tooltip.Provider>
 	{/if}
 </div>
