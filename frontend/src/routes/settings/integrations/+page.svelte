@@ -80,7 +80,7 @@
 			{#each PROVIDERS as p (p.key)}
 				{@const s = statusOf(intg, p.key)}
 				{@const Icon = icon(p.key)}
-				<div class="flex flex-wrap items-center gap-4 p-4">
+				<div class="group flex flex-wrap items-center gap-4 p-4">
 					<Icon class="size-5 shrink-0" />
 					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
 						<div class="flex items-center gap-2">
@@ -99,7 +99,9 @@
 							{/if}
 						</p>
 					</div>
-					<div class="flex shrink-0 items-center gap-1">
+					<div
+						class="flex shrink-0 items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+					>
 						{#if s?.connected}
 							{@const webhooksHref =
 								p.key === 'github'
