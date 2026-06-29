@@ -20,6 +20,14 @@
 			match: (p) => p === '/settings/integrations/linear-webhooks',
 			trail: ['Integrations', 'Linear webhooks']
 		},
+		{
+			match: (p) => p.startsWith('/settings/integrations/workspace'),
+			trail: ['Integrations', 'Workspace']
+		},
+		{
+			match: (p) => p.startsWith('/settings/integrations/user'),
+			trail: ['Integrations', 'User']
+		},
 		{ match: (p) => p.startsWith('/settings/integrations'), trail: ['Integrations'] },
 		{ match: (p) => p.startsWith('/settings/profile'), trail: ['Profile'] },
 		{ match: (p) => p.startsWith('/settings/organization'), trail: ['Organization'] }

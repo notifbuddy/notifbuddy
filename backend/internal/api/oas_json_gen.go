@@ -310,6 +310,10 @@ func (s *IntegrationStatus) encodeFields(e *jx.Encoder) {
 		e.Str(s.Provider)
 	}
 	{
+		e.FieldStart("level")
+		s.Level.Encode(e)
+	}
+	{
 		e.FieldStart("connected")
 		e.Bool(s.Connected)
 	}
@@ -327,11 +331,12 @@ func (s *IntegrationStatus) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfIntegrationStatus = [4]string{
+var jsonFieldsNameOfIntegrationStatus = [5]string{
 	0: "provider",
-	1: "connected",
-	2: "account",
-	3: "connectedBy",
+	1: "level",
+	2: "connected",
+	3: "account",
+	4: "connectedBy",
 }
 
 // Decode decodes IntegrationStatus from json.
@@ -355,8 +360,18 @@ func (s *IntegrationStatus) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"provider\"")
 			}
-		case "connected":
+		case "level":
 			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Level.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"level\"")
+			}
+		case "connected":
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				v, err := d.Bool()
 				s.Connected = bool(v)
@@ -397,7 +412,7 @@ func (s *IntegrationStatus) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000011,
+		0b00000111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -439,6 +454,46 @@ func (s *IntegrationStatus) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *IntegrationStatus) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes IntegrationStatusLevel as json.
+func (s IntegrationStatusLevel) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes IntegrationStatusLevel from json.
+func (s *IntegrationStatusLevel) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode IntegrationStatusLevel to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch IntegrationStatusLevel(v) {
+	case IntegrationStatusLevelWorkspace:
+		*s = IntegrationStatusLevelWorkspace
+	case IntegrationStatusLevelUser:
+		*s = IntegrationStatusLevelUser
+	default:
+		*s = IntegrationStatusLevel(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s IntegrationStatusLevel) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *IntegrationStatusLevel) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

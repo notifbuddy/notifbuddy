@@ -180,7 +180,9 @@ func (s *Server) handleCreateInvitationRequest(args [0]string, argsEscaped bool,
 
 // handleDisconnectIntegrationRequest handles disconnectIntegration operation.
 //
-// Removes the stored installation/token for the given provider.
+// Removes the stored installation/token for the given provider at the given level. level=workspace
+// (default) removes the org-wide connection; level=user removes only the caller's own per-user
+// connection.
 //
 // POST /integrations/{provider}/disconnect
 func (s *Server) handleDisconnectIntegrationRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -281,6 +283,10 @@ func (s *Server) handleDisconnectIntegrationRequest(args [1]string, argsEscaped 
 					Name: "provider",
 					In:   "path",
 				}: params.Provider,
+				{
+					Name: "level",
+					In:   "query",
+				}: params.Level,
 			},
 			Raw: r,
 		}

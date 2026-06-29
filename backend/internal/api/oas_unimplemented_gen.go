@@ -26,7 +26,9 @@ func (UnimplementedHandler) CreateInvitation(ctx context.Context, req *CreateInv
 
 // DisconnectIntegration implements disconnectIntegration operation.
 //
-// Removes the stored installation/token for the given provider.
+// Removes the stored installation/token for the given provider at the given level. level=workspace
+// (default) removes the org-wide connection; level=user removes only the caller's own per-user
+// connection.
 //
 // POST /integrations/{provider}/disconnect
 func (UnimplementedHandler) DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (r DisconnectIntegrationRes, _ error) {

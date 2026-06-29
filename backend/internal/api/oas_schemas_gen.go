@@ -43,6 +43,47 @@ type CreateInvitationUnauthorized Error
 
 func (*CreateInvitationUnauthorized) createInvitationRes() {}
 
+type DisconnectIntegrationLevel string
+
+const (
+	DisconnectIntegrationLevelWorkspace DisconnectIntegrationLevel = "workspace"
+	DisconnectIntegrationLevelUser      DisconnectIntegrationLevel = "user"
+)
+
+// AllValues returns all DisconnectIntegrationLevel values.
+func (DisconnectIntegrationLevel) AllValues() []DisconnectIntegrationLevel {
+	return []DisconnectIntegrationLevel{
+		DisconnectIntegrationLevelWorkspace,
+		DisconnectIntegrationLevelUser,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s DisconnectIntegrationLevel) MarshalText() ([]byte, error) {
+	switch s {
+	case DisconnectIntegrationLevelWorkspace:
+		return []byte(s), nil
+	case DisconnectIntegrationLevelUser:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *DisconnectIntegrationLevel) UnmarshalText(data []byte) error {
+	switch DisconnectIntegrationLevel(data) {
+	case DisconnectIntegrationLevelWorkspace:
+		*s = DisconnectIntegrationLevelWorkspace
+		return nil
+	case DisconnectIntegrationLevelUser:
+		*s = DisconnectIntegrationLevelUser
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 type DisconnectIntegrationProvider string
 
 const (
@@ -120,12 +161,15 @@ func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
 func (*Error) verifyEmailRes()           {}
 
-// The connection state of a single integration provider.
+// The connection state of a single integration provider at one level.
 // Ref: #/components/schemas/IntegrationStatus
 type IntegrationStatus struct {
 	// The provider key.
 	Provider string `json:"provider"`
-	// Whether this provider is connected for the active organization.
+	// Whether this entry is the organization's workspace-wide connection or the caller's own per-user
+	// connection.
+	Level IntegrationStatusLevel `json:"level"`
+	// Whether this provider is connected at this level.
 	Connected bool `json:"connected"`
 	// The connected account/workspace label (GitHub login, Slack team).
 	Account OptString `json:"account"`
@@ -136,6 +180,11 @@ type IntegrationStatus struct {
 // GetProvider returns the value of Provider.
 func (s *IntegrationStatus) GetProvider() string {
 	return s.Provider
+}
+
+// GetLevel returns the value of Level.
+func (s *IntegrationStatus) GetLevel() IntegrationStatusLevel {
+	return s.Level
 }
 
 // GetConnected returns the value of Connected.
@@ -158,6 +207,11 @@ func (s *IntegrationStatus) SetProvider(val string) {
 	s.Provider = val
 }
 
+// SetLevel sets the value of Level.
+func (s *IntegrationStatus) SetLevel(val IntegrationStatusLevel) {
+	s.Level = val
+}
+
 // SetConnected sets the value of Connected.
 func (s *IntegrationStatus) SetConnected(val bool) {
 	s.Connected = val
@@ -171,6 +225,49 @@ func (s *IntegrationStatus) SetAccount(val OptString) {
 // SetConnectedBy sets the value of ConnectedBy.
 func (s *IntegrationStatus) SetConnectedBy(val OptString) {
 	s.ConnectedBy = val
+}
+
+// Whether this entry is the organization's workspace-wide connection or the caller's own per-user
+// connection.
+type IntegrationStatusLevel string
+
+const (
+	IntegrationStatusLevelWorkspace IntegrationStatusLevel = "workspace"
+	IntegrationStatusLevelUser      IntegrationStatusLevel = "user"
+)
+
+// AllValues returns all IntegrationStatusLevel values.
+func (IntegrationStatusLevel) AllValues() []IntegrationStatusLevel {
+	return []IntegrationStatusLevel{
+		IntegrationStatusLevelWorkspace,
+		IntegrationStatusLevelUser,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s IntegrationStatusLevel) MarshalText() ([]byte, error) {
+	switch s {
+	case IntegrationStatusLevelWorkspace:
+		return []byte(s), nil
+	case IntegrationStatusLevelUser:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *IntegrationStatusLevel) UnmarshalText(data []byte) error {
+	switch IntegrationStatusLevel(data) {
+	case IntegrationStatusLevelWorkspace:
+		*s = IntegrationStatusLevelWorkspace
+		return nil
+	case IntegrationStatusLevelUser:
+		*s = IntegrationStatusLevelUser
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Connection status for every supported integration.
@@ -368,6 +465,52 @@ func (s *MemberResponse) SetLastName(val OptString) {
 // SetRole sets the value of Role.
 func (s *MemberResponse) SetRole(val OptString) {
 	s.Role = val
+}
+
+// NewOptDisconnectIntegrationLevel returns new OptDisconnectIntegrationLevel with value set to v.
+func NewOptDisconnectIntegrationLevel(v DisconnectIntegrationLevel) OptDisconnectIntegrationLevel {
+	return OptDisconnectIntegrationLevel{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDisconnectIntegrationLevel is optional DisconnectIntegrationLevel.
+type OptDisconnectIntegrationLevel struct {
+	Value DisconnectIntegrationLevel
+	Set   bool
+}
+
+// IsSet returns true if OptDisconnectIntegrationLevel was set.
+func (o OptDisconnectIntegrationLevel) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDisconnectIntegrationLevel) Reset() {
+	var v DisconnectIntegrationLevel
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDisconnectIntegrationLevel) SetTo(v DisconnectIntegrationLevel) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDisconnectIntegrationLevel) Get() (v DisconnectIntegrationLevel, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDisconnectIntegrationLevel) Or(d DisconnectIntegrationLevel) DisconnectIntegrationLevel {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
 }
 
 // NewOptString returns new OptString with value set to v.

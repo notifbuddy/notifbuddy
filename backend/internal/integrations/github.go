@@ -25,13 +25,22 @@ func (s *Service) githubConfigured() bool {
 // HandleGitHubConnect redirects the browser to the GitHub App installation page,
 // carrying a sealed `state` (org + nonce) that the callback verifies.
 func (s *Service) HandleGitHubConnect(w http.ResponseWriter, r *http.Request) {
-	if !s.Enabled() || !s.githubConfigured() {
+	if !s.Enabled() {
 		http.Error(w, "github integration not configured", http.StatusServiceUnavailable)
 		return
 	}
 	orgID, userID := s.resolve(r)
 	if orgID == "" {
 		http.Error(w, "no active organization", http.StatusUnauthorized)
+		return
+	}
+	// User-level connections use the user-to-server OAuth flow, not App install.
+	if r.URL.Query().Get("level") == string(store.LevelUser) {
+		s.handleGitHubUserConnect(w, r, orgID, userID)
+		return
+	}
+	if !s.githubConfigured() {
+		http.Error(w, "github integration not configured", http.StatusServiceUnavailable)
 		return
 	}
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Nonce: newNonce()})
@@ -56,6 +65,11 @@ func (s *Service) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	st, err := s.openState(q.Get("state"))
 	if err != nil || st.OrgID == "" {
 		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
+	// User-level callbacks complete the user-to-server OAuth flow.
+	if st.Level == string(store.LevelUser) {
+		s.handleGitHubUserCallback(w, r, st)
 		return
 	}
 	setupAction := q.Get("setup_action")
@@ -93,7 +107,7 @@ func (s *Service) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 // org's stored installation. Tokens are not persisted — they're minted on demand
 // from the App JWT, which is the GitHub-recommended pattern.
 func (s *Service) InstallationToken(ctx context.Context, orgID string) (string, error) {
-	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderGitHub)
+	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderGitHub, store.LevelWorkspace, "")
 	if err != nil {
 		return "", err
 	}

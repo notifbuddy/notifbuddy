@@ -45,6 +45,12 @@ github:
   private_key: "${GITHUB_APP_PRIVATE_KEY}" # SECRET — PEM contents, used to mint installation tokens
   webhook_secret: "${GITHUB_WEBHOOK_SECRET}" # SECRET — verifies X-Hub-Signature-256; empty disables verification
   callback_url: "http://localhost:8080/integrations/github/callback"
+  # User-level (user-to-server) connection: scopes requested when a user connects
+  # their own GitHub account (acts as the user for two-way sync). Empty is valid.
+  user_scopes:
+    - repo
+    - read:user
+  user_callback_url: "http://localhost:8080/integrations/github/callback" # user-to-server redirect
 
 slack:
   client_id: "11457434980017.11440212651047" # Slack app client id
@@ -67,6 +73,11 @@ slack:
     - users:read
     - reactions:read
     - emoji:read
+  # User-level connection: user-token scopes (the xoxp token under authed_user),
+  # used to post/act as the connecting user for two-way sync.
+  user_scopes:
+    - chat:write
+    - channels:write
   callback_url: "http://localhost:8080/integrations/slack/callback"
 
 linear:
