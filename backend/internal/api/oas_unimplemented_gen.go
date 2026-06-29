@@ -46,6 +46,17 @@ func (UnimplementedHandler) GetIntegrationStatus(ctx context.Context) (r GetInte
 	return r, ht.ErrNotImplemented
 }
 
+// GetLinearSettings implements getLinearSettings operation.
+//
+// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
+// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
+// built-in sample events for the test panel.
+//
+// GET /integrations/linear/settings
+func (UnimplementedHandler) GetLinearSettings(ctx context.Context) (r GetLinearSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetMe implements getMe operation.
 //
 // Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -120,6 +131,16 @@ func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
+// SaveLinearSettings implements saveLinearSettings operation.
+//
+// Persists the org's Linear settings. The name template and condition are validated (parsed) before
+// saving; a malformed template returns 400.
+//
+// PUT /integrations/linear/settings
+func (UnimplementedHandler) SaveLinearSettings(ctx context.Context, req *LinearSettings) (r SaveLinearSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // SelectOrg implements selectOrg operation.
 //
 // Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -127,6 +148,18 @@ func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
 //
 // POST /auth/select-org
 func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest) (r SelectOrgRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TestLinearTemplate implements testLinearTemplate operation.
+//
+// Renders nameTemplate and evaluates condition against the supplied event. Provide either a sampleId
+// (one of the built-in sample events) or a raw event JSON string. Returns the rendered name, the
+// condition result, and any template error (template errors are returned in-body, not as 4xx, so the
+// UI can show them inline).
+//
+// POST /integrations/linear/settings/test
+func (UnimplementedHandler) TestLinearTemplate(ctx context.Context, req *TemplateTestRequest) (r TestLinearTemplateRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

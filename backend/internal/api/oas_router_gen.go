@@ -11,10 +11,16 @@ import (
 )
 
 var (
-	rn15AllowedHeaders = map[string]string{
+	rn17AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn16AllowedHeaders = map[string]string{
+	rn19AllowedHeaders = map[string]string{
+		"POST": "Content-Type",
+	}
+	rn7AllowedHeaders = map[string]string{
+		"PUT": "Content-Type",
+	}
+	rn18AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
 	rn1AllowedHeaders = map[string]string{
@@ -126,7 +132,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn15AllowedHeaders,
+								allowedHeaders: rn17AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -151,7 +157,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn16AllowedHeaders,
+								allowedHeaders: rn19AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -212,29 +218,96 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						}
 
 						elem = origElem
-					case 'l': // Prefix: "linear/webhooks"
+					case 'l': // Prefix: "linear/"
 						origElem := elem
-						if l := len("linear/webhooks"); len(elem) >= l && elem[0:l] == "linear/webhooks" {
+						if l := len("linear/"); len(elem) >= l && elem[0:l] == "linear/" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
 						if len(elem) == 0 {
-							// Leaf node.
-							switch r.Method {
-							case "GET":
-								s.handleListLinearWebhooksRequest([0]string{}, elemIsEscaped, w, r)
-							default:
-								s.notAllowed(w, r, notAllowedParams{
-									allowedMethods: "GET",
-									allowedHeaders: nil,
-									acceptPost:     "",
-									acceptPatch:    "",
-								})
+							break
+						}
+						switch elem[0] {
+						case 's': // Prefix: "settings"
+
+							if l := len("settings"); len(elem) >= l && elem[0:l] == "settings" {
+								elem = elem[l:]
+							} else {
+								break
 							}
 
-							return
+							if len(elem) == 0 {
+								switch r.Method {
+								case "GET":
+									s.handleGetLinearSettingsRequest([0]string{}, elemIsEscaped, w, r)
+								case "PUT":
+									s.handleSaveLinearSettingsRequest([0]string{}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "GET,PUT",
+										allowedHeaders: rn7AllowedHeaders,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/test"
+
+								if l := len("/test"); len(elem) >= l && elem[0:l] == "/test" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleTestLinearTemplateRequest([0]string{}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn18AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						case 'w': // Prefix: "webhooks"
+
+							if l := len("webhooks"); len(elem) >= l && elem[0:l] == "webhooks" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "GET":
+									s.handleListLinearWebhooksRequest([0]string{}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "GET",
+										allowedHeaders: nil,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
 						}
 
 						elem = origElem
@@ -651,29 +724,103 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 						}
 
 						elem = origElem
-					case 'l': // Prefix: "linear/webhooks"
+					case 'l': // Prefix: "linear/"
 						origElem := elem
-						if l := len("linear/webhooks"); len(elem) >= l && elem[0:l] == "linear/webhooks" {
+						if l := len("linear/"); len(elem) >= l && elem[0:l] == "linear/" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
 						if len(elem) == 0 {
-							// Leaf node.
-							switch method {
-							case "GET":
-								r.name = ListLinearWebhooksOperation
-								r.summary = "Recent Linear webhook deliveries for the active organization"
-								r.operationID = "listLinearWebhooks"
-								r.operationGroup = ""
-								r.pathPattern = "/integrations/linear/webhooks"
-								r.args = args
-								r.count = 0
-								return r, true
-							default:
-								return
+							break
+						}
+						switch elem[0] {
+						case 's': // Prefix: "settings"
+
+							if l := len("settings"); len(elem) >= l && elem[0:l] == "settings" {
+								elem = elem[l:]
+							} else {
+								break
 							}
+
+							if len(elem) == 0 {
+								switch method {
+								case "GET":
+									r.name = GetLinearSettingsOperation
+									r.summary = "Linear channel-creation settings for the active organization"
+									r.operationID = "getLinearSettings"
+									r.operationGroup = ""
+									r.pathPattern = "/integrations/linear/settings"
+									r.args = args
+									r.count = 0
+									return r, true
+								case "PUT":
+									r.name = SaveLinearSettingsOperation
+									r.summary = "Save Linear channel-creation settings"
+									r.operationID = "saveLinearSettings"
+									r.operationGroup = ""
+									r.pathPattern = "/integrations/linear/settings"
+									r.args = args
+									r.count = 0
+									return r, true
+								default:
+									return
+								}
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/test"
+
+								if l := len("/test"); len(elem) >= l && elem[0:l] == "/test" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = TestLinearTemplateOperation
+										r.summary = "Test a name template + condition against a sample or pasted event"
+										r.operationID = "testLinearTemplate"
+										r.operationGroup = ""
+										r.pathPattern = "/integrations/linear/settings/test"
+										r.args = args
+										r.count = 0
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						case 'w': // Prefix: "webhooks"
+
+							if l := len("webhooks"); len(elem) >= l && elem[0:l] == "webhooks" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "GET":
+									r.name = ListLinearWebhooksOperation
+									r.summary = "Recent Linear webhook deliveries for the active organization"
+									r.operationID = "listLinearWebhooks"
+									r.operationGroup = ""
+									r.pathPattern = "/integrations/linear/webhooks"
+									r.args = args
+									r.count = 0
+									return r, true
+								default:
+									return
+								}
+							}
+
 						}
 
 						elem = origElem

@@ -261,6 +261,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/linear/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Linear channel-creation settings for the active organization
+         * @description Returns the org's Linear → Slack channel-creation rules (creation mode,
+         *     trigger status, name template, condition, auto-add bots), whether Linear
+         *     is connected at the workspace level, and the built-in sample events for
+         *     the test panel.
+         */
+        get: operations["getLinearSettings"];
+        /**
+         * Save Linear channel-creation settings
+         * @description Persists the org's Linear settings. The name template and condition are
+         *     validated (parsed) before saving; a malformed template returns 400.
+         */
+        put: operations["saveLinearSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/linear/settings/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a name template + condition against a sample or pasted event
+         * @description Renders nameTemplate and evaluates condition against the supplied event.
+         *     Provide either a sampleId (one of the built-in sample events) or a raw
+         *     event JSON string. Returns the rendered name, the condition result, and
+         *     any template error (template errors are returned in-body, not as 4xx, so
+         *     the UI can show them inline).
+         */
+        post: operations["testLinearTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -486,6 +538,81 @@ export interface components {
              * @example unauthorized
              */
             message: string;
+        };
+        /** @description An organization's Linear → Slack channel-creation rules. */
+        LinearSettings: {
+            /**
+             * @description 'status' auto-creates a channel when an issue reaches triggerStatus;
+             *     'manual' only creates via @notifbuddy.
+             * @example manual
+             * @enum {string}
+             */
+            creationMode: "status" | "manual";
+            /**
+             * @description Linear workflow state name that triggers creation (status mode).
+             * @example In Progress
+             */
+            triggerStatus?: string;
+            /**
+             * @description GitHub-Actions-expression template for the channel name.
+             * @example tkt-${{ linear.data.identifier }}
+             */
+            nameTemplate?: string;
+            /**
+             * @description GitHub-Actions-expression that must be true for creation.
+             * @example linear.action == 'update'
+             */
+            conditionExpr?: string;
+            /**
+             * @description Bots to auto-add on channel creation.
+             * @example [
+             *       "claude",
+             *       "linear"
+             *     ]
+             */
+            autoAddBots: string[];
+        };
+        /** @description A built-in example event for the settings test panel. */
+        SampleEvent: {
+            /** @example issue.status_changed */
+            id: string;
+            /** @example issue: status changed */
+            label: string;
+            /** @description The event envelope JSON (as a string). */
+            raw: string;
+        };
+        /** @description Linear settings plus context for the settings UI. */
+        LinearSettingsResponse: {
+            /** @description Whether Linear is connected at the workspace level. */
+            connected: boolean;
+            settings: components["schemas"]["LinearSettings"];
+            sampleEvents: components["schemas"]["SampleEvent"][];
+        };
+        /**
+         * @description A template-test request. Provide exactly one event source: sampleId
+         *     (a built-in sample event) or event (a raw envelope JSON string).
+         */
+        TemplateTestRequest: {
+            /** @example tkt-${{ linear.data.identifier }} */
+            nameTemplate?: string;
+            /** @example linear.data.state.name == 'Done' */
+            condition?: string;
+            /**
+             * @description Id of a built-in sample event.
+             * @example issue.status_changed
+             */
+            sampleId?: string;
+            /** @description A raw event envelope JSON string (alternative to sampleId). */
+            event?: string;
+        };
+        /** @description Result of rendering a template + evaluating a condition. */
+        TemplateTestResponse: {
+            /** @description The rendered channel name (empty if no template / on error). */
+            name: string;
+            /** @description Whether the condition evaluated true. */
+            conditionResult: boolean;
+            /** @description A template/condition error, if any (shown inline by the UI). */
+            error?: string;
         };
     };
     responses: never;
@@ -859,6 +986,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current settings + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearSettings"];
+            };
+        };
+        responses: {
+            /** @description Saved; returns the refreshed settings + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description Invalid settings (e.g. unparseable template/condition). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    testLinearTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Test result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateTestResponse"];
+                };
+            };
+            /** @description Neither sampleId nor a valid event was provided. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description No valid session. */

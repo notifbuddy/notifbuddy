@@ -52,6 +52,14 @@ type Invoker interface {
 	//
 	// GET /integrations/status
 	GetIntegrationStatus(ctx context.Context) (GetIntegrationStatusRes, error)
+	// GetLinearSettings invokes getLinearSettings operation.
+	//
+	// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
+	// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
+	// built-in sample events for the test panel.
+	//
+	// GET /integrations/linear/settings
+	GetLinearSettings(ctx context.Context) (GetLinearSettingsRes, error)
 	// GetMe invokes getMe operation.
 	//
 	// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -105,6 +113,13 @@ type Invoker interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// SaveLinearSettings invokes saveLinearSettings operation.
+	//
+	// Persists the org's Linear settings. The name template and condition are validated (parsed) before
+	// saving; a malformed template returns 400.
+	//
+	// PUT /integrations/linear/settings
+	SaveLinearSettings(ctx context.Context, request *LinearSettings) (SaveLinearSettingsRes, error)
 	// SelectOrg invokes selectOrg operation.
 	//
 	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -112,6 +127,15 @@ type Invoker interface {
 	//
 	// POST /auth/select-org
 	SelectOrg(ctx context.Context, request *SelectOrgRequest) (SelectOrgRes, error)
+	// TestLinearTemplate invokes testLinearTemplate operation.
+	//
+	// Renders nameTemplate and evaluates condition against the supplied event. Provide either a sampleId
+	// (one of the built-in sample events) or a raw event JSON string. Returns the rendered name, the
+	// condition result, and any template error (template errors are returned in-body, not as 4xx, so the
+	// UI can show them inline).
+	//
+	// POST /integrations/linear/settings/test
+	TestLinearTemplate(ctx context.Context, request *TemplateTestRequest) (TestLinearTemplateRes, error)
 	// VerifyEmail invokes verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
@@ -445,6 +469,88 @@ func (c *Client) sendGetIntegrationStatus(ctx context.Context) (res GetIntegrati
 
 	stage = "DecodeResponse"
 	result, err := decodeGetIntegrationStatusResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetLinearSettings invokes getLinearSettings operation.
+//
+// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
+// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
+// built-in sample events for the test panel.
+//
+// GET /integrations/linear/settings
+func (c *Client) GetLinearSettings(ctx context.Context) (GetLinearSettingsRes, error) {
+	res, err := c.sendGetLinearSettings(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetLinearSettings(ctx context.Context) (res GetLinearSettingsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getLinearSettings"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/integrations/linear/settings"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetLinearSettingsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/integrations/linear/settings"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetLinearSettingsResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -1023,6 +1129,90 @@ func (c *Client) sendPing(ctx context.Context) (res PingRes, err error) {
 	return result, nil
 }
 
+// SaveLinearSettings invokes saveLinearSettings operation.
+//
+// Persists the org's Linear settings. The name template and condition are validated (parsed) before
+// saving; a malformed template returns 400.
+//
+// PUT /integrations/linear/settings
+func (c *Client) SaveLinearSettings(ctx context.Context, request *LinearSettings) (SaveLinearSettingsRes, error) {
+	res, err := c.sendSaveLinearSettings(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendSaveLinearSettings(ctx context.Context, request *LinearSettings) (res SaveLinearSettingsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("saveLinearSettings"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
+		semconv.URLTemplateKey.String("/integrations/linear/settings"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, SaveLinearSettingsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/integrations/linear/settings"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PUT", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeSaveLinearSettingsRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeSaveLinearSettingsResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // SelectOrg invokes selectOrg operation.
 //
 // Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -1100,6 +1290,92 @@ func (c *Client) sendSelectOrg(ctx context.Context, request *SelectOrgRequest) (
 
 	stage = "DecodeResponse"
 	result, err := decodeSelectOrgResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// TestLinearTemplate invokes testLinearTemplate operation.
+//
+// Renders nameTemplate and evaluates condition against the supplied event. Provide either a sampleId
+// (one of the built-in sample events) or a raw event JSON string. Returns the rendered name, the
+// condition result, and any template error (template errors are returned in-body, not as 4xx, so the
+// UI can show them inline).
+//
+// POST /integrations/linear/settings/test
+func (c *Client) TestLinearTemplate(ctx context.Context, request *TemplateTestRequest) (TestLinearTemplateRes, error) {
+	res, err := c.sendTestLinearTemplate(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendTestLinearTemplate(ctx context.Context, request *TemplateTestRequest) (res TestLinearTemplateRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("testLinearTemplate"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/integrations/linear/settings/test"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, TestLinearTemplateOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/integrations/linear/settings/test"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeTestLinearTemplateRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeTestLinearTemplateResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

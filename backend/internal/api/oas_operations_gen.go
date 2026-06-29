@@ -9,6 +9,7 @@ const (
 	CreateInvitationOperation      OperationName = "CreateInvitation"
 	DisconnectIntegrationOperation OperationName = "DisconnectIntegration"
 	GetIntegrationStatusOperation  OperationName = "GetIntegrationStatus"
+	GetLinearSettingsOperation     OperationName = "GetLinearSettings"
 	GetMeOperation                 OperationName = "GetMe"
 	GetPendingOrgsOperation        OperationName = "GetPendingOrgs"
 	ListGithubWebhooksOperation    OperationName = "ListGithubWebhooks"
@@ -16,6 +17,8 @@ const (
 	ListLinearWebhooksOperation    OperationName = "ListLinearWebhooks"
 	ListMembersOperation           OperationName = "ListMembers"
 	PingOperation                  OperationName = "Ping"
+	SaveLinearSettingsOperation    OperationName = "SaveLinearSettings"
 	SelectOrgOperation             OperationName = "SelectOrg"
+	TestLinearTemplateOperation    OperationName = "TestLinearTemplate"
 	VerifyEmailOperation           OperationName = "VerifyEmail"
 )

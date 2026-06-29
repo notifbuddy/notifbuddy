@@ -20,6 +20,7 @@ import (
 	"xolo/backend/internal/crypto"
 	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/store"
+	"xolo/backend/internal/template"
 )
 
 // SessionResolver reads the active organization id and user id from the current
@@ -36,6 +37,7 @@ type Service struct {
 	cfg     config.Config
 	resolve SessionResolver
 	pub     pubsub.Publisher
+	tmpl    template.Engine
 }
 
 // New builds the integrations service. store/enc may be nil when the app runs
@@ -45,7 +47,7 @@ func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve Sessi
 	if pub == nil {
 		pub = pubsub.Nop
 	}
-	return &Service{store: st, enc: enc, cfg: cfg, resolve: resolve, pub: pub}
+	return &Service{store: st, enc: enc, cfg: cfg, resolve: resolve, pub: pub, tmpl: template.New()}
 }
 
 // Enabled reports whether persistence (and thus integrations) is available.

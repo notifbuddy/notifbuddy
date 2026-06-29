@@ -13,6 +13,10 @@ type GetIntegrationStatusRes interface {
 	getIntegrationStatusRes()
 }
 
+type GetLinearSettingsRes interface {
+	getLinearSettingsRes()
+}
+
 type GetMeRes interface {
 	getMeRes()
 }
@@ -41,8 +45,16 @@ type PingRes interface {
 	pingRes()
 }
 
+type SaveLinearSettingsRes interface {
+	saveLinearSettingsRes()
+}
+
 type SelectOrgRes interface {
 	selectOrgRes()
+}
+
+type TestLinearTemplateRes interface {
+	testLinearTemplateRes()
 }
 
 type VerifyEmailRes interface {

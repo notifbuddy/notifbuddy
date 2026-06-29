@@ -1,0 +1,68 @@
+{
+  "event_type": "linear",
+  "linear": {
+    "action": "create",
+    "actor": {
+      "email": "user@example.com",
+      "id": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "name": "Ada Lovelace",
+      "type": "user",
+      "url": "https://linear.app/skogai/profiles/skogix"
+    },
+    "createdAt": "2026-04-18T14:06:29.000Z",
+    "data": {
+      "addedToTeamAt": "2026-04-18T14:06:32.390Z",
+      "botActor": null,
+      "createdAt": "2026-04-18T14:06:29.000Z",
+      "creatorId": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "description": "## Problem\n\n`CLAUDE.md` and `.claude/CLAUDE.md` assume a stack of CLI tools is present, but they only exist on skogix's workstation. On a stock staging container (`/home/user/claude`) or the deployment target (`/home/claude`), none of them are available.\n\n## Observed on staging container (2026-04-18)\n\n**Missing from PATH:**\n\n* `skogcli` \u2014 blocks `.envrc` (single-line `eval \"$(skogcli config export-env ...)\"`)\n* `direnv` \u2014 no `.envrc` activation even if skogcli existed\n* `skogai`, `gptodo`, `wt` (worktrunk), `gita`, `argc`\n* `gh` (but GitHub MCP tools are a substitute)\n* `atuin` \u2014 referenced in `PreToolUse`/`PostToolUse` hooks, silently fails\n* `shellcheck` \u2014 referenced in `PostToolUse` hook, silently fails (`|| true`)\n\n**Present:** `jq`, `npx`, `prettier`, `python`, `uv`\n\n## Impact\n\n* `.envrc` is dead on these containers\n* Every hook that shells out to `atuin hook claude-code` fails\n* `rtk-rewrite.sh` warns and exits (graceful, but the rewrite layer is absent)\n* Any skill/command that assumes `gptodo`, `wt`, etc. cannot run\n\n## Options\n\n1. **Bootstrap script** (`.skogai/scripts/bootstrap/bootstrap.sh` already exists \u2014 extend it to install/verify the SkogAI toolbelt)\n2. **Dev container image** that bakes the toolbelt in\n3. **Graceful degradation documented**: [CLAUDE.md](<http://CLAUDE.md>) makes the toolbelt section conditional on a detected container profile\n4. **Dependency audit in** `healthcheck` \u2014 add a \"tools\" section that lists what's present vs expected\n\nLikely a mix: document what's genuinely optional, bootstrap what's required.\n\n## Related\n\n* [#25](https://linear.app/skogai/issue/SKO-160/feat-document-all-binariesscripts-into-claudemd) (document binaries in [CLAUDE.md](<http://CLAUDE.md>))\n* [#36](https://linear.app/skogai/issue/SKO-171/feat-bin-shared-executables-for-agent-home) (shared executables for agent home)",
+      "descriptionData": "{\"type\":\"doc\",\"content\":[{\"type\":\"heading\",\"attrs\":{\"level\":2,\"id\":\"fe82aed0-7afb-42eb-a87b-bc35d057d3ff\"},\"content\":[{\"type\":\"text\",\"text\":\"Problem\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"CLAUDE.md\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" and \"},{\"type\":\"text\",\"text\":\".claude/CLAUDE.md\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" assume a stack of CLI tools is present, but they only exist on skogix's workstation. On a stock staging container (\"},{\"type\":\"text\",\"text\":\"/home/user/claude\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\") or the deployment target (\"},{\"type\":\"text\",\"text\":\"/home/claude\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\"), none of them are available.\"}]},{\"type\":\"heading\",\"attrs\":{\"level\":2,\"id\":\"2ddee044-f1d1-4671-86ec-e9ff8cfdc52e\"},\"content\":[{\"type\":\"text\",\"text\":\"Observed on staging container (2026-04-18)\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Missing from PATH:\",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]}]},{\"type\":\"bullet_list\",\"content\":[{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"skogcli\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \u2014 blocks \"},{\"type\":\"text\",\"text\":\".envrc\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" (single-line \"},{\"type\":\"text\",\"text\":\"eval \\\"$(skogcli config export-env ...)\\\"\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\")\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"direnv\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \u2014 no \"},{\"type\":\"text\",\"text\":\".envrc\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" activation even if skogcli existed\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"skogai\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"gptodo\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"wt\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" (worktrunk), \"},{\"type\":\"text\",\"text\":\"gita\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"argc\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"gh\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" (but GitHub MCP tools are a substitute)\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"atuin\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \u2014 referenced in \"},{\"type\":\"text\",\"text\":\"PreToolUse\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\"/\"},{\"type\":\"text\",\"text\":\"PostToolUse\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" hooks, silently fails\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"shellcheck\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \u2014 referenced in \"},{\"type\":\"text\",\"text\":\"PostToolUse\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" hook, silently fails (\"},{\"type\":\"text\",\"text\":\"|| true\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\")\"}]}]}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Present:\",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \"},{\"type\":\"text\",\"text\":\"jq\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"npx\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"prettier\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"python\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"uv\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]}]},{\"type\":\"heading\",\"attrs\":{\"level\":2,\"id\":\"51827702-db77-4655-b8b8-082f07e8f983\"},\"content\":[{\"type\":\"text\",\"text\":\"Impact\"}]},{\"type\":\"bullet_list\",\"content\":[{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\".envrc\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" is dead on these containers\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Every hook that shells out to \"},{\"type\":\"text\",\"text\":\"atuin hook claude-code\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" fails\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"rtk-rewrite.sh\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" warns and exits (graceful, but the rewrite layer is absent)\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Any skill/command that assumes \"},{\"type\":\"text\",\"text\":\"gptodo\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", \"},{\"type\":\"text\",\"text\":\"wt\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\", etc. cannot run\"}]}]}]},{\"type\":\"heading\",\"attrs\":{\"level\":2,\"id\":\"e119fd6c-d35b-4927-b255-3ad3d23ecd2f\"},\"content\":[{\"type\":\"text\",\"text\":\"Options\"}]},{\"type\":\"ordered_list\",\"attrs\":{\"order\":1},\"content\":[{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Bootstrap script\",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" (\"},{\"type\":\"text\",\"text\":\".skogai/scripts/bootstrap/bootstrap.sh\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" already exists \u2014 extend it to install/verify the SkogAI toolbelt)\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Dev container image\",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" that bakes the toolbelt in\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Graceful degradation documented\",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\": \"},{\"type\":\"text\",\"text\":\"CLAUDE.md\",\"marks\":[{\"type\":\"link\",\"attrs\":{\"href\":\"http://CLAUDE.md\"}}]},{\"type\":\"text\",\"text\":\" makes the toolbelt section conditional on a detected container profile\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Dependency audit in \",\"marks\":[{\"type\":\"strong\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\"healthcheck\",\"marks\":[{\"type\":\"code\",\"attrs\":{}}]},{\"type\":\"text\",\"text\":\" \u2014 add a \\\"tools\\\" section that lists what's present vs expected\"}]}]}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Likely a mix: document what's genuinely optional, bootstrap what's required.\"}]},{\"type\":\"heading\",\"attrs\":{\"level\":2,\"id\":\"01552e6a-30b1-4472-82b8-8b396c1bd080\"},\"content\":[{\"type\":\"text\",\"text\":\"Related\"}]},{\"type\":\"bullet_list\",\"content\":[{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"issueMention\",\"attrs\":{\"id\":\"503b0a93-db1c-4dc0-a4e5-5894e5eab5de\",\"label\":\"#25\",\"href\":\"https://linear.app/skogai/issue/SKO-160/feat-document-all-binariesscripts-into-claudemd\"}},{\"type\":\"text\",\"text\":\" (document binaries in \"},{\"type\":\"text\",\"text\":\"CLAUDE.md\",\"marks\":[{\"type\":\"link\",\"attrs\":{\"href\":\"http://CLAUDE.md\"}}]},{\"type\":\"text\",\"text\":\")\"}]}]},{\"type\":\"list_item\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"issueMention\",\"attrs\":{\"id\":\"0e23f0d5-f26b-4e4c-8fc6-74af07a775a2\",\"label\":\"#36\",\"href\":\"https://linear.app/skogai/issue/SKO-171/feat-bin-shared-executables-for-agent-home\"}},{\"type\":\"text\",\"text\":\" (shared executables for agent home)\"}]}]}]}]}",
+      "id": "d3e35d68-1b0a-4079-86f8-1d706e064b81",
+      "identifier": "SKO-178",
+      "inheritsSharedAccess": false,
+      "integrationSourceType": "github",
+      "labelIds": [
+        "7e4ea218-8f12-4172-ac65-2f72c54c1f71"
+      ],
+      "labels": [
+        {
+          "color": "#EB5757",
+          "id": "7e4ea218-8f12-4172-ac65-2f72c54c1f71",
+          "name": "Bug"
+        }
+      ],
+      "number": 178,
+      "previousIdentifiers": [],
+      "priority": 0,
+      "priorityLabel": "No priority",
+      "prioritySortOrder": -20120,
+      "reactionData": [],
+      "slaType": "all",
+      "sortOrder": -20007,
+      "state": {
+        "color": "#bec2c8",
+        "id": "e73b7eb6-5437-4323-ae2a-0c32926c5da8",
+        "name": "Backlog",
+        "type": "backlog"
+      },
+      "stateId": "e73b7eb6-5437-4323-ae2a-0c32926c5da8",
+      "subscriberIds": [
+        "bd8e4951-8b83-4952-8fc5-09e9e6a61987"
+      ],
+      "team": {
+        "id": "ac4c7f2d-98ae-438f-b85a-33374856fd1b",
+        "key": "SKO",
+        "name": "SkogAI"
+      },
+      "teamId": "ac4c7f2d-98ae-438f-b85a-33374856fd1b",
+      "title": "bug: core tooling missing on non-skogix containers (staging, deployment)",
+      "updatedAt": "2026-04-18T14:06:31.940Z",
+      "url": "https://linear.app/skogai/issue/SKO-178/bug-core-tooling-missing-on-non-skogix-containers-staging-deployment"
+    },
+    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
+    "type": "Issue",
+    "url": "https://linear.app/skogai/issue/SKO-178/bug-core-tooling-missing-on-non-skogix-containers-staging-deployment",
+    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
+    "webhookTimestamp": 1776521193454
+  }
+}
