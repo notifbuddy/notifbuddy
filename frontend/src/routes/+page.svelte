@@ -14,6 +14,7 @@
 		statusOf,
 		type IntegrationState
 	} from '$lib/integrations';
+	import LinearSettings from '$lib/components/app/linear-settings.svelte';
 
 	type Invitation = { id: string; email: string; state: string; expiresAt?: string };
 
@@ -220,6 +221,9 @@
 				</Card.Content>
 			</Card.Root>
 		{/if}
+
+		<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
+		<LinearSettings />
 
 		<!-- Invite teammate card. -->
 		{#if user.organizationId}
