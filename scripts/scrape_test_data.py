@@ -27,6 +27,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT = REPO_ROOT / "test_data"
+# Backend-embeddable mirror of the Linear samples: Go embed can only reach files
+# under the module root (backend/), so the runtime sample-event dropdown reads
+# from here. test_data/ stays the source of truth (and the Go test fixtures).
+EMBED_OUT = REPO_ROOT / "backend" / "internal" / "integrations" / "sampledata"
 
 # (octokit event dir, action) -> output filename stem
 GITHUB_PAYLOADS = [
@@ -113,10 +117,16 @@ def finalize(raw: dict) -> dict:
     return raw
 
 
-def write(path: Path, envelope: dict) -> None:
+def write(path: Path, envelope: dict, embed_name: str | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(envelope, indent=2, sort_keys=True) + "\n")
+    text = json.dumps(envelope, indent=2, sort_keys=True) + "\n"
+    path.write_text(text)
     print(f"wrote {path.relative_to(REPO_ROOT)}")
+    # Mirror Linear samples into the backend embed dir for the runtime dropdown.
+    if embed_name:
+        EMBED_OUT.mkdir(parents=True, exist_ok=True)
+        (EMBED_OUT / embed_name).write_text(text)
+        print(f"wrote {(EMBED_OUT / embed_name).relative_to(REPO_ROOT)}")
 
 
 def main() -> None:
@@ -135,14 +145,16 @@ def main() -> None:
         if stem == "issue.status_changed":
             status_changed_raw = json.loads(json.dumps(raw))  # deep copy for derive
         write(OUT / "linear" / f"{stem}.json",
-              {"event_type": "linear", "linear": finalize(raw)})
+              {"event_type": "linear", "linear": finalize(raw)},
+              embed_name=f"{stem}.json")
 
     # Derive a `remove` from the status_changed payload (the log had no real
     # remove Issue event). Only `action` changes; shape is identical.
     if status_changed_raw is not None:
         status_changed_raw["action"] = "remove"
         write(OUT / "linear" / "issue.removed.json",
-              {"event_type": "linear", "linear": finalize(status_changed_raw)})
+              {"event_type": "linear", "linear": finalize(status_changed_raw)},
+              embed_name="issue.removed.json")
 
 
 if __name__ == "__main__":

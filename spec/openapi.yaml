@@ -316,6 +316,94 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /integrations/linear/settings:
+    get:
+      operationId: getLinearSettings
+      summary: Linear channel-creation settings for the active organization
+      description: |
+        Returns the org's Linear → Slack channel-creation rules (creation mode,
+        trigger status, name template, condition, auto-add bots), whether Linear
+        is connected at the workspace level, and the built-in sample events for
+        the test panel.
+      responses:
+        "200":
+          description: Current settings + context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinearSettingsResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: saveLinearSettings
+      summary: Save Linear channel-creation settings
+      description: |
+        Persists the org's Linear settings. The name template and condition are
+        validated (parsed) before saving; a malformed template returns 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinearSettings"
+      responses:
+        "200":
+          description: Saved; returns the refreshed settings + context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinearSettingsResponse"
+        "400":
+          description: Invalid settings (e.g. unparseable template/condition).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /integrations/linear/settings/test:
+    post:
+      operationId: testLinearTemplate
+      summary: Test a name template + condition against a sample or pasted event
+      description: |
+        Renders nameTemplate and evaluates condition against the supplied event.
+        Provide either a sampleId (one of the built-in sample events) or a raw
+        event JSON string. Returns the rendered name, the condition result, and
+        any template error (template errors are returned in-body, not as 4xx, so
+        the UI can show them inline).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateTestRequest"
+      responses:
+        "200":
+          description: Test result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateTestResponse"
+        "400":
+          description: Neither sampleId nor a valid event was provided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     PongResponse:
@@ -592,3 +680,104 @@ components:
           example: unauthorized
       required:
         - message
+    LinearSettings:
+      type: object
+      description: An organization's Linear → Slack channel-creation rules.
+      properties:
+        creationMode:
+          type: string
+          description: |
+            'status' auto-creates a channel when an issue reaches triggerStatus;
+            'manual' only creates via @notifbuddy.
+          enum: [status, manual]
+          example: manual
+        triggerStatus:
+          type: string
+          description: Linear workflow state name that triggers creation (status mode).
+          example: In Progress
+        nameTemplate:
+          type: string
+          description: GitHub-Actions-expression template for the channel name.
+          example: tkt-${{ linear.data.identifier }}
+        conditionExpr:
+          type: string
+          description: GitHub-Actions-expression that must be true for creation.
+          example: linear.action == 'update'
+        autoAddBots:
+          type: array
+          description: Bots to auto-add on channel creation.
+          items:
+            type: string
+          example: ["claude", "linear"]
+      required:
+        - creationMode
+        - autoAddBots
+    SampleEvent:
+      type: object
+      description: A built-in example event for the settings test panel.
+      properties:
+        id:
+          type: string
+          example: issue.status_changed
+        label:
+          type: string
+          example: "issue: status changed"
+        raw:
+          type: string
+          description: The event envelope JSON (as a string).
+      required:
+        - id
+        - label
+        - raw
+    LinearSettingsResponse:
+      type: object
+      description: Linear settings plus context for the settings UI.
+      properties:
+        connected:
+          type: boolean
+          description: Whether Linear is connected at the workspace level.
+        settings:
+          $ref: "#/components/schemas/LinearSettings"
+        sampleEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/SampleEvent"
+      required:
+        - connected
+        - settings
+        - sampleEvents
+    TemplateTestRequest:
+      type: object
+      description: |
+        A template-test request. Provide exactly one event source: sampleId
+        (a built-in sample event) or event (a raw envelope JSON string).
+      properties:
+        nameTemplate:
+          type: string
+          example: tkt-${{ linear.data.identifier }}
+        condition:
+          type: string
+          example: linear.data.state.name == 'Done'
+        sampleId:
+          type: string
+          description: Id of a built-in sample event.
+          example: issue.status_changed
+        event:
+          type: string
+          description: A raw event envelope JSON string (alternative to sampleId).
+    TemplateTestResponse:
+      type: object
+      description: Result of rendering a template + evaluating a condition.
+      properties:
+        name:
+          type: string
+          description: The rendered channel name (empty if no template / on error).
+        conditionResult:
+          type: boolean
+          description: Whether the condition evaluated true.
+        error:
+          type: string
+          description: A template/condition error, if any (shown inline by the UI).
+      required:
+        - name
+        - conditionResult

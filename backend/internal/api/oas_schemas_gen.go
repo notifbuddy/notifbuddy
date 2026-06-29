@@ -151,6 +151,7 @@ func (s *Error) SetMessage(val string) {
 
 func (*Error) disconnectIntegrationRes() {}
 func (*Error) getIntegrationStatusRes()  {}
+func (*Error) getLinearSettingsRes()     {}
 func (*Error) getMeRes()                 {}
 func (*Error) getPendingOrgsRes()        {}
 func (*Error) listGithubWebhooksRes()    {}
@@ -371,6 +372,157 @@ func (s *InvitationResponse) SetExpiresAt(val OptString) {
 }
 
 func (*InvitationResponse) createInvitationRes() {}
+
+// An organization's Linear → Slack channel-creation rules.
+// Ref: #/components/schemas/LinearSettings
+type LinearSettings struct {
+	// 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
+	// @notifbuddy.
+	CreationMode LinearSettingsCreationMode `json:"creationMode"`
+	// Linear workflow state name that triggers creation (status mode).
+	TriggerStatus OptString `json:"triggerStatus"`
+	// GitHub-Actions-expression template for the channel name.
+	NameTemplate OptString `json:"nameTemplate"`
+	// GitHub-Actions-expression that must be true for creation.
+	ConditionExpr OptString `json:"conditionExpr"`
+	// Bots to auto-add on channel creation.
+	AutoAddBots []string `json:"autoAddBots"`
+}
+
+// GetCreationMode returns the value of CreationMode.
+func (s *LinearSettings) GetCreationMode() LinearSettingsCreationMode {
+	return s.CreationMode
+}
+
+// GetTriggerStatus returns the value of TriggerStatus.
+func (s *LinearSettings) GetTriggerStatus() OptString {
+	return s.TriggerStatus
+}
+
+// GetNameTemplate returns the value of NameTemplate.
+func (s *LinearSettings) GetNameTemplate() OptString {
+	return s.NameTemplate
+}
+
+// GetConditionExpr returns the value of ConditionExpr.
+func (s *LinearSettings) GetConditionExpr() OptString {
+	return s.ConditionExpr
+}
+
+// GetAutoAddBots returns the value of AutoAddBots.
+func (s *LinearSettings) GetAutoAddBots() []string {
+	return s.AutoAddBots
+}
+
+// SetCreationMode sets the value of CreationMode.
+func (s *LinearSettings) SetCreationMode(val LinearSettingsCreationMode) {
+	s.CreationMode = val
+}
+
+// SetTriggerStatus sets the value of TriggerStatus.
+func (s *LinearSettings) SetTriggerStatus(val OptString) {
+	s.TriggerStatus = val
+}
+
+// SetNameTemplate sets the value of NameTemplate.
+func (s *LinearSettings) SetNameTemplate(val OptString) {
+	s.NameTemplate = val
+}
+
+// SetConditionExpr sets the value of ConditionExpr.
+func (s *LinearSettings) SetConditionExpr(val OptString) {
+	s.ConditionExpr = val
+}
+
+// SetAutoAddBots sets the value of AutoAddBots.
+func (s *LinearSettings) SetAutoAddBots(val []string) {
+	s.AutoAddBots = val
+}
+
+// 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
+// @notifbuddy.
+type LinearSettingsCreationMode string
+
+const (
+	LinearSettingsCreationModeStatus LinearSettingsCreationMode = "status"
+	LinearSettingsCreationModeManual LinearSettingsCreationMode = "manual"
+)
+
+// AllValues returns all LinearSettingsCreationMode values.
+func (LinearSettingsCreationMode) AllValues() []LinearSettingsCreationMode {
+	return []LinearSettingsCreationMode{
+		LinearSettingsCreationModeStatus,
+		LinearSettingsCreationModeManual,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LinearSettingsCreationMode) MarshalText() ([]byte, error) {
+	switch s {
+	case LinearSettingsCreationModeStatus:
+		return []byte(s), nil
+	case LinearSettingsCreationModeManual:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LinearSettingsCreationMode) UnmarshalText(data []byte) error {
+	switch LinearSettingsCreationMode(data) {
+	case LinearSettingsCreationModeStatus:
+		*s = LinearSettingsCreationModeStatus
+		return nil
+	case LinearSettingsCreationModeManual:
+		*s = LinearSettingsCreationModeManual
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Linear settings plus context for the settings UI.
+// Ref: #/components/schemas/LinearSettingsResponse
+type LinearSettingsResponse struct {
+	// Whether Linear is connected at the workspace level.
+	Connected    bool           `json:"connected"`
+	Settings     LinearSettings `json:"settings"`
+	SampleEvents []SampleEvent  `json:"sampleEvents"`
+}
+
+// GetConnected returns the value of Connected.
+func (s *LinearSettingsResponse) GetConnected() bool {
+	return s.Connected
+}
+
+// GetSettings returns the value of Settings.
+func (s *LinearSettingsResponse) GetSettings() LinearSettings {
+	return s.Settings
+}
+
+// GetSampleEvents returns the value of SampleEvents.
+func (s *LinearSettingsResponse) GetSampleEvents() []SampleEvent {
+	return s.SampleEvents
+}
+
+// SetConnected sets the value of Connected.
+func (s *LinearSettingsResponse) SetConnected(val bool) {
+	s.Connected = val
+}
+
+// SetSettings sets the value of Settings.
+func (s *LinearSettingsResponse) SetSettings(val LinearSettings) {
+	s.Settings = val
+}
+
+// SetSampleEvents sets the value of SampleEvents.
+func (s *LinearSettingsResponse) SetSampleEvents(val []SampleEvent) {
+	s.SampleEvents = val
+}
+
+func (*LinearSettingsResponse) getLinearSettingsRes()  {}
+func (*LinearSettingsResponse) saveLinearSettingsRes() {}
 
 // A list of members for the active organization.
 // Ref: #/components/schemas/MemberListResponse
@@ -637,6 +789,53 @@ func (s *PongResponse) SetMessage(val string) {
 
 func (*PongResponse) pingRes() {}
 
+// A built-in example event for the settings test panel.
+// Ref: #/components/schemas/SampleEvent
+type SampleEvent struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// The event envelope JSON (as a string).
+	Raw string `json:"raw"`
+}
+
+// GetID returns the value of ID.
+func (s *SampleEvent) GetID() string {
+	return s.ID
+}
+
+// GetLabel returns the value of Label.
+func (s *SampleEvent) GetLabel() string {
+	return s.Label
+}
+
+// GetRaw returns the value of Raw.
+func (s *SampleEvent) GetRaw() string {
+	return s.Raw
+}
+
+// SetID sets the value of ID.
+func (s *SampleEvent) SetID(val string) {
+	s.ID = val
+}
+
+// SetLabel sets the value of Label.
+func (s *SampleEvent) SetLabel(val string) {
+	s.Label = val
+}
+
+// SetRaw sets the value of Raw.
+func (s *SampleEvent) SetRaw(val string) {
+	s.Raw = val
+}
+
+type SaveLinearSettingsBadRequest Error
+
+func (*SaveLinearSettingsBadRequest) saveLinearSettingsRes() {}
+
+type SaveLinearSettingsUnauthorized Error
+
+func (*SaveLinearSettingsUnauthorized) saveLinearSettingsRes() {}
+
 // The organization the user chose during the org-selection step.
 // Ref: #/components/schemas/SelectOrgRequest
 type SelectOrgRequest struct {
@@ -653,6 +852,109 @@ func (s *SelectOrgRequest) GetOrganizationId() string {
 func (s *SelectOrgRequest) SetOrganizationId(val string) {
 	s.OrganizationId = val
 }
+
+// A template-test request. Provide exactly one event source: sampleId (a built-in sample event) or
+// event (a raw envelope JSON string).
+// Ref: #/components/schemas/TemplateTestRequest
+type TemplateTestRequest struct {
+	NameTemplate OptString `json:"nameTemplate"`
+	Condition    OptString `json:"condition"`
+	// Id of a built-in sample event.
+	SampleId OptString `json:"sampleId"`
+	// A raw event envelope JSON string (alternative to sampleId).
+	Event OptString `json:"event"`
+}
+
+// GetNameTemplate returns the value of NameTemplate.
+func (s *TemplateTestRequest) GetNameTemplate() OptString {
+	return s.NameTemplate
+}
+
+// GetCondition returns the value of Condition.
+func (s *TemplateTestRequest) GetCondition() OptString {
+	return s.Condition
+}
+
+// GetSampleId returns the value of SampleId.
+func (s *TemplateTestRequest) GetSampleId() OptString {
+	return s.SampleId
+}
+
+// GetEvent returns the value of Event.
+func (s *TemplateTestRequest) GetEvent() OptString {
+	return s.Event
+}
+
+// SetNameTemplate sets the value of NameTemplate.
+func (s *TemplateTestRequest) SetNameTemplate(val OptString) {
+	s.NameTemplate = val
+}
+
+// SetCondition sets the value of Condition.
+func (s *TemplateTestRequest) SetCondition(val OptString) {
+	s.Condition = val
+}
+
+// SetSampleId sets the value of SampleId.
+func (s *TemplateTestRequest) SetSampleId(val OptString) {
+	s.SampleId = val
+}
+
+// SetEvent sets the value of Event.
+func (s *TemplateTestRequest) SetEvent(val OptString) {
+	s.Event = val
+}
+
+// Result of rendering a template + evaluating a condition.
+// Ref: #/components/schemas/TemplateTestResponse
+type TemplateTestResponse struct {
+	// The rendered channel name (empty if no template / on error).
+	Name string `json:"name"`
+	// Whether the condition evaluated true.
+	ConditionResult bool `json:"conditionResult"`
+	// A template/condition error, if any (shown inline by the UI).
+	Error OptString `json:"error"`
+}
+
+// GetName returns the value of Name.
+func (s *TemplateTestResponse) GetName() string {
+	return s.Name
+}
+
+// GetConditionResult returns the value of ConditionResult.
+func (s *TemplateTestResponse) GetConditionResult() bool {
+	return s.ConditionResult
+}
+
+// GetError returns the value of Error.
+func (s *TemplateTestResponse) GetError() OptString {
+	return s.Error
+}
+
+// SetName sets the value of Name.
+func (s *TemplateTestResponse) SetName(val string) {
+	s.Name = val
+}
+
+// SetConditionResult sets the value of ConditionResult.
+func (s *TemplateTestResponse) SetConditionResult(val bool) {
+	s.ConditionResult = val
+}
+
+// SetError sets the value of Error.
+func (s *TemplateTestResponse) SetError(val OptString) {
+	s.Error = val
+}
+
+func (*TemplateTestResponse) testLinearTemplateRes() {}
+
+type TestLinearTemplateBadRequest Error
+
+func (*TestLinearTemplateBadRequest) testLinearTemplateRes() {}
+
+type TestLinearTemplateUnauthorized Error
+
+func (*TestLinearTemplateUnauthorized) testLinearTemplateRes() {}
 
 // The authenticated WorkOS user and their active organization context.
 // Ref: #/components/schemas/UserResponse

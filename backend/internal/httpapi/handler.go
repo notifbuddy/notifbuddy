@@ -7,6 +7,7 @@ import (
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/template"
 )
 
 // Handler implements the ogen-generated api.Handler interface.
@@ -243,6 +244,117 @@ func (h Handler) ListLinearWebhooks(ctx context.Context) (api.ListLinearWebhooks
 		return &api.Error{Message: "failed to list webhooks"}, nil
 	}
 	return webhookListResponse(events), nil
+}
+
+// GetLinearSettings implements `getLinearSettings`: GET /integrations/linear/settings.
+func (h Handler) GetLinearSettings(ctx context.Context) (api.GetLinearSettingsRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
+	if err != nil {
+		log.Printf("httpapi: get linear settings for org %s: %v", user.OrgID, err)
+		return &api.Error{Message: "failed to read linear settings"}, nil
+	}
+	return resp, nil
+}
+
+// SaveLinearSettings implements `saveLinearSettings`: PUT /integrations/linear/settings.
+func (h Handler) SaveLinearSettings(ctx context.Context, req *api.LinearSettings) (api.SaveLinearSettingsRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.SaveLinearSettingsUnauthorized{Message: "unauthorized"}, nil
+	}
+	in := integrations.LinearSettings{
+		CreationMode:  string(req.CreationMode),
+		TriggerStatus: req.TriggerStatus.Or(""),
+		NameTemplate:  req.NameTemplate.Or(""),
+		ConditionExpr: req.ConditionExpr.Or(""),
+		AutoAddBots:   req.AutoAddBots,
+	}
+	if err := h.integrations.SaveLinearSettings(ctx, user.OrgID, in); err != nil {
+		return &api.SaveLinearSettingsBadRequest{Message: err.Error()}, nil
+	}
+	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
+	if err != nil {
+		return &api.SaveLinearSettingsBadRequest{Message: "failed to read linear settings"}, nil
+	}
+	return resp, nil
+}
+
+// TestLinearTemplate implements `testLinearTemplate`: POST /integrations/linear/settings/test.
+func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRequest) (api.TestLinearTemplateRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.TestLinearTemplateUnauthorized{Message: "unauthorized"}, nil
+	}
+	// Resolve the event: a built-in sample id or a pasted raw JSON envelope.
+	var rawEvent []byte
+	if id, ok := req.SampleId.Get(); ok && id != "" {
+		raw, err := h.integrations.LinearSampleEventRaw(id)
+		if err != nil {
+			return &api.TestLinearTemplateBadRequest{Message: "unknown sample event"}, nil
+		}
+		rawEvent = raw
+	} else if ev, ok := req.Event.Get(); ok && ev != "" {
+		rawEvent = []byte(ev)
+	} else {
+		return &api.TestLinearTemplateBadRequest{Message: "provide a sampleId or an event"}, nil
+	}
+
+	evt, err := template.ParseEvent(rawEvent)
+	if err != nil {
+		return &api.TestLinearTemplateBadRequest{Message: "invalid event JSON"}, nil
+	}
+	res := h.integrations.TestLinearTemplate(evt, req.NameTemplate.Or(""), req.Condition.Or(""))
+	out := &api.TemplateTestResponse{Name: res.Name, ConditionResult: res.ConditionResult}
+	if res.Err != "" {
+		out.Error = api.NewOptString(res.Err)
+	}
+	return out, nil
+}
+
+// linearSettingsResponse builds the GET/PUT response (settings + connected flag
+// + sample events) for an org.
+func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api.LinearSettingsResponse, error) {
+	settings, err := h.integrations.GetLinearSettings(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := h.integrations.ListLinearSampleEvents()
+	if err != nil {
+		return nil, err
+	}
+	resp := &api.LinearSettingsResponse{
+		Connected: h.integrations.LinearConnectedAtWorkspace(ctx, orgID),
+		Settings:  toAPILinearSettings(settings),
+	}
+	for _, s := range samples {
+		resp.SampleEvents = append(resp.SampleEvents, api.SampleEvent{ID: s.ID, Label: s.Label, Raw: s.Raw})
+	}
+	return resp, nil
+}
+
+// toAPILinearSettings maps the service settings to the generated type.
+func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
+	out := api.LinearSettings{
+		CreationMode: api.LinearSettingsCreationMode(s.CreationMode),
+		AutoAddBots:  s.AutoAddBots,
+	}
+	if out.AutoAddBots == nil {
+		out.AutoAddBots = []string{}
+	}
+	if s.TriggerStatus != "" {
+		out.TriggerStatus = api.NewOptString(s.TriggerStatus)
+	}
+	if s.NameTemplate != "" {
+		out.NameTemplate = api.NewOptString(s.NameTemplate)
+	}
+	if s.ConditionExpr != "" {
+		out.ConditionExpr = api.NewOptString(s.ConditionExpr)
+	}
+	return out
 }
 
 // webhookListResponse maps a service webhook-event slice to the generated type.

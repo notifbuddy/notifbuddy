@@ -32,6 +32,14 @@ type Handler interface {
 	//
 	// GET /integrations/status
 	GetIntegrationStatus(ctx context.Context) (GetIntegrationStatusRes, error)
+	// GetLinearSettings implements getLinearSettings operation.
+	//
+	// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
+	// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
+	// built-in sample events for the test panel.
+	//
+	// GET /integrations/linear/settings
+	GetLinearSettings(ctx context.Context) (GetLinearSettingsRes, error)
 	// GetMe implements getMe operation.
 	//
 	// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
@@ -85,6 +93,13 @@ type Handler interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// SaveLinearSettings implements saveLinearSettings operation.
+	//
+	// Persists the org's Linear settings. The name template and condition are validated (parsed) before
+	// saving; a malformed template returns 400.
+	//
+	// PUT /integrations/linear/settings
+	SaveLinearSettings(ctx context.Context, req *LinearSettings) (SaveLinearSettingsRes, error)
 	// SelectOrg implements selectOrg operation.
 	//
 	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -92,6 +107,15 @@ type Handler interface {
 	//
 	// POST /auth/select-org
 	SelectOrg(ctx context.Context, req *SelectOrgRequest) (SelectOrgRes, error)
+	// TestLinearTemplate implements testLinearTemplate operation.
+	//
+	// Renders nameTemplate and evaluates condition against the supplied event. Provide either a sampleId
+	// (one of the built-in sample events) or a raw event JSON string. Returns the rendered name, the
+	// condition result, and any template error (template errors are returned in-body, not as 4xx, so the
+	// UI can show them inline).
+	//
+	// POST /integrations/linear/settings/test
+	TestLinearTemplate(ctx context.Context, req *TemplateTestRequest) (TestLinearTemplateRes, error)
 	// VerifyEmail implements verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
