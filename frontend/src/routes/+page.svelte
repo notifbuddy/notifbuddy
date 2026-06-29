@@ -164,7 +164,6 @@
 
 	const ghConnected = $derived(!!statusOf(integrations, 'github')?.connected);
 	const slackConnected = $derived(!!statusOf(integrations, 'slack')?.connected);
-	const integrationsComplete = $derived(ghConnected && slackConnected);
 </script>
 
 {#if user}
@@ -217,11 +216,7 @@
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
-					{#if integrationsComplete}
-						<Button variant="outline" size="sm" href="/settings/integrations">Manage integrations</Button>
-					{:else}
-						<Button size="sm" href="/onboarding">Finish setup</Button>
-					{/if}
+					<Button variant="outline" size="sm" href="/settings/integrations">Manage integrations</Button>
 				</Card.Content>
 			</Card.Root>
 		{/if}

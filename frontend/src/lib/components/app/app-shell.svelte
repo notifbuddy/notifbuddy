@@ -22,8 +22,7 @@
 		},
 		{ match: (p) => p.startsWith('/settings/integrations'), trail: ['Integrations'] },
 		{ match: (p) => p.startsWith('/settings/profile'), trail: ['Profile'] },
-		{ match: (p) => p.startsWith('/settings/organization'), trail: ['Organization'] },
-		{ match: (p) => p.startsWith('/onboarding'), trail: ['Onboarding'] }
+		{ match: (p) => p.startsWith('/settings/organization'), trail: ['Organization'] }
 	];
 
 	const trail = $derived(

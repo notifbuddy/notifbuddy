@@ -98,12 +98,11 @@ func (s *Service) Disconnect(ctx context.Context, orgID, provider string) error 
 }
 
 // redirectAfter builds the URL the browser returns to after a connect/callback,
-// pointing at the SPA's integrations page with provider + status query flags so
-// the UI can refresh and report the outcome. Defaults to the onboarding route;
-// the SPA reuses the same flags on the settings page.
+// pointing at the SPA's integrations settings page with provider + status query
+// flags so the UI can refresh and report the outcome.
 func (s *Service) redirectAfter(provider, status string) string {
 	base := s.cfg.App.PostLoginURL
-	return fmt.Sprintf("%s/onboarding?provider=%s&status=%s", base, provider, status)
+	return fmt.Sprintf("%s/settings/integrations?provider=%s&status=%s", base, provider, status)
 }
 
 // accountLabel derives a human label (GitHub login / Slack team name) from the
