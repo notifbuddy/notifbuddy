@@ -29,6 +29,7 @@ type Config struct {
 	GitHub     GitHubConfig     `yaml:"github"`
 	Slack      SlackConfig      `yaml:"slack"`
 	Linear     LinearConfig     `yaml:"linear"`
+	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 }
 
 type ServerConfig struct {
@@ -132,22 +133,36 @@ type LinearConfig struct {
 	WebhookSecret string `yaml:"webhook_secret"`
 }
 
+type CloudflareConfig struct {
+	// AccountID is the Cloudflare account id whose Workers AI binding runs the
+	// inference (the {account_id} in .../accounts/{account_id}/ai/run/...).
+	AccountID string `yaml:"account_id"`
+	// APIToken authorizes the Workers AI REST call (sent as a Bearer token).
+	// SECRET — env ref. Empty disables NotifBuddy intent classification, which
+	// then resolves every comment to "no-action".
+	APIToken string `yaml:"api_token"`
+	// Model is the Workers AI text-generation model id (e.g.
+	// "@cf/meta/llama-3.2-1b-instruct"). Swappable without code changes.
+	Model string `yaml:"model"`
+}
+
 // defaultConfig returns built-in defaults applied before the YAML file is
 // decoded on top. Secret/identity fields have no safe default and stay empty.
 func defaultConfig() Config {
 	return Config{
-		Server: ServerConfig{Addr: ":8080"},
-		CORS:   CORSConfig{AllowOrigin: "http://localhost:5173"},
-		WorkOS: WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
-		App:    AppConfig{PostLoginURL: "http://localhost:5173"},
+		Server:     ServerConfig{Addr: ":8080"},
+		CORS:       CORSConfig{AllowOrigin: "http://localhost:5173"},
+		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
+		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
 		Encryption: EncryptionConfig{Provider: "local"},
 		PubSub:     PubSubConfig{Provider: "memory"},
-		GitHub: GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
-		Slack:  SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
+		GitHub:     GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
+		Slack:      SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
 		Linear: LinearConfig{
 			CallbackURL: "http://localhost:8080/integrations/linear/callback",
 			Scopes:      []string{"read", "write"},
 		},
+		Cloudflare: CloudflareConfig{Model: "@cf/meta/llama-3.1-8b-instruct"},
 	}
 }
 

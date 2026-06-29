@@ -78,3 +78,11 @@ linear:
     - write
   callback_url: "http://localhost:8080/integrations/linear/callback"
   webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SECRET — verifies Linear-Signature HMAC; empty disables verification
+
+cloudflare:
+  # Workers AI powers NotifBuddy's @mention intent parsing (create-channel /
+  # close-channel / no-action). Empty credentials disable it: every comment then
+  # resolves to "no-action".
+  account_id: "${CF_ACCOUNT_ID}" # Cloudflare account id running Workers AI
+  api_token: "${CF_API_TOKEN}" # SECRET — Bearer token for the Workers AI REST API
+  model: "@cf/meta/llama-3.1-8b-instruct" # text-generation model id; swappable
