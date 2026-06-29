@@ -56,7 +56,7 @@ github, linear and slack accounts so we can replicate the messages.
 - `backend/internal/crypto/` — `Encryptor` interface (local AES-GCM + KMS seam) for token encryption at rest.
 - `backend/internal/integrations/` — GitHub App + Slack OAuth flows, status, disconnect.
 - `frontend/src/lib/api/client.ts`, `src/lib/integrations.ts` — typed client + integration helpers.
-- `frontend/src/routes/+page.svelte`, `routes/onboarding/`, `routes/settings/integrations/` — the UI.
+- `frontend/src/routes/+page.svelte`, `routes/settings/integrations/` — the UI.
 
 **Deliberate exception to "no hand-written transport":** the browser redirect
 routes — `GET /auth/{login,callback,logout}` and
@@ -218,13 +218,11 @@ workspace**. Integration records (installation id / team id, encrypted tokens,
 metadata) live in Postgres keyed by `org_id`; tokens are encrypted at rest by a
 pluggable `Encryptor` (local AES-GCM in dev, a customer KMS in prod).
 
-Two frontend surfaces share the same backend:
+The integrations UI lives on one surface:
 
-- **Onboarding wizard** (`/onboarding`) — first-run, step-gated: connect GitHub,
-  then Slack.
 - **Integrations settings** (`/settings/integrations`) — persistent management:
   per-provider status + **Connect / Reconnect / Disconnect**. The home card shows
-  a summary and links to whichever is relevant.
+  a summary and links here.
 
 ```
 Connect  ─▶ GET /integrations/{provider}/connect  (session → sealed state with org+user)
@@ -450,6 +448,6 @@ xolo/
 ├── frontend/                     # SvelteKit SPA
 │   └── src/
 │       ├── lib/                  # api/client.ts (+ GENERATED schema.d.ts), integrations.ts
-│       └── routes/               # +page.svelte, onboarding/, settings/integrations/
+│       └── routes/               # +page.svelte, settings/integrations/
 └── Makefile
 ```

@@ -35,10 +35,9 @@ func (UnimplementedHandler) DisconnectIntegration(ctx context.Context, params Di
 
 // GetIntegrationStatus implements getIntegrationStatus operation.
 //
-// Returns the connection state of each supported integration (GitHub, Slack) for the caller's active
-// organization. Drives both the onboarding wizard and the integrations settings view. The actual
-// connect/callback flows are browser redirects (GET /integrations/{provider}/connect) and are not part
-// of this JSON spec.
+// Returns the connection state of each supported integration (GitHub, Slack, Linear) for the caller's
+// active organization. Drives the integrations settings view. The actual connect/callback flows are
+// browser redirects (GET /integrations/{provider}/connect) and are not part of this JSON spec.
 //
 // GET /integrations/status
 func (UnimplementedHandler) GetIntegrationStatus(ctx context.Context) (r GetIntegrationStatusRes, _ error) {
