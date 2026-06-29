@@ -13,7 +13,8 @@ in status + settings UI.
 - **One table.** Add `level` + `connected_user_id`; PK `(org_id, provider, level, connected_user_id)`
   with `connected_user_id` defaulting to `''` for workspace rows.
 - **Full scope minus onboarding:** data model + status + user-level OAuth flows.
-  Onboarding is **deferred/purged** this round (reintroduced later once the base product is done).
+  Onboarding has already been **purged** (commit `118dcad` on `main`) and will be
+  reintroduced later once the base product is done — it is NOT part of this feature.
 - **All three providers need distinct user OAuth:**
   - GitHub user-to-server token (`ghu_`), via `login/oauth/authorize` → `login/oauth/access_token`
     (distinct from the App-installation flow, which stays workspace).
@@ -26,7 +27,7 @@ in status + settings UI.
   connect/disconnect per level, none marked required, none gating another). The app is fully
   usable with any subset connected (including none). Do NOT add any per-provider
   required/optional logic — the only "required" logic that ever existed was in onboarding
-  (`allDone = githubDone && slackDone`), and onboarding is being purged.
+  (`allDone = githubDone && slackDone`), and onboarding has been purged.
 
 ## 1. Store / schema
 
@@ -67,8 +68,8 @@ level into state; user callback stores `level='user', connected_user_id=<uid>`):
 
 - `spec/openapi.yaml`: `IntegrationStatus` gains `level` (`workspace|user`) + `connectedByMe`;
   response lists per-provider × per-level; `disconnectIntegration` + `connect` take optional
-  `level` query param. Also: scrub the onboarding wording from the
-  `getIntegrationStatus` description (onboarding is gone).
+  `level` query param. (The onboarding wording in the `getIntegrationStatus` description was
+  already scrubbed during the onboarding purge.)
 - `make generate` regenerates Go (`internal/api/*_gen.go`) and TS (`schema.d.ts`).
 - `httpapi/handler.go`: pass `user.ID` into `Status`/`Disconnect`, map new fields.
 
@@ -80,7 +81,8 @@ level into state; user callback stores `level='user', connected_user_id=<uid>`):
   and "Your account" — each with its own badge + connect/disconnect as **icon buttons with
   matching tooltips** (per CLAUDE.md + TODO). All providers rendered identically; none marked
   required; no gating.
-- **Onboarding: purged** (see below), not touched as a feature this round.
+- **Onboarding: already purged** (done — see the completed prerequisite below); not part of
+  this feature.
 
 ## 6. Tests
 
@@ -88,18 +90,19 @@ level into state; user callback stores `level='user', connected_user_id=<uid>`):
   the workspace row intact.
 - Service: `Status` returns both levels; state seals/opens with `Level`.
 
-## Onboarding purge (prerequisite cleanup, separate commit)
+## Onboarding purge — DONE (prerequisite, commit `118dcad`)
 
-Remove onboarding entirely; reintroduce later once the base product is done.
+Already merged to `main`; reintroduced later once the base product is done. Recorded here for
+context. What landed:
 
-- Delete `frontend/src/routes/onboarding/` (the `+page.svelte`).
-- `backend/internal/integrations/service.go` `redirectAfter`: stop redirecting OAuth callbacks
-  to `/onboarding` — point at `/settings/integrations` instead (keep the `?provider=&status=`
-  flags the settings page already parses).
-- `frontend/src/routes/+page.svelte`: remove the "Finish setup" → `/onboarding` button.
-- `frontend/src/lib/components/app/app-shell.svelte`: remove the `/onboarding` breadcrumb match.
-- README: drop the onboarding wizard bullet + the `routes/onboarding/` mentions.
-- `spec/openapi.yaml`: remove "Drives both the onboarding wizard …" wording.
+- Deleted `frontend/src/routes/onboarding/` (the `+page.svelte`).
+- `backend/internal/integrations/service.go` `redirectAfter`: OAuth callbacks now redirect to
+  `/settings/integrations` (was `/onboarding`); the settings page already parses the
+  `?provider=&status=` flags and refetches.
+- `frontend/src/routes/+page.svelte`: removed the "Finish setup" → `/onboarding` button (now
+  always "Manage integrations") and the unused `integrationsComplete` derivation.
+- `frontend/src/lib/components/app/app-shell.svelte`: removed the `/onboarding` breadcrumb.
+- README + `spec/openapi.yaml`: scrubbed onboarding wording; Go (ogen) + TS regenerated.
 
 ## Files
 
@@ -111,12 +114,13 @@ Remove onboarding entirely; reintroduce later once the base product is done.
 | `integrations/github_user.go` | new — GitHub user-to-server flow |
 | `integrations/slack.go`, `linear.go` | user flows |
 | `config/config.go`, `config.yaml`, `.env.example` | user scopes |
-| `spec/openapi.yaml` + regenerated `*_gen.go` / `schema.d.ts` | level fields + params; scrub onboarding wording |
+| `spec/openapi.yaml` + regenerated `*_gen.go` / `schema.d.ts` | level fields + params |
 | `httpapi/handler.go` | thread userID + map level |
 | `frontend/lib/integrations.ts`, `settings/integrations/+page.svelte` | per-level UI |
-| `frontend/src/routes/onboarding/` | deleted |
-| `frontend/src/routes/+page.svelte`, `app-shell.svelte`, `README.md` | onboarding refs removed |
 | `*_test.go` | store + service coverage |
+
+(Onboarding-purge files are not listed here — that prerequisite already landed; see the
+"Onboarding purge — DONE" section above.)
 
 ## Verification
 
@@ -127,6 +131,6 @@ workspace; app fully usable with any subset (including Linear unconnected at bot
 
 ## Commits (on `main`; no remote → "merge to main" == commit to main)
 
-1. Purge onboarding.
-2. Data model + status + spec/regen.
-3. User OAuth flows + settings UI.
+0. ~~Purge onboarding.~~ DONE (commit `118dcad`).
+1. Data model + status + spec/regen.
+2. User OAuth flows + settings UI.
