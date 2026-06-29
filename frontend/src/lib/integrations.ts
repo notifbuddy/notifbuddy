@@ -86,6 +86,54 @@ export type WebhookEvent = {
 	payload?: string;
 };
 
+// ---- Linear settings ----
+
+export type LinearSettings = {
+	creationMode: 'status' | 'manual';
+	triggerStatus?: string;
+	nameTemplate?: string;
+	conditionExpr?: string;
+	autoAddBots: string[];
+};
+
+export type SampleEvent = { id: string; label: string; raw: string };
+
+export type LinearSettingsState = {
+	connected: boolean;
+	settings: LinearSettings;
+	sampleEvents: SampleEvent[];
+};
+
+export type TemplateTestResult = { name: string; conditionResult: boolean; error?: string };
+
+// Fetch the org's Linear settings + connection state + sample events.
+export async function fetchLinearSettings(): Promise<LinearSettingsState | null> {
+	const { data, error } = await api.GET('/integrations/linear/settings');
+	if (error || !data) return null;
+	return data as LinearSettingsState;
+}
+
+// Save the org's Linear settings; returns the refreshed state or null on error.
+export async function saveLinearSettings(
+	settings: LinearSettings
+): Promise<LinearSettingsState | null> {
+	const { data, error } = await api.PUT('/integrations/linear/settings', { body: settings });
+	if (error || !data) return null;
+	return data as LinearSettingsState;
+}
+
+// Test a name template + condition against a sample (by id) or a pasted event.
+export async function testLinearTemplate(req: {
+	nameTemplate?: string;
+	condition?: string;
+	sampleId?: string;
+	event?: string;
+}): Promise<TemplateTestResult | null> {
+	const { data, error } = await api.POST('/integrations/linear/settings/test', { body: req });
+	if (error || !data) return null;
+	return data as TemplateTestResult;
+}
+
 // Fetch recent GitHub webhook deliveries for the active org. Returns null when
 // unauthenticated.
 export async function fetchGithubWebhooks(): Promise<WebhookEvent[] | null> {
