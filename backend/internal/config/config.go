@@ -106,6 +106,12 @@ type GitHubConfig struct {
 	WebhookSecret string `yaml:"webhook_secret"`
 	// CallbackURL is where GitHub redirects after install/authorize.
 	CallbackURL string `yaml:"callback_url"`
+	// UserScopes are the OAuth scopes requested for a user-level (user-to-server)
+	// connection, requested on the /login/oauth/authorize flow.
+	UserScopes []string `yaml:"user_scopes"`
+	// UserCallbackURL is where GitHub redirects after the user-to-server
+	// authorize. Distinct from CallbackURL (the App installation callback).
+	UserCallbackURL string `yaml:"user_callback_url"`
 }
 
 type SlackConfig struct {
@@ -115,6 +121,9 @@ type SlackConfig struct {
 	ClientSecret string `yaml:"client_secret"`
 	// Scopes is the list of bot scopes requested at OAuth.
 	Scopes []string `yaml:"scopes"`
+	// UserScopes are the user-token scopes requested via user_scope for a
+	// user-level connection (the xoxp token under authed_user).
+	UserScopes []string `yaml:"user_scopes"`
 	// CallbackURL is where Slack redirects after authorize.
 	CallbackURL string `yaml:"callback_url"`
 }

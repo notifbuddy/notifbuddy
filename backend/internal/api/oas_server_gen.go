@@ -18,7 +18,9 @@ type Handler interface {
 	CreateInvitation(ctx context.Context, req *CreateInvitationRequest) (CreateInvitationRes, error)
 	// DisconnectIntegration implements disconnectIntegration operation.
 	//
-	// Removes the stored installation/token for the given provider.
+	// Removes the stored installation/token for the given provider at the given level. level=workspace
+	// (default) removes the org-wide connection; level=user removes only the caller's own per-user
+	// connection.
 	//
 	// POST /integrations/{provider}/disconnect
 	DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (DisconnectIntegrationRes, error)

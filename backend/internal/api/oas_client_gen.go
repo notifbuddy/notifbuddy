@@ -38,7 +38,9 @@ type Invoker interface {
 	CreateInvitation(ctx context.Context, request *CreateInvitationRequest) (CreateInvitationRes, error)
 	// DisconnectIntegration invokes disconnectIntegration operation.
 	//
-	// Removes the stored installation/token for the given provider.
+	// Removes the stored installation/token for the given provider at the given level. level=workspace
+	// (default) removes the org-wide connection; level=user removes only the caller's own per-user
+	// connection.
 	//
 	// POST /integrations/{provider}/disconnect
 	DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (DisconnectIntegrationRes, error)
@@ -248,7 +250,9 @@ func (c *Client) sendCreateInvitation(ctx context.Context, request *CreateInvita
 
 // DisconnectIntegration invokes disconnectIntegration operation.
 //
-// Removes the stored installation/token for the given provider.
+// Removes the stored installation/token for the given provider at the given level. level=workspace
+// (default) removes the org-wide connection; level=user removes only the caller's own per-user
+// connection.
 //
 // POST /integrations/{provider}/disconnect
 func (c *Client) DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (DisconnectIntegrationRes, error) {
@@ -315,6 +319,27 @@ func (c *Client) sendDisconnectIntegration(ctx context.Context, params Disconnec
 	}
 	pathParts[2] = "/disconnect"
 	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeQueryParams"
+	q := uri.NewQueryEncoder()
+	{
+		// Encode "level" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "level",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.Level.Get(); ok {
+				return e.EncodeValue(conv.StringToString(string(val)))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	u.RawQuery = q.Values().Encode()
 
 	stage = "EncodeRequest"
 	r, err := ht.NewRequest(ctx, "POST", u)

@@ -183,7 +183,7 @@ func (h Handler) GetIntegrationStatus(ctx context.Context) (api.GetIntegrationSt
 	if user == nil {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
-	statuses, err := h.integrations.Status(ctx, user.OrgID)
+	statuses, err := h.integrations.Status(ctx, user.OrgID, user.ID)
 	if err != nil {
 		return &api.Error{Message: "failed to read integration status"}, nil
 	}
@@ -191,17 +191,21 @@ func (h Handler) GetIntegrationStatus(ctx context.Context) (api.GetIntegrationSt
 }
 
 // DisconnectIntegration implements `disconnectIntegration`:
-// POST /integrations/{provider}/disconnect. Removes the stored integration and
-// returns the refreshed status.
+// POST /integrations/{provider}/disconnect. Removes the stored integration at
+// the requested level (default workspace) and returns the refreshed status.
 func (h Handler) DisconnectIntegration(ctx context.Context, params api.DisconnectIntegrationParams) (api.DisconnectIntegrationRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.Error{Message: "unauthorized"}, nil
 	}
-	if err := h.integrations.Disconnect(ctx, user.OrgID, string(params.Provider)); err != nil {
+	level := "workspace"
+	if l, ok := params.Level.Get(); ok {
+		level = string(l)
+	}
+	if err := h.integrations.Disconnect(ctx, user.OrgID, user.ID, string(params.Provider), level); err != nil {
 		return &api.Error{Message: "failed to disconnect"}, nil
 	}
-	statuses, err := h.integrations.Status(ctx, user.OrgID)
+	statuses, err := h.integrations.Status(ctx, user.OrgID, user.ID)
 	if err != nil {
 		return &api.Error{Message: "failed to read integration status"}, nil
 	}
@@ -261,7 +265,11 @@ func webhookListResponse(events []integrations.WebhookEvent) *api.WebhookListRes
 func integrationStatusResponse(configured bool, statuses []integrations.ProviderStatus) *api.IntegrationStatusResponse {
 	resp := &api.IntegrationStatusResponse{Configured: configured}
 	for _, st := range statuses {
-		item := api.IntegrationStatus{Provider: st.Provider, Connected: st.Connected}
+		item := api.IntegrationStatus{
+			Provider:  st.Provider,
+			Level:     api.IntegrationStatusLevel(st.Level),
+			Connected: st.Connected,
+		}
 		if st.Account != "" {
 			item.Account = api.NewOptString(st.Account)
 		}

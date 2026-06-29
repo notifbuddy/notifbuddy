@@ -204,7 +204,9 @@ export interface paths {
         put?: never;
         /**
          * Disconnect an integration from the active organization
-         * @description Removes the stored installation/token for the given provider.
+         * @description Removes the stored installation/token for the given provider at the given
+         *     level. level=workspace (default) removes the org-wide connection;
+         *     level=user removes only the caller's own per-user connection.
          */
         post: operations["disconnectIntegration"];
         delete?: never;
@@ -415,14 +417,21 @@ export interface components {
         MemberListResponse: {
             members: components["schemas"]["MemberResponse"][];
         };
-        /** @description The connection state of a single integration provider. */
+        /** @description The connection state of a single integration provider at one level. */
         IntegrationStatus: {
             /**
              * @description The provider key.
              * @example github
              */
             provider: string;
-            /** @description Whether this provider is connected for the active organization. */
+            /**
+             * @description Whether this entry is the organization's workspace-wide connection or
+             *     the caller's own per-user connection.
+             * @example workspace
+             * @enum {string}
+             */
+            level: "workspace" | "user";
+            /** @description Whether this provider is connected at this level. */
             connected: boolean;
             /**
              * @description The connected account/workspace label (GitHub login, Slack team).
@@ -774,7 +783,9 @@ export interface operations {
     };
     disconnectIntegration: {
         parameters: {
-            query?: never;
+            query?: {
+                level?: "workspace" | "user";
+            };
             header?: never;
             path: {
                 provider: "github" | "slack" | "linear";

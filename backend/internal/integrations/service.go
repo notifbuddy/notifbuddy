@@ -51,35 +51,61 @@ func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve Sessi
 // Enabled reports whether persistence (and thus integrations) is available.
 func (s *Service) Enabled() bool { return s.store != nil && s.enc != nil }
 
-// ProviderStatus is the connection state of one provider for an org.
+// ProviderStatus is the connection state of one provider at one level (workspace
+// or user) for an org.
 type ProviderStatus struct {
 	Provider    string         `json:"provider"`
+	Level       string         `json:"level"` // "workspace" | "user"
 	Connected   bool           `json:"connected"`
 	Account     string         `json:"account,omitempty"` // GitHub login / Slack team name
 	ConnectedBy string         `json:"connectedBy,omitempty"`
 	Metadata    map[string]any `json:"-"`
 }
 
-// Status returns the connection status for both providers for the given org.
-func (s *Service) Status(ctx context.Context, orgID string) ([]ProviderStatus, error) {
-	out := []ProviderStatus{
-		{Provider: string(store.ProviderGitHub)},
-		{Provider: string(store.ProviderSlack)},
-		{Provider: string(store.ProviderLinear)},
+// providers is the canonical provider list, in display order.
+var providers = []store.Provider{store.ProviderGitHub, store.ProviderSlack, store.ProviderLinear}
+
+// Status returns, for each provider, both the org's workspace connection state
+// and the given user's own (user-level) connection state. The result is a flat
+// slice with one entry per (provider, level).
+func (s *Service) Status(ctx context.Context, orgID, userID string) ([]ProviderStatus, error) {
+	out := make([]ProviderStatus, 0, len(providers)*2)
+	for _, p := range providers {
+		out = append(out,
+			ProviderStatus{Provider: string(p), Level: string(store.LevelWorkspace)},
+			ProviderStatus{Provider: string(p), Level: string(store.LevelUser)},
+		)
 	}
 	if !s.Enabled() || orgID == "" {
 		return out, nil
 	}
-	rows, err := s.store.ListIntegrations(ctx, orgID)
+
+	workspaceRows, err := s.store.ListIntegrations(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
-	byProvider := map[store.Provider]store.Integration{}
-	for _, in := range rows {
-		byProvider[in.Provider] = in
+	var userRows []store.Integration
+	if userID != "" {
+		if userRows, err = s.store.ListUserIntegrations(ctx, orgID, userID); err != nil {
+			return nil, err
+		}
+	}
+
+	// Index by (provider, level) so we can fill the pre-seeded entries.
+	type key struct {
+		provider store.Provider
+		level    store.Level
+	}
+	byKey := map[key]store.Integration{}
+	for _, in := range workspaceRows {
+		byKey[key{in.Provider, store.LevelWorkspace}] = in
+	}
+	for _, in := range userRows {
+		byKey[key{in.Provider, store.LevelUser}] = in
 	}
 	for i := range out {
-		if in, ok := byProvider[store.Provider(out[i].Provider)]; ok {
+		k := key{store.Provider(out[i].Provider), store.Level(out[i].Level)}
+		if in, ok := byKey[k]; ok {
 			out[i].Connected = true
 			out[i].ConnectedBy = in.ConnectedBy
 			out[i].Account = accountLabel(in)
@@ -89,12 +115,19 @@ func (s *Service) Status(ctx context.Context, orgID string) ([]ProviderStatus, e
 	return out, nil
 }
 
-// Disconnect removes a provider integration for an org.
-func (s *Service) Disconnect(ctx context.Context, orgID, provider string) error {
+// Disconnect removes a provider integration at the given level. For the user
+// level it deletes only the caller's own row (keyed by userID); for the
+// workspace level it deletes the org-wide row.
+func (s *Service) Disconnect(ctx context.Context, orgID, userID, provider, level string) error {
 	if !s.Enabled() {
 		return fmt.Errorf("integrations: not configured")
 	}
-	return s.store.DeleteIntegration(ctx, orgID, store.Provider(provider))
+	lvl := store.Level(level).Norm()
+	uid := ""
+	if lvl == store.LevelUser {
+		uid = userID
+	}
+	return s.store.DeleteIntegration(ctx, orgID, store.Provider(provider), lvl, uid)
 }
 
 // redirectAfter builds the URL the browser returns to after a connect/callback,
@@ -125,6 +158,7 @@ func accountLabel(in store.Integration) string {
 type oauthState struct {
 	OrgID  string `json:"org"`
 	UserID string `json:"uid"`
+	Level  string `json:"lvl,omitempty"` // "" or "workspace" = workspace; "user" = per-user
 	Nonce  string `json:"n"`
 }
 

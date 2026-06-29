@@ -32,7 +32,11 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no active organization", http.StatusUnauthorized)
 		return
 	}
-	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Nonce: newNonce()})
+	level := store.LevelWorkspace
+	if r.URL.Query().Get("level") == string(store.LevelUser) {
+		level = store.LevelUser
+	}
+	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: newNonce()})
 	if err != nil {
 		log.Printf("integrations: seal linear state: %v", err)
 		http.Error(w, "failed to start linear connect", http.StatusInternalServerError)
@@ -45,8 +49,11 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 	// Linear takes a comma-separated scope list (e.g. "read,write").
 	q.Set("scope", strings.Join(s.cfg.Linear.Scopes, ","))
 	q.Set("state", state)
-	// Install into the workspace as the app actor (workspace-level install).
-	q.Set("actor", "app")
+	// Workspace install uses actor=app (actions attributed to the app); a
+	// user-level connect omits it so the token acts as the connecting user.
+	if level == store.LevelWorkspace {
+		q.Set("actor", "app")
+	}
 	http.Redirect(w, r, "https://linear.app/oauth/authorize?"+q.Encode(), http.StatusFound)
 }
 
@@ -89,9 +96,10 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.store.UpsertIntegration(r.Context(), store.Integration{
+	in := store.Integration{
 		OrgID:          st.OrgID,
 		Provider:       store.ProviderLinear,
+		Level:          store.LevelWorkspace,
 		ExternalID:     workspaceID,
 		EncryptedToken: encToken,
 		ConnectedBy:    st.UserID,
@@ -99,8 +107,12 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 			"workspace_name": workspaceName,
 			"scope":          access.Scope,
 		},
-	})
-	if err != nil {
+	}
+	if st.Level == string(store.LevelUser) {
+		in.Level = store.LevelUser
+		in.ConnectedUserID = st.UserID
+	}
+	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
 		log.Printf("integrations: store linear token: %v", err)
 		http.Error(w, "failed to save linear connection", http.StatusInternalServerError)
 		return
@@ -185,10 +197,20 @@ func (s *Service) linearWorkspace(ctx context.Context, token string) (id, name s
 	return body.Data.Organization.ID, body.Data.Organization.Name
 }
 
-// LinearAccessToken returns the decrypted access token for an org's Linear
-// connection.
+// LinearAccessToken returns the decrypted workspace access token for an org's
+// Linear connection.
 func (s *Service) LinearAccessToken(ctx context.Context, orgID string) (string, error) {
-	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderLinear)
+	return s.linearToken(ctx, orgID, store.LevelWorkspace, "")
+}
+
+// LinearUserToken returns the decrypted per-user access token for a user's
+// Linear connection.
+func (s *Service) LinearUserToken(ctx context.Context, orgID, userID string) (string, error) {
+	return s.linearToken(ctx, orgID, store.LevelUser, userID)
+}
+
+func (s *Service) linearToken(ctx context.Context, orgID string, level store.Level, userID string) (string, error) {
+	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, level, userID)
 	if err != nil {
 		return "", err
 	}

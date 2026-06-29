@@ -241,7 +241,10 @@ paths:
     post:
       operationId: disconnectIntegration
       summary: Disconnect an integration from the active organization
-      description: Removes the stored installation/token for the given provider.
+      description: |
+        Removes the stored installation/token for the given provider at the given
+        level. level=workspace (default) removes the org-wide connection;
+        level=user removes only the caller's own per-user connection.
       parameters:
         - name: provider
           in: path
@@ -249,6 +252,13 @@ paths:
           schema:
             type: string
             enum: [github, slack, linear]
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [workspace, user]
+            default: workspace
       responses:
         "200":
           description: Disconnected (or was already not connected).
@@ -493,15 +503,22 @@ components:
         - members
     IntegrationStatus:
       type: object
-      description: The connection state of a single integration provider.
+      description: The connection state of a single integration provider at one level.
       properties:
         provider:
           type: string
           description: The provider key.
           example: github
+        level:
+          type: string
+          description: |
+            Whether this entry is the organization's workspace-wide connection or
+            the caller's own per-user connection.
+          enum: [workspace, user]
+          example: workspace
         connected:
           type: boolean
-          description: Whether this provider is connected for the active organization.
+          description: Whether this provider is connected at this level.
         account:
           type: string
           description: The connected account/workspace label (GitHub login, Slack team).
@@ -512,6 +529,7 @@ components:
           example: user_01H...
       required:
         - provider
+        - level
         - connected
     IntegrationStatusResponse:
       type: object

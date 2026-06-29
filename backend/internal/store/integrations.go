@@ -18,6 +18,24 @@ const (
 	ProviderLinear Provider = "linear"
 )
 
+// Level distinguishes a workspace-wide connection (org install / bot token) from
+// a per-user connection (a user's own OAuth token, used to act as that user).
+type Level string
+
+const (
+	LevelWorkspace Level = "workspace"
+	LevelUser      Level = "user"
+)
+
+// Norm returns the level defaulted to workspace when empty, so callers that
+// don't care about levels keep working unchanged.
+func (l Level) Norm() Level {
+	if l == "" {
+		return LevelWorkspace
+	}
+	return l
+}
+
 // ErrNotFound is returned when an integration row does not exist.
 var ErrNotFound = errors.New("store: integration not found")
 
@@ -25,12 +43,14 @@ var ErrNotFound = errors.New("store: integration not found")
 // is ciphertext (or nil); callers decrypt it via crypto.Encryptor. Metadata
 // holds provider-specific display data (account login, team name, scopes).
 type Integration struct {
-	OrgID          string
-	Provider       Provider
-	ExternalID     string
-	EncryptedToken []byte
-	Metadata       map[string]any
-	ConnectedBy    string
+	OrgID           string
+	Provider        Provider
+	Level           Level  // "" is treated as workspace
+	ConnectedUserID string // the user this row belongs to (level=user); "" for workspace
+	ExternalID      string
+	EncryptedToken  []byte
+	Metadata        map[string]any
+	ConnectedBy     string
 }
 
 // UpsertIntegration inserts or replaces the integration for (org, provider).
@@ -46,30 +66,33 @@ func (s *Store) UpsertIntegration(ctx context.Context, in Integration) error {
 	}
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO org_integrations
-			(org_id, provider, external_id, encrypted_token, metadata, connected_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())
-		ON CONFLICT (org_id, provider) DO UPDATE SET
+			(org_id, provider, level, connected_user_id, external_id, encrypted_token, metadata, connected_by, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		ON CONFLICT (org_id, provider, level, connected_user_id) DO UPDATE SET
 			external_id     = EXCLUDED.external_id,
 			encrypted_token = EXCLUDED.encrypted_token,
 			metadata        = EXCLUDED.metadata,
 			connected_by    = EXCLUDED.connected_by,
 			updated_at      = now()
-	`, in.OrgID, string(in.Provider), in.ExternalID, in.EncryptedToken, metaJSON, in.ConnectedBy)
+	`, in.OrgID, string(in.Provider), string(in.Level.Norm()), in.ConnectedUserID,
+		in.ExternalID, in.EncryptedToken, metaJSON, in.ConnectedBy)
 	if err != nil {
 		return fmt.Errorf("store: upsert integration: %w", err)
 	}
 	return nil
 }
 
-// GetIntegration returns the integration for (org, provider), or ErrNotFound.
-func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provider) (*Integration, error) {
+// GetIntegration returns the integration for (org, provider, level, userID), or
+// ErrNotFound. Use level=LevelWorkspace with userID="" for the workspace row.
+func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provider, level Level, userID string) (*Integration, error) {
+	level = level.Norm()
 	row := s.pool.QueryRow(ctx, `
 		SELECT external_id, encrypted_token, metadata, connected_by
 		FROM org_integrations
-		WHERE org_id = $1 AND provider = $2
-	`, orgID, string(provider))
+		WHERE org_id = $1 AND provider = $2 AND level = $3 AND connected_user_id = $4
+	`, orgID, string(provider), string(level), userID)
 
-	in := Integration{OrgID: orgID, Provider: provider}
+	in := Integration{OrgID: orgID, Provider: provider, Level: level, ConnectedUserID: userID}
 	var metaJSON []byte
 	var connectedBy *string
 	if err := row.Scan(&in.ExternalID, &in.EncryptedToken, &metaJSON, &connectedBy); err != nil {
@@ -89,14 +112,25 @@ func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provi
 	return &in, nil
 }
 
-// ListIntegrations returns all integrations for an organization.
+// ListIntegrations returns an organization's workspace-level integrations.
 func (s *Store) ListIntegrations(ctx context.Context, orgID string) ([]Integration, error) {
+	return s.listIntegrations(ctx, orgID, LevelWorkspace, "")
+}
+
+// ListUserIntegrations returns one user's user-level integrations for an org.
+func (s *Store) ListUserIntegrations(ctx context.Context, orgID, userID string) ([]Integration, error) {
+	return s.listIntegrations(ctx, orgID, LevelUser, userID)
+}
+
+// listIntegrations is the shared query behind List/ListUser, filtering by level
+// (and connected_user_id for user rows).
+func (s *Store) listIntegrations(ctx context.Context, orgID string, level Level, userID string) ([]Integration, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT provider, external_id, encrypted_token, metadata, connected_by
 		FROM org_integrations
-		WHERE org_id = $1
+		WHERE org_id = $1 AND level = $2 AND connected_user_id = $3
 		ORDER BY provider
-	`, orgID)
+	`, orgID, string(level.Norm()), userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list integrations: %w", err)
 	}
@@ -104,7 +138,7 @@ func (s *Store) ListIntegrations(ctx context.Context, orgID string) ([]Integrati
 
 	var out []Integration
 	for rows.Next() {
-		in := Integration{OrgID: orgID}
+		in := Integration{OrgID: orgID, Level: level.Norm(), ConnectedUserID: userID}
 		var provider string
 		var metaJSON []byte
 		var connectedBy *string
@@ -125,12 +159,14 @@ func (s *Store) ListIntegrations(ctx context.Context, orgID string) ([]Integrati
 	return out, rows.Err()
 }
 
-// DeleteIntegration removes the integration for (org, provider). Deleting a
-// non-existent row is not an error.
-func (s *Store) DeleteIntegration(ctx context.Context, orgID string, provider Provider) error {
+// DeleteIntegration removes the integration for (org, provider, level, userID).
+// Deleting a non-existent row is not an error. Use level=LevelWorkspace,
+// userID="" for the workspace row; level=LevelUser, userID=<uid> for a user row.
+func (s *Store) DeleteIntegration(ctx context.Context, orgID string, provider Provider, level Level, userID string) error {
 	_, err := s.pool.Exec(ctx, `
-		DELETE FROM org_integrations WHERE org_id = $1 AND provider = $2
-	`, orgID, string(provider))
+		DELETE FROM org_integrations
+		WHERE org_id = $1 AND provider = $2 AND level = $3 AND connected_user_id = $4
+	`, orgID, string(provider), string(level.Norm()), userID)
 	if err != nil {
 		return fmt.Errorf("store: delete integration: %w", err)
 	}
