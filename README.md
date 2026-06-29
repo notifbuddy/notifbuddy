@@ -1,18 +1,29 @@
-# Xolo — spec-first ping/pong
+# Xolo
 
-A minimal full-stack app demonstrating a **spec-first REST workflow** with
-**WorkOS AuthKit** login. A single hand-written OpenAPI document is the source
-of truth; both the Go server stub and the TypeScript client are **generated**
-from it. There is no hand-written transport code for the JSON API — only
-business logic, the auth redirect flow, and UI.
+An app to sync your github PRs and linear tickets to slack. We keep it simple so
+you can focus on a single dashboard for communication. We do 2-way syncs for slack
+channels to your github PR or your linear tickets, so whatever you comment on github/linear
+will be reflected on your slack channel as well.
 
-Sign in via WorkOS's hosted AuthKit page; the session is carried in an HttpOnly,
-encrypted ("sealed") cookie. `GET /ping` and `GET /me` require that session.
+## Features
 
-```
-spec/openapi.yaml  ──┬──▶  ogen                ──▶  backend/internal/api/  (Go server stub)
-  (source of truth)  └──▶  openapi-typescript  ──▶  frontend/src/lib/api/schema.d.ts (TS types)
-```
+#### Keep github and linear slack channel creation manual
+
+You may have a lot of PRs or linear ticket that will create noise if we create the channels automatically, you can
+keep this optional and just ask the 'NotifBuddy' app to create the channel. We support natural langauge queries so
+on github you can simply do `@NotifBuddy create slack channel` or `@notifbuddy slack this plz`.
+
+Internally we make a cloudflare workers ai call to figure our the exact command that need to be done.
+  
+#### Workspace integrations
+
+Workspeace level integrations are available for github account connection, linear account connection and slack workspace
+connections.
+
+#### User integrations
+
+To do the two way sync, we need oauth logins to act as user across the apps. Every user needs to connect 
+github, linear and slack accounts so we can replicate the messages.
 
 ## Stack
 
