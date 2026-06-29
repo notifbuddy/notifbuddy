@@ -1,0 +1,92 @@
+{
+  "event_type": "linear",
+  "linear": {
+    "action": "update",
+    "actor": {
+      "email": "user@example.com",
+      "id": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "name": "Ada Lovelace",
+      "type": "user",
+      "url": "https://linear.app/skogai/profiles/skogix"
+    },
+    "createdAt": "2026-04-18T12:24:02.756Z",
+    "data": {
+      "addedToTeamAt": "2026-04-18T11:55:21.686Z",
+      "assignee": {
+        "email": "user@example.com",
+        "id": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+        "name": "Ada Lovelace",
+        "url": "https://linear.app/skogai/profiles/skogix"
+      },
+      "assigneeId": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "botActor": null,
+      "completedAt": "2026-04-18T12:24:02.746Z",
+      "createdAt": "2026-04-18T11:55:21.652Z",
+      "creatorId": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "delegate": {
+        "email": "user@example.com",
+        "id": "7cc703ad-906d-4cca-8418-f5e01c9e5c0e",
+        "name": "claude",
+        "url": "https://linear.app/skogai/profiles/claude"
+      },
+      "delegateId": "7cc703ad-906d-4cca-8418-f5e01c9e5c0e",
+      "description": "hello! [claude](https://linear.app/skogai/team/SKO/issue-label/claude)  whazzup  @claude?",
+      "descriptionData": "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"hello! \"},{\"type\":\"entityMention\",\"attrs\":{\"id\":\"8004a90e-0b7d-4160-8b0e-ea33b23bd264\",\"label\":\"claude\",\"href\":\"https://linear.app/skogai/team/SKO/issue-label/claude\"}},{\"type\":\"text\",\"text\":\"  whazzup  @claude?\"}]}]}",
+      "id": "110ae066-d7e3-47f0-96c2-4a3536810dac",
+      "identifier": "SKO-177",
+      "inheritsSharedAccess": false,
+      "labelIds": [],
+      "labels": [],
+      "number": 177,
+      "previousIdentifiers": [],
+      "priority": 0,
+      "priorityLabel": "No priority",
+      "prioritySortOrder": -3072.27,
+      "reactionData": [],
+      "slaType": "all",
+      "sortOrder": -51,
+      "state": {
+        "color": "#5e6ad2",
+        "id": "065a2424-81d9-479d-84b8-ea8b1f20cf67",
+        "name": "Done",
+        "type": "completed"
+      },
+      "stateId": "065a2424-81d9-479d-84b8-ea8b1f20cf67",
+      "subscriberIds": [
+        "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+        "7cc703ad-906d-4cca-8418-f5e01c9e5c0e"
+      ],
+      "syncedWith": [
+        {
+          "id": "4287873595",
+          "metadata": {
+            "number": 42,
+            "owner": "SkogAI",
+            "repo": "claude"
+          },
+          "service": "github"
+        }
+      ],
+      "team": {
+        "id": "ac4c7f2d-98ae-438f-b85a-33374856fd1b",
+        "key": "SKO",
+        "name": "SkogAI"
+      },
+      "teamId": "ac4c7f2d-98ae-438f-b85a-33374856fd1b",
+      "title": "test-issue",
+      "updatedAt": "2026-04-18T12:24:02.755Z",
+      "url": "https://linear.app/skogai/issue/SKO-177/test-issue"
+    },
+    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
+    "type": "Issue",
+    "updatedFrom": {
+      "completedAt": null,
+      "sortOrder": -3076,
+      "stateId": "aabc7e7e-aeb7-4de6-9a43-92eaf5c1e263",
+      "updatedAt": "2026-04-18T12:12:04.022Z"
+    },
+    "url": "https://linear.app/skogai/issue/SKO-177/test-issue",
+    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
+    "webhookTimestamp": 1776515043292
+  }
+}
