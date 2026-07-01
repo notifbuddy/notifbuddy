@@ -32,7 +32,7 @@
 						class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 					>
 						<div
-							class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-md"
+							class="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border flex aspect-square size-8 items-center justify-center rounded-md border"
 						>
 							<BuildingIcon class="size-4" />
 						</div>

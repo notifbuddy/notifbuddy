@@ -56,7 +56,7 @@
 						<Sidebar.MenuItem {...props}>
 							<Collapsible.Trigger>
 								{#snippet child({ props })}
-									<Sidebar.MenuButton {...props} tooltipContent={item.title} isActive={isActive(item.url)}>
+									<Sidebar.MenuButton {...props} tooltipContent={item.title}>
 										{#if item.icon}<item.icon />{/if}
 										<span>{item.title}</span>
 										<ChevronRightIcon

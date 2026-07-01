@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import * as Field from '$lib/components/ui/field';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -103,12 +102,12 @@
 </script>
 
 {#if loading}
-	<Card.Root>
-		<Card.Content class="pt-6"><p class="text-muted-foreground text-sm">Loading…</p></Card.Content>
-	</Card.Root>
+	<p class="text-muted-foreground text-sm">Loading…</p>
 {:else if ctx && ctx.connected}
-	<Card.Root>
-		<Card.Content class="pt-6">
+	<!-- Minimal/hairline layout: no card. Sections are separated by whitespace and
+	     the FieldSeparator hairlines; the whole surface sits flat on the page. -->
+	<div>
+		<div>
 			<!-- Two regions: the rules form, and a test tool that validates them
 			     before you save. Side by side on wide screens, stacked below. -->
 			<div class="grid gap-8 lg:grid-cols-2">
@@ -268,13 +267,13 @@
 					{/if}
 				</div>
 			</div>
-		</Card.Content>
-		<Card.Footer class="gap-3">
+		</div>
+		<div class="mt-8 flex items-center gap-3 border-t pt-6">
 			<Button size="sm" onclick={doSave} disabled={saving}>
 				{#if saving}<LoaderIcon class="animate-spin" />{:else}<SaveIcon />{/if}
 				Save
 			</Button>
 			{#if saveMsg}<span class="text-muted-foreground text-sm">{saveMsg}</span>{/if}
-		</Card.Footer>
-	</Card.Root>
+		</div>
+	</div>
 {/if}
