@@ -37,6 +37,12 @@ usecase for this though.~~
 - Connect posthog to see user activity capture.
 - Webhook events need from notifbuddy need to be supported, users can add custom logic if required.
 - Access control logs need to be done.
+- Docs site (Astro Starlight) — WIP on branch `docs-starlight`, in `website/`.
+  Themed to the app (QraftHive golden-orange + Outfit/JetBrains Mono, Stripe/Linear-clean look).
+  To resume: `git checkout docs-starlight && cd website && npm install && npm run dev` (http://localhost:4321).
+  STILL TODO: replace placeholder content; add `starlight-llms-txt`
+  (llms.txt / llms-full.txt / llms-small.txt); wire SEO (site url, description,
+  sitemap, social image); decide deploy target (docs.<domain> subdomain vs /docs proxy).
 
 Post launch
 - Explore plain integration
