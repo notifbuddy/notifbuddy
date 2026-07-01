@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import * as Field from '$lib/components/ui/field';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -102,12 +103,19 @@
 </script>
 
 {#if loading}
-	<p class="text-muted-foreground text-sm">Loading…</p>
+	<Card.Root>
+		<Card.Content class="pt-6"><p class="text-muted-foreground text-sm">Loading…</p></Card.Content>
+	</Card.Root>
 {:else if ctx && ctx.connected}
-	<!-- Minimal/hairline layout: no card. Sections are separated by whitespace and
-	     the FieldSeparator hairlines; the whole surface sits flat on the page. -->
-	<div>
-		<div>
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-base">Channel rules</Card.Title>
+			<Card.Description>
+				Control how Linear issues open Slack channels. Templates and conditions use GitHub Actions
+				expression syntax, e.g. <code class="text-xs">${'{{'} linear.data.identifier {'}}'}</code>.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content>
 			<!-- Two regions: the rules form, and a test tool that validates them
 			     before you save. Side by side on wide screens, stacked below. -->
 			<div class="grid gap-8 lg:grid-cols-2">
@@ -267,13 +275,13 @@
 					{/if}
 				</div>
 			</div>
-		</div>
-		<div class="mt-8 flex items-center gap-3 border-t pt-6">
+		</Card.Content>
+		<Card.Footer class="gap-3">
 			<Button size="sm" onclick={doSave} disabled={saving}>
 				{#if saving}<LoaderIcon class="animate-spin" />{:else}<SaveIcon />{/if}
 				Save
 			</Button>
 			{#if saveMsg}<span class="text-muted-foreground text-sm">{saveMsg}</span>{/if}
-		</div>
-	</div>
+		</Card.Footer>
+	</Card.Root>
 {/if}

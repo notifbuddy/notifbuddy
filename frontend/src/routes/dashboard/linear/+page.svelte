@@ -26,12 +26,6 @@
 
 		<PageTabs tabs={DASHBOARD_TABS} />
 
-		<div class="flex flex-col gap-3">
-			<p class="text-muted-foreground text-sm">
-				Control how Linear issues open Slack channels. Templates and conditions use GitHub Actions
-				expression syntax, e.g. <code class="text-xs">${'{{'} linear.data.identifier {'}}'}</code>.
-			</p>
-			<LinearSettings />
-		</div>
+		<LinearSettings />
 	</div>
 {/if}
