@@ -88,20 +88,15 @@
 		userStore.user = u;
 		history.replaceState(null, '', window.location.pathname);
 	}
-
-	const activeOrg = $derived(userStore.activeOrg);
 </script>
 
 {#if user}
-	<!-- Signed in: dashboard content rendered inside the app shell's content area. -->
+	<!-- Signed in: dashboard content rendered inside the app shell's content area.
+	     The active org, role, and email already live in the sidebar shell, so the
+	     heading doesn't restate them. -->
 	<div class="flex flex-col gap-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
-		<p class="text-muted-foreground text-sm">
-			Signed in as <span class="text-foreground font-medium">{user.email}</span>
-			{#if activeOrg}
-				· {activeOrg.name}{#if user.role}<span class="text-muted-foreground"> · {user.role}</span>{/if}
-			{/if}
-		</p>
+		<p class="text-muted-foreground text-sm">Manage how your Linear issues sync to Slack.</p>
 	</div>
 
 	<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
