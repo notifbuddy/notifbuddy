@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
+	import { Input } from '$lib/components/ui/input';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -71,9 +71,9 @@
 	<section class="flex flex-col gap-3">
 		<h2 class="text-sm font-medium">Members</h2>
 		{#if members === undefined}
-			<Card.Root class="gap-0 divide-y py-0">
+			<div class="flex flex-col gap-1">
 				{#each [0, 1, 2] as i (i)}
-					<div class="flex items-center gap-3 p-4">
+					<div class="flex items-center gap-3 py-2">
 						<Skeleton class="size-9 shrink-0 rounded-full" />
 						<div class="flex flex-1 flex-col gap-2">
 							<Skeleton class="h-4 w-40" />
@@ -82,17 +82,17 @@
 						<Skeleton class="h-5 w-16 shrink-0" />
 					</div>
 				{/each}
-			</Card.Root>
+			</div>
 		{:else if members === null}
 			<p class="text-destructive text-sm">Couldn't load members. Please sign in again.</p>
 		{:else if members.length === 0}
 			<p class="text-muted-foreground text-sm">No members yet.</p>
 		{:else}
-			<Card.Root class="gap-0 divide-y py-0">
+			<div class="flex flex-col gap-1">
 				{#each members as m (m.id)}
-					<div class="flex items-center gap-3 p-4">
+					<div class="flex items-center gap-3 py-2">
 						<Avatar.Root class="size-9">
-							<Avatar.Fallback class="bg-primary text-primary-foreground text-xs font-medium">
+							<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
 								{memberInitials(m)}
 							</Avatar.Fallback>
 						</Avatar.Root>
@@ -108,7 +108,7 @@
 						{/if}
 					</div>
 				{/each}
-			</Card.Root>
+			</div>
 		{/if}
 	</section>
 
@@ -117,43 +117,41 @@
 		<h2 class="text-sm font-medium">Invitations</h2>
 
 		<!-- Invite form -->
-		<Card.Root>
-			<Card.Content>
-				<form class="flex flex-col gap-2 sm:flex-row" onsubmit={invite}>
-					<input
-						class="border-input bg-background focus-visible:ring-ring flex-1 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-						type="email"
-						placeholder="teammate@example.com"
-						bind:value={inviteEmail}
-						disabled={inviting}
-						required
-					/>
-					<input
-						class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none sm:w-40"
-						type="text"
-						placeholder="role (optional)"
-						bind:value={inviteRole}
-						disabled={inviting}
-					/>
-					<Button type="submit" disabled={inviting || inviteEmail.trim() === ''}>
-						{#if inviting}
-							<LoaderIcon data-icon="inline-start" class="animate-spin" />
-							Sending…
-						{:else}
-							<UserPlusIcon data-icon="inline-start" />
-							Invite
-						{/if}
-					</Button>
-				</form>
-				{#if inviteMsg}<p class="text-muted-foreground mt-2 text-sm">{inviteMsg}</p>{/if}
-			</Card.Content>
-		</Card.Root>
+		<div class="flex flex-col gap-2">
+			<form class="flex flex-col gap-2 sm:flex-row" onsubmit={invite}>
+				<Input
+					class="flex-1"
+					type="email"
+					placeholder="teammate@example.com"
+					bind:value={inviteEmail}
+					disabled={inviting}
+					required
+				/>
+				<Input
+					class="sm:w-40"
+					type="text"
+					placeholder="role (optional)"
+					bind:value={inviteRole}
+					disabled={inviting}
+				/>
+				<Button type="submit" disabled={inviting || inviteEmail.trim() === ''}>
+					{#if inviting}
+						<LoaderIcon data-icon="inline-start" class="animate-spin" />
+						Sending…
+					{:else}
+						<UserPlusIcon data-icon="inline-start" />
+						Invite
+					{/if}
+				</Button>
+			</form>
+			{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
+		</div>
 
 		<!-- Invitations list -->
 		{#if invitations === undefined}
-			<Card.Root class="gap-0 divide-y py-0">
+			<div class="flex flex-col gap-1">
 				{#each [0, 1] as i (i)}
-					<div class="flex items-center justify-between gap-3 p-4">
+					<div class="flex items-center justify-between gap-3 py-2">
 						<div class="flex items-center gap-3">
 							<Skeleton class="size-9 shrink-0 rounded-full" />
 							<Skeleton class="h-4 w-48" />
@@ -161,15 +159,15 @@
 						<Skeleton class="h-5 w-16 shrink-0" />
 					</div>
 				{/each}
-			</Card.Root>
+			</div>
 		{:else if invitations === null}
 			<p class="text-destructive text-sm">Couldn't load invitations.</p>
 		{:else if invitations.length === 0}
 			<p class="text-muted-foreground text-sm">No invitations sent yet.</p>
 		{:else}
-			<Card.Root class="gap-0 divide-y py-0">
+			<div class="flex flex-col gap-1">
 				{#each invitations as inv (inv.id)}
-					<div class="flex items-center justify-between gap-3 p-4">
+					<div class="flex items-center justify-between gap-3 py-2">
 						<div class="flex min-w-0 items-center gap-3">
 							<div class="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full">
 								<MailIcon class="size-4" />
@@ -179,7 +177,7 @@
 						<Badge variant={inviteBadge(inv.state)} class="shrink-0 capitalize">{inv.state}</Badge>
 					</div>
 				{/each}
-			</Card.Root>
+			</div>
 		{/if}
 	</section>
 </div>
