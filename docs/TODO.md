@@ -26,7 +26,7 @@ usecase for this though.~~
   (`internal/sync`): status-trigger channel creation, comment mirroring both ways
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
-- Update the login page, it just says Sign in with WorkOS
+- ~~Update the login page, it just says Sign in with WorkOS~~
 - Add settings icon to take to linear, github, etc.'s settings page.
 - Invitation needs rework.
 - Add stripe account and create billing integration.
