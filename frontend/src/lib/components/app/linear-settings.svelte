@@ -7,6 +7,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import SaveIcon from '@lucide/svelte/icons/save';
@@ -105,8 +106,30 @@
 </script>
 
 {#if loading}
+	<!-- Skeleton mirroring the loaded card: header + the two-region form. -->
 	<Card.Root>
-		<Card.Content class="pt-6"><p class="text-muted-foreground text-sm">Loading…</p></Card.Content>
+		<Card.Header>
+			<Skeleton class="h-5 w-32" />
+			<Skeleton class="h-4 w-full max-w-md" />
+		</Card.Header>
+		<Card.Content>
+			<div class="grid gap-8 lg:grid-cols-2">
+				<div class="flex flex-col gap-5">
+					{#each [0, 1, 2] as i (i)}
+						<div class="flex flex-col gap-2">
+							<Skeleton class="h-4 w-28" />
+							<Skeleton class="h-9 w-full" />
+						</div>
+					{/each}
+				</div>
+				<div class="flex flex-col gap-3">
+					<Skeleton class="h-4 w-40" />
+					<Skeleton class="h-9 w-full" />
+					<Skeleton class="h-24 w-full" />
+					<Skeleton class="h-9 w-24" />
+				</div>
+			</div>
+		</Card.Content>
 	</Card.Root>
 {:else if ctx && ctx.connected}
 	<Card.Root>
