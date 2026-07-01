@@ -10,7 +10,7 @@
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import { userPrefersMode, setMode } from 'mode-watcher';
-	import { userStore, signIn, signOut, displayName, initials } from '$lib/user.svelte';
+	import { userStore, signIn, signOut, displayName, initials, avatarUrl } from '$lib/user.svelte';
 
 	const user = $derived(userStore.user);
 	const org = $derived(userStore.activeOrg);
@@ -76,6 +76,7 @@
 			<Card.Root>
 				<Card.Header class="flex-row items-center gap-4">
 					<Avatar.Root class="size-14">
+						<Avatar.Image src={avatarUrl(user)} alt={displayName(user)} />
 						<Avatar.Fallback class="bg-primary text-primary-foreground text-lg font-medium">
 							{initials(user)}
 						</Avatar.Fallback>

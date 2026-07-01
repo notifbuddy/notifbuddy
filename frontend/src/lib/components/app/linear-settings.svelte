@@ -21,9 +21,12 @@
 		fetchLinearSettings,
 		saveLinearSettings,
 		testLinearTemplate,
+		fetchIntegrationStatus,
+		statusOf,
 		type LinearSettings,
 		type SampleEvent,
-		type TemplateTestResult
+		type TemplateTestResult,
+		type IntegrationState
 	} from '$lib/integrations';
 
 	let ctx = $state<{
@@ -31,6 +34,11 @@
 		sampleEvents: SampleEvent[];
 	} | null>(null);
 	let loading = $state(true);
+
+	// [experimental] Per-provider status for the empty-state check badges.
+	let status = $state<IntegrationState | null>(null);
+	const linearConnected = $derived(!!statusOf(status, 'linear')?.connected);
+	const slackConnected = $derived(!!statusOf(status, 'slack')?.connected);
 
 	// Editable settings (a working copy).
 	let creationMode = $state<'status' | 'manual'>('manual');
@@ -58,6 +66,8 @@
 		loading = true;
 		const s = await fetchLinearSettings();
 		loading = false;
+		// [experimental] Also load per-provider status for the empty-state badges.
+		fetchIntegrationStatus().then((st) => (status = st));
 		if (!s) return;
 		ctx = { connected: s.connected, sampleEvents: s.sampleEvents };
 		creationMode = s.settings.creationMode;
@@ -314,14 +324,39 @@
 	     rules to configure. Point the user to the integrations page to connect. -->
 	<Card.Root>
 		<Card.Content class="flex flex-col items-center gap-4 py-12 text-center">
-			<!-- Both integrations are required: Linear (source) + Slack (destination). -->
+			<!-- Both integrations are required: Linear (source) + Slack (destination).
+			     [experimental] Each shows a check badge when connected, dims when not. -->
 			<div class="text-muted-foreground flex items-center gap-2">
-				<div class="bg-muted flex size-12 items-center justify-center rounded-full">
-					<SiLinear class="size-6" />
+				<div class="relative">
+					<div
+						class="bg-muted flex size-12 items-center justify-center rounded-full transition-opacity"
+						class:opacity-40={!linearConnected}
+					>
+						<SiLinear class="size-6" />
+					</div>
+					{#if linearConnected}
+						<span
+							class="bg-primary text-primary-foreground border-card absolute -end-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full border-2"
+						>
+							<CheckIcon class="size-3" />
+						</span>
+					{/if}
 				</div>
 				<PlusIcon class="size-4" />
-				<div class="bg-muted flex size-12 items-center justify-center rounded-full">
-					<SlackIcon class="size-6" />
+				<div class="relative">
+					<div
+						class="bg-muted flex size-12 items-center justify-center rounded-full transition-opacity"
+						class:opacity-40={!slackConnected}
+					>
+						<SlackIcon class="size-6" />
+					</div>
+					{#if slackConnected}
+						<span
+							class="bg-primary text-primary-foreground border-card absolute -end-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full border-2"
+						>
+							<CheckIcon class="size-3" />
+						</span>
+					{/if}
 				</div>
 			</div>
 			<div class="flex flex-col gap-1">

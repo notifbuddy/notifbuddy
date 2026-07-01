@@ -348,6 +348,11 @@ export interface components {
              */
             lastName?: string;
             /**
+             * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in.
+             * @example https://avatars.githubusercontent.com/u/12345?v=4
+             */
+            profilePictureUrl?: string;
+            /**
              * @description The ID of the organization the current session is scoped to, if any.
              * @example org_01H...
              */

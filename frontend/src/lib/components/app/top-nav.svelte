@@ -30,6 +30,7 @@
 		signOut,
 		displayName,
 		initials,
+		avatarUrl,
 		type Organization
 	} from '$lib/user.svelte';
 
@@ -120,6 +121,7 @@
 					{#snippet child({ props })}
 						<Button {...props} variant="ghost" size="icon" class="ms-auto rounded-full">
 							<Avatar.Root class="size-8">
+								<Avatar.Image src={avatarUrl(user)} alt={displayName(user)} />
 								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
 									{initials(user)}
 								</Avatar.Fallback>
@@ -131,6 +133,7 @@
 					<DropdownMenu.Label class="p-0 font-normal">
 						<div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
 							<Avatar.Root class="size-8">
+								<Avatar.Image src={avatarUrl(user)} alt={displayName(user)} />
 								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
 									{initials(user)}
 								</Avatar.Fallback>

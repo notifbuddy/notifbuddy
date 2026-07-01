@@ -35,7 +35,10 @@ func (s *Service) HandleGitHubConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// User-level connections use the user-to-server OAuth flow, not App install.
-	if r.URL.Query().Get("level") == string(store.LevelUser) {
+	reqLevel := r.URL.Query().Get("level")
+	log.Printf("integrations: github connect: raw_query=%q level=%q -> %s flow",
+		r.URL.RawQuery, reqLevel, map[bool]string{true: "user", false: "workspace"}[reqLevel == string(store.LevelUser)])
+	if reqLevel == string(store.LevelUser) {
 		s.handleGitHubUserConnect(w, r, orgID, userID)
 		return
 	}
@@ -68,6 +71,8 @@ func (s *Service) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// User-level callbacks complete the user-to-server OAuth flow.
+	log.Printf("integrations: github callback: raw_query=%q state.level=%q -> %s flow",
+		r.URL.RawQuery, st.Level, map[bool]string{true: "user", false: "workspace"}[st.Level == string(store.LevelUser)])
 	if st.Level == string(store.LevelUser) {
 		s.handleGitHubUserCallback(w, r, st)
 		return

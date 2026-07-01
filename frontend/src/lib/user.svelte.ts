@@ -59,6 +59,12 @@ export function displayName(user: User): string {
 	return full || user.email;
 }
 
+// The user's profile picture URL (GitHub avatar for GitHub logins), or undefined
+// if WorkOS didn't capture one — callers pair it with an initials fallback.
+export function avatarUrl(user: User): string | undefined {
+	return user.profilePictureUrl || undefined;
+}
+
 // Up-to-two-letter initials for the avatar fallback.
 export function initials(user: User): string {
 	const first = user.firstName?.trim()?.[0];

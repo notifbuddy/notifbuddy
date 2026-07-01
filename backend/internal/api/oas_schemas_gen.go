@@ -967,6 +967,9 @@ type UserResponse struct {
 	FirstName OptString `json:"firstName"`
 	// The user's last name, if set.
 	LastName OptString `json:"lastName"`
+	// URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar,
+	// captured by WorkOS at sign-in.
+	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 	// The ID of the organization the current session is scoped to, if any.
 	OrganizationId OptString `json:"organizationId"`
 	// The user's role within the active organization, if any.
@@ -993,6 +996,11 @@ func (s *UserResponse) GetFirstName() OptString {
 // GetLastName returns the value of LastName.
 func (s *UserResponse) GetLastName() OptString {
 	return s.LastName
+}
+
+// GetProfilePictureUrl returns the value of ProfilePictureUrl.
+func (s *UserResponse) GetProfilePictureUrl() OptString {
+	return s.ProfilePictureUrl
 }
 
 // GetOrganizationId returns the value of OrganizationId.
@@ -1028,6 +1036,11 @@ func (s *UserResponse) SetFirstName(val OptString) {
 // SetLastName sets the value of LastName.
 func (s *UserResponse) SetLastName(val OptString) {
 	s.LastName = val
+}
+
+// SetProfilePictureUrl sets the value of ProfilePictureUrl.
+func (s *UserResponse) SetProfilePictureUrl(val OptString) {
+	s.ProfilePictureUrl = val
 }
 
 // SetOrganizationId sets the value of OrganizationId.

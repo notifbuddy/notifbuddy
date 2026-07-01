@@ -407,6 +407,9 @@ func (h Handler) toUserResponse(ctx context.Context, user *auth.SessionUser) *ap
 	if user.LastName != "" {
 		resp.LastName = api.NewOptString(user.LastName)
 	}
+	if user.ProfilePictureURL != "" {
+		resp.ProfilePictureUrl = api.NewOptString(user.ProfilePictureURL)
+	}
 	if user.OrgID != "" {
 		resp.OrganizationId = api.NewOptString(user.OrgID)
 	}
