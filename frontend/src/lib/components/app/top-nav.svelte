@@ -16,6 +16,7 @@
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
+	import Logo from './logo.svelte';
 	import { cn } from '$lib/utils';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -51,6 +52,17 @@
 	class="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-40 border-b backdrop-blur"
 >
 	<div class="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
+		<!-- Full brand lockup: mark + wordmark, links home. -->
+		<a
+			href="/dashboard"
+			aria-label="notifbuddy — dashboard"
+			class="text-foreground focus-visible:ring-ring flex items-center rounded-md outline-none focus-visible:ring-2"
+		>
+			<Logo size={26} />
+		</a>
+
+		<div class="bg-border mx-1 h-5 w-px" aria-hidden="true"></div>
+
 		<!-- Org switcher -->
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
