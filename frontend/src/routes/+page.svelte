@@ -4,9 +4,9 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
 	import { userStore, signIn, type User, type Organization as Org } from '$lib/user.svelte';
-	import LinearSettings from '$lib/components/app/linear-settings.svelte';
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
@@ -35,6 +35,13 @@
 	} else if (!startInVerify) {
 		loadUser();
 	}
+
+	// This is the entry route: it owns the signed-out / mid-login UI. Once the
+	// session resolves to a real user (and we're not mid verify/select-org), send
+	// them into the app at the first dashboard product.
+	$effect(() => {
+		if (user && !needsVerify && !needsSelectOrg) goto('/dashboard/linear');
+	});
 
 	async function loadUser() {
 		await userStore.load();
@@ -90,19 +97,12 @@
 	}
 </script>
 
-{#if user}
-	<!-- Signed in: dashboard content rendered inside the app shell's content area.
-	     The active org, role, and email already live in the sidebar shell, so the
-	     heading doesn't restate them. -->
-	<div class="flex flex-col gap-1">
-		<h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
-		<p class="text-muted-foreground text-sm">Manage how your Linear issues sync to Slack.</p>
-	</div>
-
-	<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
-	<div class="mt-2 w-full">
-		<LinearSettings />
-	</div>
+{#if user && !needsVerify && !needsSelectOrg}
+	<!-- Signed in: the $effect above redirects to /dashboard/linear; show a brief
+	     placeholder while navigation happens so the page isn't blank. -->
+	<main class="flex min-h-svh items-center justify-center p-6">
+		<LoaderIcon class="text-muted-foreground animate-spin" />
+	</main>
 {:else}
 	<!-- Signed out / mid-login: centered login card (rendered bare, no app shell). -->
 	<main class="flex min-h-svh items-center justify-center p-6">

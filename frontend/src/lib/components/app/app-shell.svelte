@@ -11,7 +11,8 @@
 	// Map known routes to readable breadcrumb trails. Each entry is the list of
 	// crumbs shown in the header for that path.
 	const CRUMBS: { match: (p: string) => boolean; trail: string[] }[] = [
-		{ match: (p) => p === '/', trail: ['Dashboard'] },
+		{ match: (p) => p.startsWith('/dashboard/linear'), trail: ['Dashboard', 'Linear'] },
+		{ match: (p) => p === '/' || p.startsWith('/dashboard'), trail: ['Dashboard'] },
 		{
 			match: (p) => p === '/settings/integrations/webhooks',
 			trail: ['Integrations', 'GitHub webhooks']
