@@ -26,6 +26,7 @@ usecase for this though.~~
   (`internal/sync`): status-trigger channel creation, comment mirroring both ways
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
+- Add settings icon to take to linear, github, etc.'s settings page.
 - Invitation needs rework.
 - Add stripe account and create billing integration.
 - Open discord/slack community for support.
