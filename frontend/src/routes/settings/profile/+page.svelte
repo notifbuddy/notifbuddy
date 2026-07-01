@@ -1,10 +1,15 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import * as Avatar from '$lib/components/ui/avatar';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import SunIcon from '@lucide/svelte/icons/sun';
+	import MoonIcon from '@lucide/svelte/icons/moon';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import { userPrefersMode, setMode } from 'mode-watcher';
 	import { userStore, signIn, signOut, displayName, initials } from '$lib/user.svelte';
 
 	const user = $derived(userStore.user);
@@ -97,6 +102,33 @@
 						<dt class="text-muted-foreground">Role</dt>
 						<dd>{user.role ?? '—'}</dd>
 					</dl>
+				</Card.Content>
+			</Card.Root>
+
+			<Card.Root>
+				<Card.Header>
+					<Card.Title class="text-base">Appearance</Card.Title>
+					<Card.Description>Choose how the interface looks on this device.</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					<ToggleGroup.Root
+						type="single"
+						variant="outline"
+						spacing={2}
+						value={userPrefersMode.current}
+						onValueChange={(v) => v && setMode(v as 'light' | 'dark' | 'system')}
+						aria-label="Theme"
+					>
+						<ToggleGroup.Item value="light" class="gap-2">
+							<SunIcon class="size-4" /> Light
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="dark" class="gap-2">
+							<MoonIcon class="size-4" /> Dark
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="system" class="gap-2">
+							<MonitorIcon class="size-4" /> System
+						</ToggleGroup.Item>
+					</ToggleGroup.Root>
 				</Card.Content>
 			</Card.Root>
 

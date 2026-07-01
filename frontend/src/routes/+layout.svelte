@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { ModeWatcher } from 'mode-watcher';
 	import AppShell from '$lib/components/app/app-shell.svelte';
 	import { userStore } from '$lib/user.svelte';
 
@@ -14,6 +15,10 @@
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
+
+<!-- Manages the `dark` class on <html> + persists the choice. Defaults to dark
+     (the app's original single mode) until the user toggles. -->
+<ModeWatcher defaultMode="dark" />
 
 {#if signedIn}
 	<AppShell>
