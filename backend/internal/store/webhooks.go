@@ -142,6 +142,33 @@ func (s *Store) ListLinearWebhookEvents(ctx context.Context, orgID string, limit
 	return out, rows.Err()
 }
 
+// LinearWebhookPayload returns the raw stored payload for a Linear delivery id,
+// or ErrNotFound. The sync engine uses this to re-read the full event body (the
+// published notification carries only routing fields).
+func (s *Store) LinearWebhookPayload(ctx context.Context, deliveryID string) (json.RawMessage, error) {
+	var payload []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT payload FROM linear_webhook_events WHERE delivery_id = $1
+	`, deliveryID).Scan(&payload)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return json.RawMessage(payload), nil
+}
+
+// SlackWebhookPayload returns the raw stored payload for a Slack event id, or
+// ErrNotFound. The sync engine uses this to re-read the full event body.
+func (s *Store) SlackWebhookPayload(ctx context.Context, eventID string) (json.RawMessage, error) {
+	var payload []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT payload FROM slack_webhook_events WHERE event_id = $1
+	`, eventID).Scan(&payload)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return json.RawMessage(payload), nil
+}
+
 // OrgIDByLinearWorkspace resolves the org that owns a Linear workspace id, or
 // "" + ErrNotFound if no integration matches.
 func (s *Store) OrgIDByLinearWorkspace(ctx context.Context, workspaceID string) (string, error) {
@@ -151,6 +178,81 @@ func (s *Store) OrgIDByLinearWorkspace(ctx context.Context, workspaceID string) 
 		WHERE provider = 'linear' AND external_id = $1
 		LIMIT 1
 	`, workspaceID).Scan(&orgID)
+	if err != nil {
+		return "", ErrNotFound
+	}
+	return orgID, nil
+}
+
+// SlackWebhookEvent is one stored Slack Events API delivery.
+type SlackWebhookEvent struct {
+	ID         int64
+	EventID    string
+	EventType  string
+	TeamID     string
+	OrgID      string
+	ChannelID  string
+	Payload    json.RawMessage
+	ReceivedAt string
+}
+
+// InsertSlackWebhookEvent stores a received Slack event. On a duplicate event id
+// (Slack retry) it does nothing and reports inserted=false, so the caller can
+// treat retries idempotently.
+func (s *Store) InsertSlackWebhookEvent(ctx context.Context, e SlackWebhookEvent) (inserted bool, err error) {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO slack_webhook_events
+			(event_id, event_type, team_id, org_id, channel_id, payload)
+		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6)
+		ON CONFLICT (event_id) DO NOTHING
+	`, e.EventID, e.EventType, e.TeamID, e.OrgID, e.ChannelID, []byte(e.Payload))
+	if err != nil {
+		return false, fmt.Errorf("store: insert slack webhook event: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// ListSlackWebhookEvents returns an org's most recent Slack webhook events,
+// newest first, capped at limit.
+func (s *Store) ListSlackWebhookEvents(ctx context.Context, orgID string, limit int) ([]SlackWebhookEvent, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, event_id, event_type, coalesce(team_id,''),
+		       coalesce(org_id,''), coalesce(channel_id,''), payload, received_at
+		FROM slack_webhook_events
+		WHERE org_id = $1
+		ORDER BY received_at DESC, id DESC
+		LIMIT $2
+	`, orgID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list slack webhook events: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SlackWebhookEvent
+	for rows.Next() {
+		var e SlackWebhookEvent
+		var payload []byte
+		var receivedAt time.Time
+		if err := rows.Scan(&e.ID, &e.EventID, &e.EventType, &e.TeamID,
+			&e.OrgID, &e.ChannelID, &payload, &receivedAt); err != nil {
+			return nil, fmt.Errorf("store: scan slack webhook event: %w", err)
+		}
+		e.Payload = json.RawMessage(payload)
+		e.ReceivedAt = receivedAt.UTC().Format(time.RFC3339)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// OrgIDBySlackTeam resolves the org that owns a Slack team (workspace) id, or
+// "" + ErrNotFound if no integration matches.
+func (s *Store) OrgIDBySlackTeam(ctx context.Context, teamID string) (string, error) {
+	var orgID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT org_id FROM org_integrations
+		WHERE provider = 'slack' AND level = 'workspace' AND external_id = $1
+		LIMIT 1
+	`, teamID).Scan(&orgID)
 	if err != nil {
 		return "", ErrNotFound
 	}
