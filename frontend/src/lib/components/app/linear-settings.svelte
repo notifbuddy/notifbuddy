@@ -7,7 +7,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
-	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import SaveIcon from '@lucide/svelte/icons/save';
@@ -105,25 +104,11 @@
 
 {#if loading}
 	<Card.Root>
-		<Card.Header>
-			<Card.Title class="flex items-center gap-2 text-base">
-				<SiLinear class="size-4" /> Linear workspace settings
-			</Card.Title>
-		</Card.Header>
-		<Card.Content><p class="text-muted-foreground text-sm">Loading…</p></Card.Content>
+		<Card.Content class="pt-6"><p class="text-muted-foreground text-sm">Loading…</p></Card.Content>
 	</Card.Root>
 {:else if ctx && ctx.connected}
 	<Card.Root>
-		<Card.Header>
-			<Card.Title class="flex items-center gap-2 text-base">
-				<SiLinear class="size-4" /> Linear workspace settings
-			</Card.Title>
-			<Card.Description>
-				Control how Linear issues open Slack channels. Templates and conditions use GitHub Actions
-				expression syntax, e.g. <code class="text-xs">${'{{'} linear.data.identifier {'}}'}</code>.
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
+		<Card.Content class="pt-6">
 			<!-- Two regions: the rules form, and a test tool that validates them
 			     before you save. Side by side on wide screens, stacked below. -->
 			<div class="grid gap-8 lg:grid-cols-2">
