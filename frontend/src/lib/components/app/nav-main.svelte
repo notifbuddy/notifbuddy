@@ -11,9 +11,17 @@
 	};
 
 	// The left-hand navigation. Items with `items` expand to sub-links; URLs map to
-	// real routes that render in the content area (inset).
+	// real routes that render in the content area (inset). Dashboard is a
+	// product-based group: one child per connected product (Linear now, GitHub
+	// later). The parent only expands — its `url` is the child prefix, used to
+	// highlight/auto-open the group when a product page is active.
 	export const NAV_MAIN: NavItem[] = [
-		{ title: 'Dashboard', url: '/', icon: LayoutDashboardIcon },
+		{
+			title: 'Dashboard',
+			url: '/dashboard',
+			icon: LayoutDashboardIcon,
+			items: [{ title: 'Linear', url: '/dashboard/linear' }]
+		},
 		{
 			title: 'Integrations',
 			url: '/settings/integrations',
