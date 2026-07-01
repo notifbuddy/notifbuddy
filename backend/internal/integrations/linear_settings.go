@@ -30,13 +30,22 @@ func defaultLinearSettings() LinearSettings {
 	return LinearSettings{CreationMode: "manual", AutoAddBots: []string{}}
 }
 
-// LinearConnectedAtWorkspace reports whether Linear is connected at the
-// workspace level for the org — Linear settings are only meaningful then.
-func (s *Service) LinearConnectedAtWorkspace(ctx context.Context, orgID string) bool {
+// LinearSyncReady reports whether the org can actually run the Linear → Slack
+// channel sync: it needs BOTH Linear and Slack connected at the workspace level
+// (the rules create Slack channels from Linear issues, so Slack is required
+// too). The Linear settings UI gates on this.
+func (s *Service) LinearSyncReady(ctx context.Context, orgID string) bool {
+	return s.connectedAtWorkspace(ctx, orgID, store.ProviderLinear) &&
+		s.connectedAtWorkspace(ctx, orgID, store.ProviderSlack)
+}
+
+// connectedAtWorkspace reports whether the given provider is connected at the
+// workspace level for the org.
+func (s *Service) connectedAtWorkspace(ctx context.Context, orgID string, provider store.Provider) bool {
 	if !s.Enabled() || orgID == "" {
 		return false
 	}
-	_, err := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, store.LevelWorkspace, "")
+	_, err := s.store.GetIntegration(ctx, orgID, provider, store.LevelWorkspace, "")
 	return err == nil
 }
 

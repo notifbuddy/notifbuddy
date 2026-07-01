@@ -317,10 +317,10 @@
 				<SiLinear class="size-6" />
 			</div>
 			<div class="flex flex-col gap-1">
-				<p class="font-medium">Connect Linear to configure channel rules</p>
+				<p class="font-medium">Connect Linear and Slack to configure channel rules</p>
 				<p class="text-muted-foreground max-w-md text-sm">
-					Channel creation rules become available once Linear is connected at the workspace level
-					for your organization.
+					These rules create Slack channels from Linear issues, so both Linear and Slack must be
+					connected at the workspace level for your organization.
 				</p>
 			</div>
 			<Button href="/settings/integrations/workspace">
