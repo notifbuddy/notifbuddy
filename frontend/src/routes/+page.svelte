@@ -104,8 +104,8 @@
 		</p>
 	</div>
 
-	<div class="grid auto-rows-min gap-4 md:grid-cols-2 xl:grid-cols-3">
-		<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
+	<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
+	<div class="mt-2 w-full max-w-4xl">
 		<LinearSettings />
 	</div>
 {:else}
