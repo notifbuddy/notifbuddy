@@ -130,6 +130,9 @@
 	}
 	html {
 		@apply font-sans;
+		/* Always reserve the scrollbar gutter so the content width doesn't jump
+		   when a scrollbar appears (e.g. after content loads / on navigation). */
+		scrollbar-gutter: stable;
 	}
 	html.dark {
 		color-scheme: dark;
