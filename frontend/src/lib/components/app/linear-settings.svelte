@@ -229,8 +229,11 @@
 					</Field.Field>
 				</Field.FieldGroup>
 
-				<!-- Test tool -->
-				<div class="bg-muted/50 flex h-fit flex-col gap-3 rounded-lg border p-4 lg:sticky lg:top-4">
+				<!-- Test tool: a peer region, divided from the form by a rule rather than
+				     boxed in its own card (no card-in-card). -->
+				<div
+					class="flex h-fit flex-col gap-3 lg:sticky lg:top-4 lg:border-l lg:pl-8"
+				>
 					<div class="flex flex-col gap-0.5">
 						<span class="text-sm font-medium">Test against an event</span>
 						<p class="text-muted-foreground text-xs">
@@ -253,19 +256,13 @@
 						class="min-h-24 font-mono text-xs"
 						placeholder={'Or paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
 					/>
-					<Button
-						size="sm"
-						variant="outline"
-						class="w-fit"
-						onclick={doTest}
-						disabled={testing}
-					>
+					<Button size="sm" variant="outline" class="w-fit" onclick={doTest} disabled={testing}>
 						{#if testing}<LoaderIcon class="animate-spin" />{:else}<PlayIcon />{/if}
 						Run test
 					</Button>
 
 					{#if testResult}
-						<div class="bg-background flex flex-col gap-2 rounded-md border p-3 text-sm">
+						<div class="flex flex-col gap-2 border-t pt-3 text-sm">
 							{#if testResult.error}
 								<p class="text-destructive font-mono text-xs">{testResult.error}</p>
 							{:else}
