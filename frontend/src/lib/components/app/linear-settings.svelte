@@ -148,18 +148,17 @@
 								On issue status
 							</ToggleGroup.Item>
 						</ToggleGroup.Root>
-						{#if creationMode === 'status'}
-							<Input
-								id="trigger-status"
-								bind:value={triggerStatus}
-								placeholder="In Progress"
-								class="mt-1"
-							/>
+					</Field.Field>
+
+					{#if creationMode === 'status'}
+						<Field.Field>
+							<Field.FieldLabel for="trigger-status">Trigger status</Field.FieldLabel>
+							<Input id="trigger-status" bind:value={triggerStatus} placeholder="In Progress" />
 							<Field.FieldDescription>
 								The Linear workflow state name that triggers creation.
 							</Field.FieldDescription>
-						{/if}
-					</Field.Field>
+						</Field.Field>
+					{/if}
 
 					<Field.FieldSeparator />
 
