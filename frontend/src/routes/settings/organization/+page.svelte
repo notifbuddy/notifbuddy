@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { Badge } from '$lib/components/ui/badge';
@@ -68,56 +69,62 @@
 	</div>
 
 	<!-- Members -->
-	<section class="flex flex-col gap-3">
-		<h2 class="text-sm font-medium">Members</h2>
-		{#if members === undefined}
-			<div class="flex flex-col gap-1">
-				{#each [0, 1, 2] as i (i)}
-					<div class="flex items-center gap-3 py-2">
-						<Skeleton class="size-9 shrink-0 rounded-full" />
-						<div class="flex flex-1 flex-col gap-2">
-							<Skeleton class="h-4 w-40" />
-							<Skeleton class="h-3.5 w-56 max-w-full" />
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-base">Members</Card.Title>
+		</Card.Header>
+		<Card.Content>
+			{#if members === undefined}
+				<div class="flex flex-col divide-y">
+					{#each [0, 1, 2] as i (i)}
+						<div class="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+							<Skeleton class="size-9 shrink-0 rounded-full" />
+							<div class="flex flex-1 flex-col gap-2">
+								<Skeleton class="h-4 w-40" />
+								<Skeleton class="h-3.5 w-56 max-w-full" />
+							</div>
+							<Skeleton class="h-5 w-16 shrink-0" />
 						</div>
-						<Skeleton class="h-5 w-16 shrink-0" />
-					</div>
-				{/each}
-			</div>
-		{:else if members === null}
-			<p class="text-destructive text-sm">Couldn't load members. Please sign in again.</p>
-		{:else if members.length === 0}
-			<p class="text-muted-foreground text-sm">No members yet.</p>
-		{:else}
-			<div class="flex flex-col gap-1">
-				{#each members as m (m.id)}
-					<div class="flex items-center gap-3 py-2">
-						<Avatar.Root class="size-9">
-							<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
-								{memberInitials(m)}
-							</Avatar.Fallback>
-						</Avatar.Root>
-						<div class="flex min-w-0 flex-1 flex-col">
-							<span class="flex items-center gap-2 truncate font-medium">
-								{memberName(m)}
-								{#if m.userId === user?.id}<span class="text-muted-foreground text-xs font-normal">(you)</span>{/if}
-							</span>
-							<span class="text-muted-foreground truncate text-sm">{m.email}</span>
+					{/each}
+				</div>
+			{:else if members === null}
+				<p class="text-destructive text-sm">Couldn't load members. Please sign in again.</p>
+			{:else if members.length === 0}
+				<p class="text-muted-foreground text-sm">No members yet.</p>
+			{:else}
+				<div class="flex flex-col divide-y">
+					{#each members as m (m.id)}
+						<div class="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+							<Avatar.Root class="size-9">
+								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
+									{memberInitials(m)}
+								</Avatar.Fallback>
+							</Avatar.Root>
+							<div class="flex min-w-0 flex-1 flex-col">
+								<span class="flex items-center gap-2 truncate font-medium">
+									{memberName(m)}
+									{#if m.userId === user?.id}<span class="text-muted-foreground text-xs font-normal">(you)</span>{/if}
+								</span>
+								<span class="text-muted-foreground truncate text-sm">{m.email}</span>
+							</div>
+							{#if m.role}
+								<Badge variant="secondary" class="shrink-0">{m.role}</Badge>
+							{/if}
 						</div>
-						{#if m.role}
-							<Badge variant="secondary" class="shrink-0">{m.role}</Badge>
-						{/if}
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</section>
+					{/each}
+				</div>
+			{/if}
+		</Card.Content>
+	</Card.Root>
 
 	<!-- Invitations -->
-	<section class="flex flex-col gap-3">
-		<h2 class="text-sm font-medium">Invitations</h2>
-
-		<!-- Invite form -->
-		<div class="flex flex-col gap-2">
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-base">Invitations</Card.Title>
+			<Card.Description>Invite teammates to {org?.name ?? 'your organization'}.</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
+			<!-- Invite form -->
 			<form class="flex flex-col gap-2 sm:flex-row" onsubmit={invite}>
 				<Input
 					class="flex-1"
@@ -145,13 +152,12 @@
 				</Button>
 			</form>
 			{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
-		</div>
 
-		<!-- Invitations list -->
+			<!-- Invitations list -->
 		{#if invitations === undefined}
-			<div class="flex flex-col gap-1">
+			<div class="flex flex-col divide-y border-t">
 				{#each [0, 1] as i (i)}
-					<div class="flex items-center justify-between gap-3 py-2">
+					<div class="flex items-center justify-between gap-3 py-3">
 						<div class="flex items-center gap-3">
 							<Skeleton class="size-9 shrink-0 rounded-full" />
 							<Skeleton class="h-4 w-48" />
@@ -165,9 +171,9 @@
 		{:else if invitations.length === 0}
 			<p class="text-muted-foreground text-sm">No invitations sent yet.</p>
 		{:else}
-			<div class="flex flex-col gap-1">
+			<div class="flex flex-col divide-y border-t">
 				{#each invitations as inv (inv.id)}
-					<div class="flex items-center justify-between gap-3 py-2">
+					<div class="flex items-center justify-between gap-3 py-3">
 						<div class="flex min-w-0 items-center gap-3">
 							<div class="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full">
 								<MailIcon class="size-4" />
@@ -179,5 +185,6 @@
 				{/each}
 			</div>
 		{/if}
-	</section>
+		</Card.Content>
+	</Card.Root>
 </div>

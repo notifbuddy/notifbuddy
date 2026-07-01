@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import RefreshIcon from '@lucide/svelte/icons/refresh-cw';
@@ -57,17 +58,17 @@
 
 	{#if events === undefined}
 		<!-- Skeleton mirroring the delivery rows. -->
-		<ul class="flex flex-col gap-1">
+		<Card.Root class="gap-0 divide-y py-0">
 			{#each [0, 1, 2, 3] as i (i)}
-				<li class="flex items-center justify-between gap-3 py-2.5">
+				<div class="flex items-center justify-between gap-3 p-4">
 					<div class="flex items-center gap-2">
 						<Skeleton class="h-5 w-28" />
 						<Skeleton class="h-4 w-16" />
 					</div>
 					<Skeleton class="h-4 w-32 shrink-0" />
-				</li>
+				</div>
 			{/each}
-		</ul>
+		</Card.Root>
 	{:else if events === null}
 		<div class="flex flex-col items-start gap-2">
 			<p class="text-destructive text-sm">Please sign in first.</p>
@@ -78,9 +79,9 @@
 			No webhooks received yet. Once Linear delivers events for your workspace, they'll appear here.
 		</p>
 	{:else}
-		<ul class="flex flex-col gap-1">
+		<Card.Root class="gap-0 divide-y py-0">
 			{#each events as e (e.deliveryId)}
-				<li class="py-2.5">
+				<div class="p-4">
 					<button
 						class="flex w-full items-center justify-between gap-3 text-left"
 						onclick={() => toggle(e.deliveryId)}
@@ -102,9 +103,9 @@
 								class="bg-muted max-h-80 overflow-auto rounded-md p-3 text-xs">{pretty(e.payload)}</pre>
 						</div>
 					{/if}
-				</li>
+				</div>
 			{/each}
-		</ul>
+		</Card.Root>
 	{/if}
 
 	<div>
