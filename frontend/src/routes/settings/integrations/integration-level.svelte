@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Badge } from '$lib/components/ui/badge';
@@ -60,9 +61,9 @@
 
 {#if intg === undefined}
 	<!-- Skeleton mirroring the connection list. -->
-	<div class="flex flex-col gap-2">
+	<Card.Root class="gap-0 divide-y py-0">
 		{#each [0, 1] as i (i)}
-			<div class="flex flex-wrap items-center gap-4 py-2">
+			<div class="flex flex-wrap items-center gap-4 p-4">
 				<Skeleton class="size-5 shrink-0 rounded-md" />
 				<div class="flex min-w-0 flex-1 flex-col gap-2">
 					<div class="flex items-center gap-2">
@@ -77,7 +78,7 @@
 				</div>
 			</div>
 		{/each}
-	</div>
+	</Card.Root>
 {:else if intg === null}
 	<div class="flex flex-col items-start gap-2">
 		<p class="text-destructive text-sm">Please sign in first.</p>
@@ -87,12 +88,12 @@
 	<p class="text-muted-foreground text-sm">Integrations aren't configured on the server yet.</p>
 {:else}
 	<Tooltip.Provider delayDuration={200}>
-		<div class="flex flex-col gap-2">
+		<Card.Root class="gap-0 divide-y py-0">
 			{#each PROVIDERS as p (p.key)}
 				{@const s = statusOf(intg, p.key, level)}
 				{@const Icon = icon(p.key)}
 				{@const hooks = webhooksHref(p.key)}
-				<div class="flex flex-wrap items-center gap-4 py-2">
+				<div class="flex flex-wrap items-center gap-4 p-4">
 					<Icon class="size-5 shrink-0" />
 					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
 						<div class="flex items-center gap-2">
@@ -194,6 +195,6 @@
 					</div>
 				</div>
 			{/each}
-		</div>
+		</Card.Root>
 	</Tooltip.Provider>
 {/if}
