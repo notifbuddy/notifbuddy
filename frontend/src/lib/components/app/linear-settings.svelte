@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
+	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import { SiLinear } from '@icons-pack/svelte-simple-icons';
@@ -41,6 +42,11 @@
 	let pastedEvent = $state('');
 	let testing = $state(false);
 	let testResult = $state<TemplateTestResult | null>(null);
+
+	// Label shown in the Select trigger for the chosen sample event.
+	const sampleLabel = $derived(
+		ctx?.sampleEvents.find((s) => s.id === sampleId)?.label ?? 'Select a sample event'
+	);
 
 	async function load() {
 		loading = true;
@@ -92,8 +98,6 @@
 		testing = false;
 	}
 
-	const selectCls =
-		'border-input bg-background ring-offset-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-2 focus-visible:outline-none';
 	const textareaCls =
 		'border-input bg-background ring-offset-background focus-visible:ring-ring min-h-20 w-full rounded-md border px-3 py-2 font-mono text-xs shadow-xs focus-visible:ring-2 focus-visible:outline-none';
 </script>
@@ -206,11 +210,16 @@
 					Pick a sample event or paste a raw event to validate your template + condition.
 				</p>
 				<div class="mt-2 flex flex-col gap-2">
-					<select bind:value={sampleId} class={selectCls} disabled={!!pastedEvent.trim()}>
-						{#each ctx.sampleEvents as s (s.id)}
-							<option value={s.id}>{s.label}</option>
-						{/each}
-					</select>
+					<Select.Root type="single" bind:value={sampleId} disabled={!!pastedEvent.trim()}>
+						<Select.Trigger class="w-full">{sampleLabel}</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each ctx.sampleEvents as s (s.id)}
+									<Select.Item value={s.id} label={s.label}>{s.label}</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 					<textarea
 						bind:value={pastedEvent}
 						class={textareaCls}

@@ -126,6 +126,10 @@ type SlackConfig struct {
 	UserScopes []string `yaml:"user_scopes"`
 	// CallbackURL is where Slack redirects after authorize.
 	CallbackURL string `yaml:"callback_url"`
+	// SigningSecret verifies inbound Slack Events API requests (the
+	// X-Slack-Signature v0 HMAC over the raw body). SECRET — env ref. Empty
+	// disables verification (and thus the Slack → Linear sync direction).
+	SigningSecret string `yaml:"signing_secret"`
 }
 
 type LinearConfig struct {

@@ -2,21 +2,11 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import SendIcon from '@lucide/svelte/icons/send';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
-	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
-	import PlugIcon from '@lucide/svelte/icons/plug';
 	import { api } from '$lib/api/client';
 	import { userStore, signIn, type User, type Organization as Org } from '$lib/user.svelte';
-	import {
-		fetchIntegrationStatus,
-		statusOf,
-		type IntegrationState
-	} from '$lib/integrations';
 	import LinearSettings from '$lib/components/app/linear-settings.svelte';
-
-	type Invitation = { id: string; email: string; state: string; expiresAt?: string };
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
@@ -38,21 +28,6 @@
 	let selectingOrgId = $state<string | null>(null);
 	let selectOrgError = $state<string | null>(null);
 
-	// ---- Ping ----
-	let pinging = $state(false);
-	let result = $state<string | null>(null);
-	let error = $state<string | null>(null);
-
-	// ---- Invitations ----
-	let inviteEmail = $state('');
-	let inviteRole = $state('');
-	let inviting = $state(false);
-	let inviteMsg = $state<string | null>(null);
-	let invitations = $state<Invitation[]>([]);
-
-	// ---- Integrations summary ----
-	let integrations = $state<IntegrationState | null>(null);
-
 	// Boot: pick the right entry path. If a step is in progress there's no session
 	// yet, so we don't call /me.
 	if (startInSelectOrg) {
@@ -62,15 +37,7 @@
 	}
 
 	async function loadUser() {
-		const u = await userStore.load();
-		if (u) {
-			loadInvitations();
-			loadIntegrations();
-		}
-	}
-
-	async function loadIntegrations() {
-		integrations = await fetchIntegrationStatus();
+		await userStore.load();
 	}
 
 	async function loadPendingOrgs() {
@@ -120,51 +87,9 @@
 		needsSelectOrg = false;
 		userStore.user = u;
 		history.replaceState(null, '', window.location.pathname);
-		loadInvitations();
-		loadIntegrations();
-	}
-
-	async function ping() {
-		pinging = true;
-		result = null;
-		error = null;
-		const { data, error: reqError } = await api.GET('/ping');
-		pinging = false;
-		if (reqError || !data) {
-			error = 'Request failed — you may need to sign in again.';
-			userStore.user = null;
-			return;
-		}
-		result = data.message;
-	}
-
-	async function loadInvitations() {
-		const { data } = await api.GET('/invitations');
-		invitations = data ? ((data.invitations ?? []) as Invitation[]) : [];
-	}
-
-	async function sendInvite(e: SubmitEvent) {
-		e.preventDefault();
-		inviting = true;
-		inviteMsg = null;
-		const { data, error: reqError } = await api.POST('/invitations', {
-			body: { email: inviteEmail.trim(), ...(inviteRole.trim() ? { role: inviteRole.trim() } : {}) }
-		});
-		inviting = false;
-		if (reqError || !data) {
-			inviteMsg = 'Could not send the invitation.';
-			return;
-		}
-		inviteMsg = `Invited ${data.email}.`;
-		inviteEmail = '';
-		inviteRole = '';
-		loadInvitations();
 	}
 
 	const activeOrg = $derived(userStore.activeOrg);
-
-	const ghConnected = $derived(!!statusOf(integrations, 'github')?.connected);
-	const slackConnected = $derived(!!statusOf(integrations, 'slack')?.connected);
 </script>
 
 {#if user}
@@ -180,99 +105,8 @@
 	</div>
 
 	<div class="grid auto-rows-min gap-4 md:grid-cols-2 xl:grid-cols-3">
-		<!-- Ping card. -->
-		<Card.Root>
-			<Card.Header>
-				<Card.Title class="text-base">Ping / Pong</Card.Title>
-				<Card.Description><code>GET /ping</code> is authenticated with your session.</Card.Description>
-			</Card.Header>
-			<Card.Content class="flex flex-col gap-3">
-				<Button onclick={ping} disabled={pinging}>
-					{#if pinging}
-						<LoaderIcon data-icon="inline-start" class="animate-spin" />
-						Pinging…
-					{:else}
-						<SendIcon data-icon="inline-start" />
-						Send ping
-					{/if}
-				</Button>
-				{#if result}
-					<p class="text-sm">Server replied: <span class="text-primary font-semibold">{result}</span></p>
-				{:else if error}
-					<p class="text-destructive text-sm">{error}</p>
-				{/if}
-			</Card.Content>
-		</Card.Root>
-
-		<!-- Integrations summary card. -->
-		{#if integrations && integrations.configured}
-			<Card.Root>
-				<Card.Header>
-					<Card.Title class="flex items-center gap-2 text-base">
-						<PlugIcon class="size-4" /> Integrations
-					</Card.Title>
-					<Card.Description>
-						GitHub: <span class="text-foreground">{ghConnected ? 'connected' : 'not connected'}</span>
-						· Slack: <span class="text-foreground">{slackConnected ? 'connected' : 'not connected'}</span>
-					</Card.Description>
-				</Card.Header>
-				<Card.Content>
-					<Button variant="outline" size="sm" href="/settings/integrations">Manage integrations</Button>
-				</Card.Content>
-			</Card.Root>
-		{/if}
-
 		<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
 		<LinearSettings />
-
-		<!-- Invite teammate card. -->
-		{#if user.organizationId}
-			<Card.Root>
-				<Card.Header>
-					<Card.Title class="text-base">Invite a teammate</Card.Title>
-					<Card.Description>Add someone to {activeOrg?.name ?? 'your organization'}.</Card.Description>
-				</Card.Header>
-				<Card.Content class="flex flex-col gap-2">
-					<form class="flex flex-col gap-2" onsubmit={sendInvite}>
-						<input
-							class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-							type="email"
-							placeholder="teammate@example.com"
-							bind:value={inviteEmail}
-							disabled={inviting}
-							required
-						/>
-						<input
-							class="border-input bg-background focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-							type="text"
-							placeholder="role slug (optional, e.g. member)"
-							bind:value={inviteRole}
-							disabled={inviting}
-						/>
-						<Button type="submit" variant="secondary" disabled={inviting || inviteEmail.trim() === ''}>
-							{#if inviting}
-								<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								Sending…
-							{:else}
-								<UserPlusIcon data-icon="inline-start" />
-								Send invite
-							{/if}
-						</Button>
-					</form>
-					{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
-					{#if invitations.length > 0}
-						<ul class="text-muted-foreground mt-1 flex flex-col gap-1 text-xs">
-							{#each invitations as inv (inv.id)}
-								<li class="flex justify-between gap-2">
-									<span class="truncate">{inv.email}</span>
-									<span class="shrink-0">{inv.state}</span>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</Card.Content>
-			</Card.Root>
-		{/if}
 	</div>
 {:else}
 	<!-- Signed out / mid-login: centered login card (rendered bare, no app shell). -->

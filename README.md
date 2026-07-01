@@ -25,6 +25,21 @@ connections.
 To do the two way sync, we need oauth logins to act as user across the apps. Every user needs to connect 
 github, linear and slack accounts so we can replicate the messages.
 
+#### Linear workspace settings
+
+Only available when linear workspace is connected to notifbuddy. We support the following for linear -
+
+- Create slack channel on linear issue status (enum drop down of status) or keep channel creation manual. on manual
+  users have to @notifbuddy create a channel for this.
+- Support github template for naming the channels. For test, we need to give sample event data that will be used for
+  channel creation so guess work is limited. Test should be possible via real world data as well. This can be use to
+  quickly validate changes or create channels for existing tickets when user first onboards. We'll forward the complete
+  event that we use for conditional for example, the event will be { event_type: "linear", linear: raw_event }. 
+- Configurable conditional on channel creation using similar github template, this must evaluate to a true condition.
+  validation is extremely important here to verify the changes so a test against sample events would be pretty nice.
+- Auto add bots feature, accept a list of bots to automatically add them on channel creation. Bots like claude, linear,
+  etc. can be added by this.
+
 ## Stack
 
 | Layer        | Tech                                                           |
@@ -289,6 +304,76 @@ Select the backend with `pubsub.provider` in `config.yaml`. The
 (event type, action, time) with expandable payloads, served by the spec-driven
 `GET /integrations/github/webhooks`.
 
+## Bidirectional sync (Slack ↔ Linear)
+
+Beyond storing webhooks, xolo runs a **sync engine** (`internal/sync`) that keeps
+a Slack channel and a Linear issue in step — one channel per issue, comments
+mirrored both ways (including threaded replies). It is event-driven: it
+*subscribes* to the ingestion topics and *publishes* a processing topic per
+action it takes.
+
+```
+Linear webhook ─▶ HandleLinearWebhook ─ store ─ publish integrations.linear.webhook_event
+                                                          │
+                                                          ▼ Engine.OnLinearEvent
+   Defense 1: drop if the event was authored by our app (data.botActor present)
+   ├─ Issue reached the trigger status ─▶ create channel (name template + condition),
+   │     auto-add bots ─▶ fire sync.slack.channel.created / sync.slack.bots.added
+   └─ Comment created ─▶ post into the issue's channel AS the bot, showing the
+         author's name+avatar (chat:write.customize) ─▶ fire sync.slack.message.posted
+
+Slack event ─▶ HandleSlackWebhook ─ verify signature ─ store ─ publish integrations.slack.webhook_event
+                                                          │
+                                                          ▼ Engine.OnSlackEvent
+   Defense 1: drop the bot's own messages (bot_id / subtype set)
+   └─ Message in a synced channel ─▶ commentCreate on the issue with actor=app +
+         createAsUser + displayIconUrl (author's name+avatar) ─▶ fire sync.linear.comment.posted
+```
+
+**Attribution (why our writes are safe to ignore).** Every mirrored message is
+authored by our **bot/app**, but *displays* the real person:
+
+- Slack: `chat.postMessage` as the bot with `username` + `icon_url` overrides
+  (the `chat:write.customize` scope). The message shows the person's name/avatar
+  with a small **APP** tag.
+- Linear: `commentCreate` with `actor=app` plus `createAsUser` + `displayIconUrl`
+  (only available to `actor=app` OAuth tokens). The comment renders as
+  *"Name (via NotifBuddy)"*.
+
+**Loop prevention is a single rule (Defense 1).** Because our writes are always
+bot/app-authored, their echo arrives tagged as such — a Linear webhook carries a
+`data.botActor`, a Slack event carries a `bot_id`/subtype — and the engine drops
+it before mirroring it back. That one check breaks the Linear→Slack→Linear cycle
+in both directions; there is deliberately no separate "message links" anti-loop
+table.
+
+**Routing map (not a loop defense).** Two small tables place messages correctly:
+`issue_channels` (the one channel per issue) and `mirrored_messages` (each
+mirrored comment ↔ its counterpart, with the thread root's counterpart so a
+reply on one side lands under the right parent on the other). These are read to
+route and to thread; they are not used to prevent loops.
+
+**Processing topics (fire an event per action).** Every action publishes a
+best-effort notification after it succeeds — `sync.slack.channel.created`,
+`sync.slack.channel.closed`, `sync.slack.channel.deleted`,
+`sync.slack.bots.added`, `sync.slack.message.posted`,
+`sync.linear.comment.posted`. In dev the memory bus logs them; in production they
+feed the same SNS seam as the ingestion topics (and, later, user-defined
+webhooks). Publishing failures are logged, never fatal — the action already
+happened.
+
+**Channel creation is settings-driven.** The engine reuses the org's Linear
+settings (`internal/store/linear_settings.go`): `creation_mode` (`status` vs
+`manual`), the trigger status, the name template and creation condition (both
+GitHub-Actions expressions evaluated against the forwarded event via
+`internal/template`), and the auto-add-bots list. In `manual` mode a channel is
+created only when someone comments **@notifbuddy create channel** — the comment
+body is classified by `internal/intent` (Cloudflare Workers AI) into
+create/close.
+
+The engine only runs on the in-memory pubsub backend (it subscribes in-process);
+the SNS path is consumed by a separate worker, which is not built here.
+
 ### Dashboard prerequisites for integrations
 
 - **GitHub App** ([create one](https://github.com/settings/apps/new)): set the
@@ -332,13 +417,19 @@ oauth_config:
       - reactions:write
       - chat:write
       - chat:write.public
+      - chat:write.customize   # post as the bot but show a per-message name/avatar (attribution)
       - im:history
       - im:read
       - im:write
       - users:read
+      - users:read.email        # resolve a comment author's Slack identity for attribution
       - reactions:read
       - emoji:read
 settings:
+  event_subscriptions:
+    request_url: https://localhost:8080/integrations/slack/webhook
+    bot_events:
+      - message.channels        # inbound channel messages drive the Slack → Linear sync
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
@@ -349,6 +440,16 @@ settings:
   resolve in local dev, either run the backend behind a tunnel (ngrok) and use
   that https URL here and in `slack.callback_url`, or terminate TLS in front of
   `:8080`. Plain `http://localhost` works for GitHub but **not** Slack.
+
+  For the **Slack → Linear** sync direction, enable **Event Subscriptions** on
+  the app (Request URL `…/integrations/slack/webhook`, bot event
+  `message.channels`) and copy the app's **Signing Secret** (Basic Information)
+  into `.env` as `SLACK_SIGNING_SECRET`. Inbound events are verified against it
+  (`X-Slack-Signature`, with a ±5-minute timestamp check); an empty secret
+  disables verification and thus the Slack → Linear direction. The manifest above
+  already declares the event subscription. The `chat:write.customize` and
+  `users:read.email` scopes power native message attribution (see
+  [Bidirectional sync](#bidirectional-sync-slack--linear)).
 - **Linear OAuth app**: in Linear go to **Settings → API → OAuth applications →
   Create**. Set the **redirect URL** to
   `http://localhost:8080/integrations/linear/callback` (must match
@@ -413,6 +514,7 @@ app:
 | `slack.client_id`              | `SLACK_CLIENT_ID`              |           | Slack app client id                                  |
 | `slack.client_secret`          | `SLACK_CLIENT_SECRET`          | ✅        | Slack app client secret                              |
 | `slack.scopes`                 | —                              |           | Requested bot scopes (space/comma separated)         |
+| `slack.signing_secret`         | `SLACK_SIGNING_SECRET`         | ✅        | Verifies inbound Slack Events API requests (empty disables the Slack → Linear sync) |
 | `linear.client_id`             | `LINEAR_CLIENT_ID`             |           | Linear OAuth app client id                           |
 | `linear.client_secret`         | `LINEAR_CLIENT_SECRET`         | ✅        | Linear OAuth app client secret                       |
 | `linear.scopes`                | —                              |           | Requested OAuth scopes (default: read, write)        |

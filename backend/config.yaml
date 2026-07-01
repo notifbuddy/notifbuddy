@@ -67,10 +67,12 @@ slack:
     - reactions:write
     - chat:write
     - chat:write.public
+    - chat:write.customize # post as the bot but display a per-message name/avatar (attribution)
     - im:history
     - im:read
     - im:write
     - users:read
+    - users:read.email # resolve a comment author's Slack identity for attribution
     - reactions:read
     - emoji:read
   # User-level connection: user-token scopes (the xoxp token under authed_user),
@@ -79,6 +81,9 @@ slack:
     - chat:write
     - channels:write
   callback_url: "http://localhost:8080/integrations/slack/callback"
+  # Verifies inbound Slack Events API requests (X-Slack-Signature). SECRET.
+  # Empty disables verification (and the Slack → Linear sync direction).
+  signing_secret: "${SLACK_SIGNING_SECRET}"
 
 linear:
   client_id: "c7a330b6ba19f5ba1489ef509fa10516" # Linear OAuth application client id (public; may be inlined)

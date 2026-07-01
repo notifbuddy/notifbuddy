@@ -16,8 +16,11 @@ import (
 	"xolo/backend/internal/crypto"
 	"xolo/backend/internal/httpapi"
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/intent"
 	"xolo/backend/internal/pubsub"
+	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
+	syncengine "xolo/backend/internal/sync"
 )
 
 func main() {
@@ -64,14 +67,27 @@ func main() {
 	authSvc := auth.New(cfg)
 
 	// Pub/sub: provider-agnostic publisher for integration events. Local dev uses
-	// an in-memory bus (with a logging subscriber so published events are
-	// visible); production selects SNS. Callers only see pubsub.Publisher.
-	publisher := buildPublisher(cfg)
+	// an in-memory bus; production selects SNS. Callers only see pubsub.Publisher.
+	// When the backend is the in-memory bus we also keep the concrete *MemoryBus
+	// so the sync engine can subscribe to the ingestion + processing topics.
+	publisher, bus := buildPublisher(cfg)
 
-	// Integrations (GitHub/Slack): reads the caller's org/user from the session
-	// via auth.OrgUserFromRequest. Runs with a nil store when no DB is configured
-	// (Enabled() == false), in which case the endpoints report "not configured".
+	// Integrations (GitHub/Slack/Linear): reads the caller's org/user from the
+	// session via auth.OrgUserFromRequest. Runs with a nil store when no DB is
+	// configured (Enabled() == false), reporting "not configured".
 	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
+
+	// Sync engine: subscribes to the Linear/Slack ingestion topics and performs
+	// the bidirectional sync (channel creation, comment mirroring). Only wired
+	// when there is a store and an in-memory bus to subscribe on; the SNS path
+	// consumes via a separate worker (not built here).
+	if st != nil && bus != nil {
+		classifier := intent.NewCloudflareClassifier(cfg.Cloudflare)
+		engine := syncengine.New(st, slackapi.New(), intgSvc, classifier, publisher)
+		bus.Subscribe(integrations.LinearWebhookTopic, engine.OnLinearEvent)
+		bus.Subscribe(integrations.SlackWebhookTopic, engine.OnSlackEvent)
+		log.Printf("sync engine subscribed to linear + slack ingestion topics")
+	}
 
 	// API handler (implements the ogen interface) + the generated server.
 	apiHandler := httpapi.New(authSvc, intgSvc)
@@ -95,6 +111,7 @@ func main() {
 	mux.HandleFunc("POST /integrations/github/webhook", intgSvc.HandleGitHubWebhook)
 	mux.HandleFunc("GET /integrations/slack/connect", intgSvc.HandleSlackConnect)
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
+	mux.HandleFunc("POST /integrations/slack/webhook", intgSvc.HandleSlackWebhook)
 	mux.HandleFunc("GET /integrations/linear/connect", intgSvc.HandleLinearConnect)
 	mux.HandleFunc("GET /integrations/linear/callback", intgSvc.HandleLinearCallback)
 	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
@@ -134,28 +151,36 @@ func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, e
 }
 
 // buildPublisher constructs the pub/sub Publisher from config. "memory" builds
-// an in-process bus and registers a logging subscriber on the GitHub webhook
-// topic so published events are visible in dev. "sns" needs an AWS SNS client
-// wired into pubsub.NewSNSPublisher — until then it falls back to Nop with a
-// warning so the app still runs.
-func buildPublisher(cfg config.Config) pubsub.Publisher {
+// an in-process bus and registers a logging subscriber on the webhook + sync
+// topics so published events are visible in dev; it returns the concrete
+// *MemoryBus too so callers (the sync engine) can subscribe. "sns" needs an AWS
+// SNS client wired into pubsub.NewSNSPublisher — until then it falls back to Nop
+// with a warning so the app still runs (and returns a nil bus).
+func buildPublisher(cfg config.Config) (pubsub.Publisher, *pubsub.MemoryBus) {
 	switch cfg.PubSub.Provider {
 	case "", "memory":
 		bus := pubsub.NewMemoryBus()
-		bus.Subscribe(integrations.GitHubWebhookTopic, func(_ context.Context, msg pubsub.Message) {
+		logSub := func(_ context.Context, msg pubsub.Message) {
 			log.Printf("pubsub(memory): %s %s", msg.Topic, string(msg.Payload))
-		})
-		return bus
+		}
+		for _, topic := range append([]string{
+			integrations.GitHubWebhookTopic,
+			integrations.LinearWebhookTopic,
+			integrations.SlackWebhookTopic,
+		}, syncengine.AllTopics...) {
+			bus.Subscribe(topic, logSub)
+		}
+		return bus, bus
 	case "sns":
 		// Wire your AWS SNS client here, e.g.:
 		//   client := awssns.New(...)
 		//   resolver := func(string) (string, bool) { return cfg.PubSub.SNSTopicARN, cfg.PubSub.SNSTopicARN != "" }
 		//   pub, err := pubsub.NewSNSPublisher(client, resolver)
 		log.Printf("warning: pubsub.provider=sns but no SNS client is wired — publishing disabled (Nop). See buildPublisher.")
-		return pubsub.Nop
+		return pubsub.Nop, nil
 	default:
 		log.Printf("warning: unknown pubsub.provider %q — publishing disabled (Nop)", cfg.PubSub.Provider)
-		return pubsub.Nop
+		return pubsub.Nop, nil
 	}
 }
 

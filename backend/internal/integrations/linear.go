@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -195,6 +196,150 @@ func (s *Service) linearWorkspace(ctx context.Context, token string) (id, name s
 		return "", ""
 	}
 	return body.Data.Organization.ID, body.Data.Organization.Name
+}
+
+// LinearComment is the created comment returned by LinearCreateComment.
+type LinearComment struct {
+	ID string
+}
+
+// LinearCreateCommentInput describes a comment to create on a Linear issue.
+// CreateAsUser + DisplayIconURL render the comment as "<name> (via <app>)" —
+// native attribution available only to actor=app OAuth tokens (which is how the
+// workspace Linear integration is installed). ParentID, when set, makes this a
+// threaded reply under that comment.
+type LinearCreateCommentInput struct {
+	IssueID        string
+	Body           string
+	ParentID       string
+	CreateAsUser   string
+	DisplayIconURL string
+}
+
+// LinearCreateComment posts a comment via the commentCreate GraphQL mutation
+// using the org's workspace token. The attribution fields (createAsUser,
+// displayIconUrl) only take effect for actor=app tokens; Linear ignores them
+// otherwise rather than erroring.
+func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in LinearCreateCommentInput) (LinearComment, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return LinearComment{}, err
+	}
+	const mutation = `mutation($input: CommentCreateInput!) {
+		commentCreate(input: $input) { success comment { id } }
+	}`
+	input := map[string]any{
+		"issueId": in.IssueID,
+		"body":    in.Body,
+	}
+	if in.ParentID != "" {
+		input["parentId"] = in.ParentID
+	}
+	if in.CreateAsUser != "" {
+		input["createAsUser"] = in.CreateAsUser
+	}
+	if in.DisplayIconURL != "" {
+		input["displayIconUrl"] = in.DisplayIconURL
+	}
+	var resp struct {
+		Data struct {
+			CommentCreate struct {
+				Success bool `json:"success"`
+				Comment struct {
+					ID string `json:"id"`
+				} `json:"comment"`
+			} `json:"commentCreate"`
+		} `json:"data"`
+	}
+	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"input": input}, &resp); err != nil {
+		return LinearComment{}, err
+	}
+	if !resp.Data.CommentCreate.Success {
+		return LinearComment{}, fmt.Errorf("integrations: linear commentCreate returned success=false")
+	}
+	return LinearComment{ID: resp.Data.CommentCreate.Comment.ID}, nil
+}
+
+// LinearIssue is the subset of a Linear issue the sync engine needs (for
+// channel naming/status checks).
+type LinearIssue struct {
+	ID         string
+	Identifier string // e.g. "SKO-178"
+	Title      string
+	StateName  string // workflow state name (e.g. "Done")
+}
+
+// LinearIssueByID fetches an issue by id using the org's workspace token.
+func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (LinearIssue, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return LinearIssue{}, err
+	}
+	const query = `query($id: String!) {
+		issue(id: $id) { id identifier title state { name } }
+	}`
+	var resp struct {
+		Data struct {
+			Issue struct {
+				ID         string `json:"id"`
+				Identifier string `json:"identifier"`
+				Title      string `json:"title"`
+				State      struct {
+					Name string `json:"name"`
+				} `json:"state"`
+			} `json:"issue"`
+		} `json:"data"`
+	}
+	if err := s.linearGraphQL(ctx, token, query, map[string]any{"id": issueID}, &resp); err != nil {
+		return LinearIssue{}, err
+	}
+	i := resp.Data.Issue
+	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name}, nil
+}
+
+// linearGraphQL executes a GraphQL query/mutation against Linear's API with the
+// given token and decodes the JSON response into out. It surfaces transport,
+// HTTP-status, and GraphQL-level errors. Kept unexported: callers use the typed
+// helpers above rather than issuing raw GraphQL.
+func (s *Service) linearGraphQL(ctx context.Context, token, query string, variables map[string]any, out any) error {
+	reqBody, err := json.Marshal(map[string]any{"query": query, "variables": variables})
+	if err != nil {
+		return fmt.Errorf("integrations: marshal linear request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.linear.app/graphql", bytes.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("integrations: linear graphql: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("integrations: linear graphql: status %d", resp.StatusCode)
+	}
+	// Decode into a wrapper that also captures top-level GraphQL errors, then
+	// decode the data portion into the caller's out.
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("integrations: linear graphql: read body: %w", err)
+	}
+	var errCheck struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &errCheck); err == nil && len(errCheck.Errors) > 0 {
+		return fmt.Errorf("integrations: linear graphql: %s", errCheck.Errors[0].Message)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("integrations: linear graphql: decode: %w", err)
+	}
+	return nil
 }
 
 // LinearAccessToken returns the decrypted workspace access token for an org's
