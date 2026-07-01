@@ -2532,6 +2532,12 @@ func (s *UserResponse) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.ProfilePictureUrl.Set {
+			e.FieldStart("profilePictureUrl")
+			s.ProfilePictureUrl.Encode(e)
+		}
+	}
+	{
 		if s.OrganizationId.Set {
 			e.FieldStart("organizationId")
 			s.OrganizationId.Encode(e)
@@ -2555,14 +2561,15 @@ func (s *UserResponse) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfUserResponse = [7]string{
+var jsonFieldsNameOfUserResponse = [8]string{
 	0: "id",
 	1: "email",
 	2: "firstName",
 	3: "lastName",
-	4: "organizationId",
-	5: "role",
-	6: "organizations",
+	4: "profilePictureUrl",
+	5: "organizationId",
+	6: "role",
+	7: "organizations",
 }
 
 // Decode decodes UserResponse from json.
@@ -2617,6 +2624,16 @@ func (s *UserResponse) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"lastName\"")
+			}
+		case "profilePictureUrl":
+			if err := func() error {
+				s.ProfilePictureUrl.Reset()
+				if err := s.ProfilePictureUrl.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"profilePictureUrl\"")
 			}
 		case "organizationId":
 			if err := func() error {

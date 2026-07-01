@@ -80,12 +80,13 @@ type HTTPPair struct {
 // organization the current session is scoped to (empty when the user has no
 // active organization).
 type SessionUser struct {
-	ID        string
-	Email     string
-	FirstName string
-	LastName  string
-	OrgID     string
-	Role      string
+	ID                string
+	Email             string
+	FirstName         string
+	LastName          string
+	ProfilePictureURL string // GitHub avatar for GitHub logins; WorkOS captures it at sign-in
+	OrgID             string
+	Role              string
 }
 
 // New builds the WorkOS client from the loaded Config. Secret fields
@@ -680,12 +681,13 @@ func toSessionUser(u *workos.User, orgID, role string) *SessionUser {
 		return nil
 	}
 	return &SessionUser{
-		ID:        u.ID,
-		Email:     u.Email,
-		FirstName: deref(u.FirstName),
-		LastName:  deref(u.LastName),
-		OrgID:     orgID,
-		Role:      role,
+		ID:                u.ID,
+		Email:             u.Email,
+		FirstName:         deref(u.FirstName),
+		LastName:          deref(u.LastName),
+		ProfilePictureURL: deref(u.ProfilePictureURL),
+		OrgID:             orgID,
+		Role:              role,
 	}
 }
 

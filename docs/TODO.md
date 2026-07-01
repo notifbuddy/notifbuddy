@@ -26,6 +26,7 @@ usecase for this though.~~
   (`internal/sync`): status-trigger channel creation, comment mirroring both ways
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
+- Update the login page, it just says Sign in with WorkOS
 - Add settings icon to take to linear, github, etc.'s settings page.
 - Invitation needs rework.
 - Add stripe account and create billing integration.
@@ -44,6 +45,20 @@ usecase for this though.~~
   (llms.txt / llms-full.txt / llms-small.txt); wire SEO (site url, description,
   sitemap, social image); decide deploy target (docs.<domain> subdomain vs /docs proxy).
 
+## Bugs
+
+- The connect button doesn't work properly, workspace connection triggers a user connection flow first and
+  then triggers a workspace connection on the next iteration
+
 Post launch
 - Explore plain integration
 - Explore clearfeed for email <-> slack syncing
+
+Design
+
+- Right side visual on our notifbuddy. Top icons linear, slack, plain <- NotifBuddy icon -> Slack
+  Animate the flow, message from github moves to slack, slack moves to github, linear moves to slack,
+  slack moves to linear.
+- Using 5 different app to communicate with your team? Use notifybuddy and unleash slack's full
+  potential
+- CTA: Unleash Slack's full potential
