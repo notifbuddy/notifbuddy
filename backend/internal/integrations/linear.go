@@ -150,15 +150,21 @@ func (s *Service) linearExchangeCode(ctx context.Context, code string) (*linearA
 	}
 	defer resp.Body.Close()
 
+	// Read the body once so we can surface Linear's error detail on a non-200
+	// (e.g. redirect_uri mismatch, invalid_grant) rather than just the status.
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if readErr != nil {
+		return nil, fmt.Errorf("linear token exchange: read body: %w", readErr)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("linear token exchange: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("linear token exchange: status %d: %s", resp.StatusCode, string(body))
 	}
 	var out linearAccessResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("linear token exchange: decode: %w (body: %s)", err, string(body))
 	}
 	if out.AccessToken == "" {
-		return nil, fmt.Errorf("linear token exchange: empty access token")
+		return nil, fmt.Errorf("linear token exchange: empty access token (body: %s)", string(body))
 	}
 	return &out, nil
 }
