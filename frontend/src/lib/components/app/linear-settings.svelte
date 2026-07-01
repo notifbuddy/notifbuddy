@@ -16,6 +16,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import { SiLinear } from '@icons-pack/svelte-simple-icons';
+	import SlackIcon from '$lib/icons/slack.svelte';
 	import {
 		fetchLinearSettings,
 		saveLinearSettings,
@@ -313,8 +314,15 @@
 	     rules to configure. Point the user to the integrations page to connect. -->
 	<Card.Root>
 		<Card.Content class="flex flex-col items-center gap-4 py-12 text-center">
-			<div class="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-				<SiLinear class="size-6" />
+			<!-- Both integrations are required: Linear (source) + Slack (destination). -->
+			<div class="text-muted-foreground flex items-center gap-2">
+				<div class="bg-muted flex size-12 items-center justify-center rounded-full">
+					<SiLinear class="size-6" />
+				</div>
+				<PlusIcon class="size-4" />
+				<div class="bg-muted flex size-12 items-center justify-center rounded-full">
+					<SlackIcon class="size-6" />
+				</div>
 			</div>
 			<div class="flex flex-col gap-1">
 				<p class="font-medium">Connect Linear and Slack to configure channel rules</p>
