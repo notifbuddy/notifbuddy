@@ -126,7 +126,7 @@
 		<Card.Content>
 			<!-- Two regions: the rules form, and a test tool that validates them
 			     before you save. Side by side on wide screens, stacked below. -->
-			<div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
+			<div class="grid gap-8 lg:grid-cols-2">
 				<!-- Rules -->
 				<Field.FieldGroup>
 					<Field.Field>

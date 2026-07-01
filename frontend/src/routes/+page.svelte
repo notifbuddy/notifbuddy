@@ -105,7 +105,7 @@
 	</div>
 
 	<!-- Linear workspace settings (self-gates on Linear being workspace-connected). -->
-	<div class="mt-2 w-full max-w-4xl">
+	<div class="mt-2 w-full">
 		<LinearSettings />
 	</div>
 {:else}
