@@ -327,7 +327,10 @@ func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api
 		return nil, err
 	}
 	resp := &api.LinearSettingsResponse{
-		Connected: h.integrations.LinearConnectedAtWorkspace(ctx, orgID),
+		// "Connected" here means the org is ready to run the sync — both Linear
+		// and Slack connected at the workspace level, since the rules create
+		// Slack channels from Linear issues.
+		Connected: h.integrations.LinearSyncReady(ctx, orgID),
 		Settings:  toAPILinearSettings(settings),
 	}
 	for _, s := range samples {
