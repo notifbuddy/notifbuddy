@@ -13,6 +13,8 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import PlugIcon from '@lucide/svelte/icons/plug';
+	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import {
 		fetchLinearSettings,
 		saveLinearSettings,
@@ -282,5 +284,26 @@
 			</Button>
 			{#if saveMsg}<span class="text-muted-foreground text-sm">{saveMsg}</span>{/if}
 		</Card.Footer>
+	</Card.Root>
+{:else}
+	<!-- Linear isn't connected at the workspace level, so there are no channel
+	     rules to configure. Point the user to the integrations page to connect. -->
+	<Card.Root>
+		<Card.Content class="flex flex-col items-center gap-4 py-12 text-center">
+			<div class="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
+				<SiLinear class="size-6" />
+			</div>
+			<div class="flex flex-col gap-1">
+				<p class="font-medium">Connect Linear to configure channel rules</p>
+				<p class="text-muted-foreground max-w-md text-sm">
+					Channel creation rules become available once Linear is connected at the workspace level
+					for your organization.
+				</p>
+			</div>
+			<Button href="/settings/integrations/workspace">
+				<PlugIcon data-icon="inline-start" />
+				Go to integrations
+			</Button>
+		</Card.Content>
 	</Card.Root>
 {/if}
