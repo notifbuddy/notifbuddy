@@ -25,7 +25,7 @@
 							{...props}
 						>
 							<Avatar.Root class="size-8">
-								<Avatar.Fallback class="bg-primary text-primary-foreground text-xs font-medium">
+								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
 									{initials(user)}
 								</Avatar.Fallback>
 							</Avatar.Root>
@@ -46,7 +46,7 @@
 					<DropdownMenu.Label class="p-0 font-normal">
 						<div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
 							<Avatar.Root class="size-8">
-								<Avatar.Fallback class="bg-primary text-primary-foreground text-xs font-medium">
+								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
 									{initials(user)}
 								</Avatar.Fallback>
 							</Avatar.Root>
