@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
@@ -60,9 +60,9 @@
 
 {#if intg === undefined}
 	<!-- Skeleton mirroring the connection list. -->
-	<Card.Root class="gap-0 divide-y py-0">
+	<div class="flex flex-col gap-2">
 		{#each [0, 1] as i (i)}
-			<div class="flex flex-wrap items-center gap-4 p-4">
+			<div class="flex flex-wrap items-center gap-4 py-2">
 				<Skeleton class="size-5 shrink-0 rounded-md" />
 				<div class="flex min-w-0 flex-1 flex-col gap-2">
 					<div class="flex items-center gap-2">
@@ -77,7 +77,7 @@
 				</div>
 			</div>
 		{/each}
-	</Card.Root>
+	</div>
 {:else if intg === null}
 	<div class="flex flex-col items-start gap-2">
 		<p class="text-destructive text-sm">Please sign in first.</p>
@@ -87,12 +87,12 @@
 	<p class="text-muted-foreground text-sm">Integrations aren't configured on the server yet.</p>
 {:else}
 	<Tooltip.Provider delayDuration={200}>
-		<Card.Root class="gap-0 divide-y py-0">
+		<div class="flex flex-col gap-2">
 			{#each PROVIDERS as p (p.key)}
 				{@const s = statusOf(intg, p.key, level)}
 				{@const Icon = icon(p.key)}
 				{@const hooks = webhooksHref(p.key)}
-				<div class="group flex flex-wrap items-center gap-4 p-4">
+				<div class="flex flex-wrap items-center gap-4 py-2">
 					<Icon class="size-5 shrink-0" />
 					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
 						<div class="flex items-center gap-2">
@@ -111,9 +111,7 @@
 							{/if}
 						</p>
 					</div>
-					<div
-						class="flex shrink-0 items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-					>
+					<div class="flex shrink-0 items-center gap-1">
 						{#if s?.connected}
 							{#if hooks}
 								<Tooltip.Root>
@@ -133,33 +131,55 @@
 									<Tooltip.Content>Webhooks</Tooltip.Content>
 								</Tooltip.Root>
 							{/if}
-							<Tooltip.Root>
-								<Tooltip.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="destructive"
-											size="icon-sm"
-											disabled={busy === p.key}
-											onclick={() => doDisconnect(p.key)}
-											aria-label="Disconnect"
-										>
-											{#if busy === p.key}
-												<LoaderIcon class="animate-spin" />
-											{:else}
-												<UnplugIcon />
-											{/if}
-										</Button>
-									{/snippet}
-								</Tooltip.Trigger>
-								<Tooltip.Content>Disconnect</Tooltip.Content>
-							</Tooltip.Root>
+							<AlertDialog.Root>
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props: tipProps })}
+											<AlertDialog.Trigger>
+												{#snippet child({ props: dialogProps })}
+													<Button
+														{...tipProps}
+														{...dialogProps}
+														variant="ghost"
+														size="icon-sm"
+														disabled={busy === p.key}
+														aria-label="Disconnect"
+													>
+														{#if busy === p.key}
+															<LoaderIcon class="animate-spin" />
+														{:else}
+															<UnplugIcon />
+														{/if}
+													</Button>
+												{/snippet}
+											</AlertDialog.Trigger>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>Disconnect</Tooltip.Content>
+								</Tooltip.Root>
+								<AlertDialog.Content>
+									<AlertDialog.Header>
+										<AlertDialog.Title>Disconnect {p.label}?</AlertDialog.Title>
+										<AlertDialog.Description>
+											This removes the {level === 'user' ? 'personal' : 'workspace'} connection to
+											{p.label}. Any sync that relies on it will stop until you reconnect.
+										</AlertDialog.Description>
+									</AlertDialog.Header>
+									<AlertDialog.Footer>
+										<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+										<AlertDialog.Action variant="destructive" onclick={() => doDisconnect(p.key)}>
+											Disconnect
+										</AlertDialog.Action>
+									</AlertDialog.Footer>
+								</AlertDialog.Content>
+							</AlertDialog.Root>
 						{:else}
 							<Tooltip.Root>
 								<Tooltip.Trigger>
 									{#snippet child({ props })}
 										<Button
 											{...props}
+											variant="ghost"
 											size="icon-sm"
 											onclick={() => connect(p.key, level)}
 											aria-label="Connect"
@@ -174,6 +194,6 @@
 					</div>
 				</div>
 			{/each}
-		</Card.Root>
+		</div>
 	</Tooltip.Provider>
 {/if}
