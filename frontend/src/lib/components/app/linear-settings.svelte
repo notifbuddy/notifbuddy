@@ -28,6 +28,7 @@
 	import FlaskConicalIcon from '@lucide/svelte/icons/flask-conical';
 	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import SlackIcon from '$lib/icons/slack.svelte';
+	import JsonEventEditor from './json-event-editor.svelte';
 	import { cn } from '$lib/utils';
 	import {
 		fetchLinearSettings,
@@ -633,11 +634,7 @@
 									</Select.Group>
 								</Select.Content>
 							</Select.Root>
-							<Textarea
-								bind:value={pastedEvent}
-								class="min-h-32 font-mono text-xs"
-								placeholder={'Paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
-							/>
+							<JsonEventEditor bind:value={pastedEvent} />
 							<Button
 								variant="outline"
 								class="w-fit"
