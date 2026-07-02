@@ -255,7 +255,6 @@
 						<Button
 							{...props}
 							variant="outline"
-							size="sm"
 							aria-label="Choose members to auto-add"
 						>
 						{#if selected.length === 0}
@@ -365,7 +364,7 @@
 					<Popover.Root bind:open={addOpen}>
 						<Popover.Trigger>
 							{#snippet child({ props })}
-								<Button {...props} size="sm" disabled={availableTeams.length === 0}>
+								<Button {...props} disabled={availableTeams.length === 0}>
 									<PlusIcon data-icon="inline-start" />
 									Add team
 								</Button>
@@ -590,7 +589,6 @@
 								placeholder={'Or paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
 							/>
 							<Button
-								size="sm"
 								variant="outline"
 								class="w-fit"
 								onclick={() => runTest(d)}
@@ -625,7 +623,7 @@
 					</div>
 				</Card.Content>
 				<Card.Footer class="gap-3">
-					<Button size="sm" onclick={() => saveDraft(d)} disabled={saving[d.key]}>
+					<Button onclick={() => saveDraft(d)} disabled={saving[d.key]}>
 						{#if saving[d.key]}<LoaderIcon class="animate-spin" />{:else}<SaveIcon />{/if}
 						Save
 					</Button>
