@@ -3,6 +3,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import * as Popover from '$lib/components/ui/popover';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import * as Command from '$lib/components/ui/command';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as Tooltip from '$lib/components/ui/tooltip';
@@ -23,6 +24,8 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import FlaskConicalIcon from '@lucide/svelte/icons/flask-conical';
 	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import { cn } from '$lib/utils';
@@ -68,11 +71,24 @@
 	let saveMsg = $state<Record<string, string>>({});
 	let deleting = $state<Record<string, boolean>>({});
 
-	// Test panel is shared but runs a given draft's template/condition.
+	// Test panel is shared but runs a given draft's template/condition. It's
+	// collapsed per config by default (testOpen) and auto-opens the first time a
+	// config is edited (autoOpened guards so we only auto-open once — after that
+	// the user's manual toggle wins).
 	let sampleId = $state('');
 	let pastedEvent = $state('');
 	let testing = $state<string | null>(null); // draft.key being tested, or null
 	let testResult = $state<Record<string, TemplateTestResult>>({});
+	let testOpen = $state<Record<string, boolean>>({});
+	let autoOpened = $state<Record<string, boolean>>({});
+
+	// Called when any rule field of a config changes: reveal its test panel once.
+	function markEdited(d: Draft) {
+		if (!autoOpened[d.key]) {
+			autoOpened[d.key] = true;
+			testOpen[d.key] = true;
+		}
+	}
 
 	let keySeq = 0;
 	const nextKey = () => `draft-${keySeq++}`;
@@ -453,7 +469,7 @@
 					</div>
 				</Card.Header>
 				<Card.Content>
-					<div class="grid gap-8 lg:grid-cols-2">
+					<div class="flex flex-col gap-6">
 						<!-- Rules -->
 						<Field.FieldGroup>
 							<Field.Field>
@@ -467,7 +483,12 @@
 									variant="outline"
 									spacing={2}
 									value={d.creationMode}
-									onValueChange={(v) => v && (d.creationMode = v as 'manual' | 'status')}
+									onValueChange={(v) => {
+										if (v) {
+											d.creationMode = v as 'manual' | 'status';
+											markEdited(d);
+										}
+									}}
 								>
 									<ToggleGroup.Item
 										value="manual"
@@ -555,6 +576,7 @@
 									bind:value={d.nameTemplate}
 									class="font-mono text-xs"
 									placeholder="tkt-${'{{'} linear.data.identifier {'}}'}"
+									oninput={() => markEdited(d)}
 								/>
 								<Field.FieldDescription>Template for the new channel's name.</Field.FieldDescription>
 							</Field.Field>
@@ -565,6 +587,7 @@
 									bind:value={d.conditionExpr}
 									class="min-h-20 font-mono text-xs"
 									placeholder={"linear.action == 'update' && linear.data.state.name == 'Done'"}
+									oninput={() => markEdited(d)}
 								/>
 								<Field.FieldDescription>
 									Must evaluate to true for a channel to be created. Leave empty to always create.
@@ -576,15 +599,31 @@
 							{@render memberPicker(d)}
 						</Field.FieldGroup>
 
-						<!-- Test tool for this config. -->
-						<div class="flex h-fit flex-col gap-3 lg:sticky lg:top-4 lg:border-l lg:pl-8">
-							<div class="flex flex-col gap-0.5">
-								<span class="text-sm font-medium">Test against an event</span>
+						<!-- Test tool for this config: hidden behind a collapsible so the card
+						     stays focused on editing; auto-opens on first edit. -->
+						<Collapsible.Root
+							bind:open={() => testOpen[d.key] ?? false, (v) => (testOpen[d.key] = v)}
+							class="border-t pt-4"
+						>
+							<Collapsible.Trigger>
+								{#snippet child({ props })}
+									<button
+										{...props}
+										class="text-muted-foreground hover:text-foreground group/test flex w-full items-center gap-2 text-sm font-medium transition-colors"
+									>
+										<FlaskConicalIcon class="size-4" />
+										Test against an event
+										<ChevronRightIcon
+											class="size-4 transition-transform group-data-[state=open]/test:rotate-90"
+										/>
+									</button>
+								{/snippet}
+							</Collapsible.Trigger>
+							<Collapsible.Content class="flex flex-col gap-3 pt-3">
 								<p class="text-muted-foreground text-xs">
 									Preview this config's channel name and condition against a sample or pasted event.
 								</p>
-							</div>
-							<Select.Root type="single" value={sampleId} onValueChange={selectSample}>
+								<Select.Root type="single" value={sampleId} onValueChange={selectSample}>
 								<Select.Trigger class="w-full">{sampleLabel}</Select.Trigger>
 								<Select.Content>
 									<Select.Group>
@@ -630,7 +669,8 @@
 									{/if}
 								</div>
 							{/if}
-						</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 					</div>
 				</Card.Content>
 				<Card.Footer class="gap-3">
