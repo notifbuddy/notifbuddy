@@ -102,7 +102,16 @@
 		slackMembers = s.slackMembers ?? [];
 		sampleEvents = s.sampleEvents ?? [];
 		drafts = (s.configs ?? []).map(toDraft);
-		if (sampleEvents.length && !sampleId) sampleId = sampleEvents[0].id;
+		// Default the test panel to the first sample event: select it and load its
+		// JSON into the editable textarea so there's something to run right away.
+		if (sampleEvents.length && !sampleId) selectSample(sampleEvents[0].id);
+	}
+
+	// Selecting a sample loads its raw JSON into the editable event textarea.
+	function selectSample(id: string) {
+		sampleId = id;
+		const s = sampleEvents.find((e) => e.id === id);
+		if (s) pastedEvent = s.raw;
 	}
 
 	async function load() {
@@ -217,6 +226,8 @@
 
 	async function runTest(d: Draft) {
 		testing = d.key;
+		// The textarea holds the event JSON (a sample's, possibly edited), so it's
+		// always the source of truth; fall back to sampleId if it's somehow empty.
 		const req = pastedEvent.trim()
 			? { nameTemplate: d.nameTemplate, condition: d.conditionExpr, event: pastedEvent }
 			: { nameTemplate: d.nameTemplate, condition: d.conditionExpr, sampleId };
@@ -573,7 +584,7 @@
 									Preview this config's channel name and condition against a sample or pasted event.
 								</p>
 							</div>
-							<Select.Root type="single" bind:value={sampleId} disabled={!!pastedEvent.trim()}>
+							<Select.Root type="single" value={sampleId} onValueChange={selectSample}>
 								<Select.Trigger class="w-full">{sampleLabel}</Select.Trigger>
 								<Select.Content>
 									<Select.Group>
@@ -585,8 +596,8 @@
 							</Select.Root>
 							<Textarea
 								bind:value={pastedEvent}
-								class="min-h-24 font-mono text-xs"
-								placeholder={'Or paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
+								class="min-h-32 font-mono text-xs"
+								placeholder={'Paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
 							/>
 							<Button
 								variant="outline"
