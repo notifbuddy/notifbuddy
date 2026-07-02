@@ -14,6 +14,71 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
+// DeleteLinearSettingsParams is parameters of deleteLinearSettings operation.
+type DeleteLinearSettingsParams struct {
+	SettingId string
+}
+
+func unpackDeleteLinearSettingsParams(packed middleware.Parameters) (params DeleteLinearSettingsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "settingId",
+			In:   "path",
+		}
+		params.SettingId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeDeleteLinearSettingsParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteLinearSettingsParams, _ error) {
+	// Decode path: settingId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "settingId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.SettingId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "settingId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DisconnectIntegrationParams is parameters of disconnectIntegration operation.
 type DisconnectIntegrationParams struct {
 	Provider DisconnectIntegrationProvider
@@ -153,6 +218,71 @@ func decodeDisconnectIntegrationParams(args [1]string, argsEscaped bool, r *http
 		return params, &ogenerrors.DecodeParamError{
 			Name: "level",
 			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateLinearSettingsParams is parameters of updateLinearSettings operation.
+type UpdateLinearSettingsParams struct {
+	SettingId string
+}
+
+func unpackUpdateLinearSettingsParams(packed middleware.Parameters) (params UpdateLinearSettingsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "settingId",
+			In:   "path",
+		}
+		params.SettingId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeUpdateLinearSettingsParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateLinearSettingsParams, _ error) {
+	// Decode path: settingId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "settingId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.SettingId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "settingId",
+			In:   "path",
 			Err:  err,
 		}
 	}

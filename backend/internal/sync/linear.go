@@ -32,8 +32,9 @@ type linearActor struct {
 	Type  string `json:"type"`
 }
 
-// linearData is the subset of a Linear webhook's `data` we read, covering both
-// Issue events (identifier/state) and Comment events (body/issue/parent).
+// linearData is the subset of a Linear webhook's `data` we read, covering Issue
+// events (identifier/state/team), Comment events (body/issue/parent), and
+// WorkflowState events (id/name/type/color/position/team).
 type linearData struct {
 	ID         string `json:"id"`
 	Identifier string `json:"identifier"`
@@ -41,6 +42,17 @@ type linearData struct {
 	State      struct {
 		Name string `json:"name"`
 	} `json:"state"`
+	// TeamID identifies the issue's (or workflow state's) team. Present on Issue
+	// events (data.teamId) and used to resolve which config applies.
+	TeamID string `json:"teamId"`
+	Team   struct {
+		ID string `json:"id"`
+	} `json:"team"`
+	// WorkflowState fields (type == "WorkflowState"): the status itself.
+	Name     string  `json:"name"`
+	Type     string  `json:"type"`
+	Color    string  `json:"color"`
+	Position float64 `json:"position"`
 	// botActor is present when the action was performed by an OAuth app
 	// (actor=app) — i.e. by us. Its presence is the Defense-1 signal.
 	BotActor *json.RawMessage `json:"botActor"`
@@ -103,6 +115,8 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
 		e.onLinearIssue(ctx, ref.OrgID, p)
 	case "Comment":
 		e.onLinearComment(ctx, ref.OrgID, raw, p)
+	case "WorkflowState":
+		e.onLinearWorkflowState(ctx, ref.OrgID, p)
 	}
 }
 
@@ -110,10 +124,9 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
 // name template and evaluates the condition from the org's saved settings, both
 // against the forwarded event envelope, exactly as the settings test UI does.
 func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayload) {
-	settings, err := e.intg.GetLinearSettings(ctx, orgID)
-	if err != nil {
-		log.Printf("sync: linear issue: settings: %v", err)
-		return
+	settings, ok := e.settingForIssue(ctx, orgID, p)
+	if !ok {
+		return // no config applies to this issue's team
 	}
 	if settings.CreationMode != "status" {
 		return // manual mode: channels are created via @notifbuddy only
@@ -128,6 +141,55 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	}
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
 	e.ensureChannel(ctx, orgID, issueID, settings, evt, "status")
+}
+
+// settingForIssue resolves the config that applies to an issue event's team.
+// Returns ok=false (and logs only real errors) when the team is unmapped —
+// an unmapped team is an explicit "do nothing", not an error.
+func (e *Engine) settingForIssue(ctx context.Context, orgID string, p linearPayload) (integrations.LinearSettings, bool) {
+	teamID := p.Linear.Data.TeamID
+	if teamID == "" {
+		teamID = p.Linear.Data.Team.ID
+	}
+	if teamID == "" {
+		return integrations.LinearSettings{}, false
+	}
+	return e.settingForTeam(ctx, orgID, teamID)
+}
+
+// settingForTeam wraps the integrations resolver, mapping "unmapped team"
+// (store.ErrNotFound) to ok=false and logging only unexpected errors.
+func (e *Engine) settingForTeam(ctx context.Context, orgID, teamID string) (integrations.LinearSettings, bool) {
+	settings, err := e.intg.SettingForTeam(ctx, orgID, teamID)
+	if errors.Is(err, store.ErrNotFound) {
+		return integrations.LinearSettings{}, false
+	}
+	if err != nil {
+		log.Printf("sync: linear: resolve setting for team %s: %v", teamID, err)
+		return integrations.LinearSettings{}, false
+	}
+	return settings, true
+}
+
+// onLinearWorkflowState keeps the org's synced status snapshot fresh: a
+// create/update upserts the state into its team's list; a remove deletes it.
+// This is what powers the settings status dropdown between full syncs.
+func (e *Engine) onLinearWorkflowState(ctx context.Context, orgID string, p linearPayload) {
+	d := p.Linear.Data
+	teamID := d.Team.ID
+	if teamID == "" {
+		teamID = d.TeamID
+	}
+	if teamID == "" || d.ID == "" {
+		return
+	}
+	st := store.LinearWorkflowState{
+		ID: d.ID, Name: d.Name, Type: d.Type, Color: d.Color, Position: d.Position,
+	}
+	removed := p.Linear.Action == "remove"
+	if err := e.store.PatchLinearTeamState(ctx, orgID, teamID, st, removed); err != nil {
+		log.Printf("sync: linear workflow state %s (team %s): %v", d.ID, teamID, err)
+	}
 }
 
 // onLinearComment mirrors a human Linear comment into the issue's Slack channel,
@@ -238,10 +300,16 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 	}
 	switch e.classifier.Classify(ctx, body) {
 	case intent.CreateChannel:
-		settings, err := e.intg.GetLinearSettings(ctx, orgID)
+		// Resolve which config applies via the issue's team. The comment webhook
+		// doesn't reliably carry the team, so fetch the issue for it.
+		issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
 		if err != nil {
-			log.Printf("sync: notifbuddy create: settings: %v", err)
+			log.Printf("sync: notifbuddy create: fetch issue: %v", err)
 			return true
+		}
+		settings, ok := e.settingForTeam(ctx, orgID, issue.TeamID)
+		if !ok {
+			return true // no config applies to this issue's team
 		}
 		evt := template.Event{EventType: "linear", Linear: envelopeLinearRaw(raw)}
 		if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err != nil {

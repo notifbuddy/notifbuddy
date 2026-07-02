@@ -5,6 +5,14 @@ type CreateInvitationRes interface {
 	createInvitationRes()
 }
 
+type CreateLinearSettingsRes interface {
+	createLinearSettingsRes()
+}
+
+type DeleteLinearSettingsRes interface {
+	deleteLinearSettingsRes()
+}
+
 type DisconnectIntegrationRes interface {
 	disconnectIntegrationRes()
 }
@@ -45,16 +53,20 @@ type PingRes interface {
 	pingRes()
 }
 
-type SaveLinearSettingsRes interface {
-	saveLinearSettingsRes()
-}
-
 type SelectOrgRes interface {
 	selectOrgRes()
 }
 
+type SyncSettingsRes interface {
+	syncSettingsRes()
+}
+
 type TestLinearTemplateRes interface {
 	testLinearTemplateRes()
+}
+
+type UpdateLinearSettingsRes interface {
+	updateLinearSettingsRes()
 }
 
 type VerifyEmailRes interface {

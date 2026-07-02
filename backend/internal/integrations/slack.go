@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"xolo/backend/internal/store"
 )
@@ -128,6 +129,21 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save slack connection", http.StatusInternalServerError)
 		return
 	}
+
+	// Best-effort: sync the workspace's members so the auto-add pickers have real
+	// bots/people immediately. Only for a workspace install (the bot token can
+	// read the member list). Detached — the request context ends at the redirect.
+	if in.Level == store.LevelWorkspace {
+		orgID := st.OrgID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := s.SyncSlackMembers(ctx, orgID); err != nil {
+				log.Printf("integrations: initial slack member sync for org %s: %v", orgID, err)
+			}
+		}()
+	}
+
 	http.Redirect(w, r, s.redirectAfter("slack", "connected"), http.StatusFound)
 }
 

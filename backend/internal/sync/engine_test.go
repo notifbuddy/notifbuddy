@@ -25,6 +25,14 @@ type fakeStore struct {
 	linksByLinear  map[string]store.MirroredMessage
 	recorded       []store.MirroredMessage
 	deletedIssues  []string
+	statePatches   []statePatch
+}
+
+// statePatch records a PatchLinearTeamState call for assertions.
+type statePatch struct {
+	teamID  string
+	state   store.LinearWorkflowState
+	removed bool
 }
 
 func newFakeStore() *fakeStore {
@@ -93,6 +101,10 @@ func (f *fakeStore) LinkByLinearComment(_ context.Context, org, id string) (stor
 	}
 	return store.MirroredMessage{}, store.ErrNotFound
 }
+func (f *fakeStore) PatchLinearTeamState(_ context.Context, _ string, teamID string, st store.LinearWorkflowState, removed bool) error {
+	f.statePatches = append(f.statePatches, statePatch{teamID: teamID, state: st, removed: removed})
+	return nil
+}
 
 // fakeSlack records calls and returns canned ids.
 type fakeSlack struct {
@@ -143,8 +155,15 @@ func (s *fakeSlack) AuthTestUserID(_ context.Context, _ string) (string, error) 
 }
 
 // fakeIntg satisfies Integrations.
+//
+// settings is the config returned for any mapped team; teamMapped controls which
+// teams resolve to it (nil → every team maps to settings, matching the old
+// single-config behavior so existing tests keep passing). issueTeamID is what
+// LinearIssueByID reports (used by the @notifbuddy path to resolve the team).
 type fakeIntg struct {
 	settings        integrations.LinearSettings
+	teamMapped      map[string]bool
+	issueTeamID     string
 	createdComments []integrations.LinearCreateCommentInput
 	nextCommentID   string
 }
@@ -159,10 +178,15 @@ func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrati
 	return integrations.LinearComment{ID: id}, nil
 }
 func (i *fakeIntg) LinearIssueByID(context.Context, string, string) (integrations.LinearIssue, error) {
-	return integrations.LinearIssue{}, nil
+	return integrations.LinearIssue{TeamID: i.issueTeamID}, nil
 }
-func (i *fakeIntg) GetLinearSettings(context.Context, string) (integrations.LinearSettings, error) {
-	return i.settings, nil
+func (i *fakeIntg) SettingForTeam(_ context.Context, _ string, teamID string) (integrations.LinearSettings, error) {
+	// nil map → any team maps (legacy single-config tests). Otherwise only teams
+	// explicitly marked true resolve; the rest are unmapped (ErrNotFound).
+	if i.teamMapped == nil || i.teamMapped[teamID] {
+		return i.settings, nil
+	}
+	return integrations.LinearSettings{}, store.ErrNotFound
 }
 
 // spyPub records published topics.
@@ -332,7 +356,7 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 		"linear": map[string]any{
 			"action": "update", "type": "Issue",
 			"actor": map[string]any{"name": "Ada"},
-			"data":  map[string]any{"id": "issue9", "identifier": "SKO-9", "state": map[string]any{"name": "In Progress"}},
+			"data":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 		},
 	}
 	b, _ := json.Marshal(env)
@@ -341,10 +365,10 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	sl := &fakeSlack{nextChannel: "C_MADE"}
 	pub := &spyPub{}
 	ig := &fakeIntg{settings: integrations.LinearSettings{
-		CreationMode:  "status",
-		TriggerStatus: "In Progress",
-		NameTemplate:  "tkt-${{ linear.data.identifier }}",
-		AutoAddBots:   []string{"UBOT1", "UBOT2"},
+		CreationMode:   "status",
+		TriggerStatus:  "In Progress",
+		NameTemplate:   "tkt-${{ linear.data.identifier }}",
+		AutoAddMembers: []string{"UBOT1", "UBOT2"},
 	}}
 	e := newEngine(st, sl, ig, pub)
 
@@ -369,7 +393,7 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{"event_type": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
-		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "state": map[string]any{"name": "Backlog"}},
+		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
 	}}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d5"] = b
@@ -379,6 +403,79 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	e.OnLinearEvent(context.Background(), linearRef("d5", "org1"))
 	if sl.createdName != "" {
 		t.Errorf("no channel should be created for a non-trigger status; created %q", sl.createdName)
+	}
+}
+
+// An issue whose team isn't mapped to any config must be ignored, even when its
+// status would otherwise trigger creation.
+func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
+	st := newFakeStore()
+	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		"action": "update", "type": "Issue", "actor": map[string]any{},
+		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "teamB", "state": map[string]any{"name": "In Progress"}},
+	}}
+	b, _ := json.Marshal(env)
+	st.linearPayloads["d6"] = b
+	sl := &fakeSlack{}
+	// Only teamA is mapped; the event's teamB is not → do nothing.
+	ig := &fakeIntg{
+		teamMapped: map[string]bool{"teamA": true},
+		settings:   integrations.LinearSettings{CreationMode: "status", TriggerStatus: "In Progress"},
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d6", "org1"))
+	if sl.createdName != "" {
+		t.Errorf("unmapped team must not create a channel; created %q", sl.createdName)
+	}
+}
+
+// A WorkflowState create/update upserts the state into its team's snapshot; a
+// remove deletes it. This keeps the status dropdown fresh between full syncs.
+func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
+	workflowStatePayload := func(action, id, name string) json.RawMessage {
+		env := map[string]any{"event_type": "linear", "linear": map[string]any{
+			"action": action, "type": "WorkflowState", "actor": map[string]any{},
+			"data": map[string]any{
+				"id": id, "name": name, "type": "started", "color": "#5e6ad2", "position": 1.5,
+				"team": map[string]any{"id": "teamX"},
+			},
+		}}
+		b, _ := json.Marshal(env)
+		return b
+	}
+
+	cases := []struct {
+		name        string
+		action      string
+		wantRemoved bool
+	}{
+		{"create", "create", false},
+		{"update", "update", false},
+		{"remove", "remove", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := newFakeStore()
+			st.linearPayloads["w1"] = workflowStatePayload(tc.action, "state1", "In Review")
+			e := newEngine(st, &fakeSlack{}, &fakeIntg{}, &spyPub{})
+
+			e.OnLinearEvent(context.Background(), linearRef("w1", "org1"))
+
+			if len(st.statePatches) != 1 {
+				t.Fatalf("want 1 state patch, got %d", len(st.statePatches))
+			}
+			p := st.statePatches[0]
+			if p.teamID != "teamX" {
+				t.Errorf("patch teamID = %q, want teamX", p.teamID)
+			}
+			if p.state.ID != "state1" || p.state.Name != "In Review" {
+				t.Errorf("patch state = %+v, want id=state1 name=In Review", p.state)
+			}
+			if p.removed != tc.wantRemoved {
+				t.Errorf("patch removed = %v, want %v", p.removed, tc.wantRemoved)
+			}
+		})
 	}
 }
 

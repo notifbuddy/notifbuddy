@@ -43,6 +43,14 @@ type CreateInvitationUnauthorized Error
 
 func (*CreateInvitationUnauthorized) createInvitationRes() {}
 
+type CreateLinearSettingsBadRequest Error
+
+func (*CreateLinearSettingsBadRequest) createLinearSettingsRes() {}
+
+type CreateLinearSettingsUnauthorized Error
+
+func (*CreateLinearSettingsUnauthorized) createLinearSettingsRes() {}
+
 type DisconnectIntegrationLevel string
 
 const (
@@ -149,6 +157,7 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
+func (*Error) deleteLinearSettingsRes()  {}
 func (*Error) disconnectIntegrationRes() {}
 func (*Error) getIntegrationStatusRes()  {}
 func (*Error) getLinearSettingsRes()     {}
@@ -160,6 +169,7 @@ func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
 func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
+func (*Error) syncSettingsRes()          {}
 func (*Error) verifyEmailRes()           {}
 
 // The connection state of a single integration provider at one level.
@@ -373,9 +383,13 @@ func (s *InvitationResponse) SetExpiresAt(val OptString) {
 
 func (*InvitationResponse) createInvitationRes() {}
 
-// An organization's Linear → Slack channel-creation rules.
+// A Linear → Slack channel-creation config scoped to a single Linear team (teamId). The team is the
+// config's identity; a team has at most one config.
 // Ref: #/components/schemas/LinearSettings
 type LinearSettings struct {
+	// Stable id of this config. Omitted/empty when creating; returned on read and required in the URL for
+	// update/delete.
+	SettingId OptString `json:"settingId"`
 	// 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
 	// @notifbuddy.
 	CreationMode LinearSettingsCreationMode `json:"creationMode"`
@@ -385,8 +399,15 @@ type LinearSettings struct {
 	NameTemplate OptString `json:"nameTemplate"`
 	// GitHub-Actions-expression that must be true for creation.
 	ConditionExpr OptString `json:"conditionExpr"`
-	// Bots to auto-add on channel creation.
-	AutoAddBots []string `json:"autoAddBots"`
+	// Slack member ids (U…) — bots and people — to auto-add on channel creation.
+	AutoAddMembers []string `json:"autoAddMembers"`
+	// The Linear team this config applies to.
+	TeamId string `json:"teamId"`
+}
+
+// GetSettingId returns the value of SettingId.
+func (s *LinearSettings) GetSettingId() OptString {
+	return s.SettingId
 }
 
 // GetCreationMode returns the value of CreationMode.
@@ -409,9 +430,19 @@ func (s *LinearSettings) GetConditionExpr() OptString {
 	return s.ConditionExpr
 }
 
-// GetAutoAddBots returns the value of AutoAddBots.
-func (s *LinearSettings) GetAutoAddBots() []string {
-	return s.AutoAddBots
+// GetAutoAddMembers returns the value of AutoAddMembers.
+func (s *LinearSettings) GetAutoAddMembers() []string {
+	return s.AutoAddMembers
+}
+
+// GetTeamId returns the value of TeamId.
+func (s *LinearSettings) GetTeamId() string {
+	return s.TeamId
+}
+
+// SetSettingId sets the value of SettingId.
+func (s *LinearSettings) SetSettingId(val OptString) {
+	s.SettingId = val
 }
 
 // SetCreationMode sets the value of CreationMode.
@@ -434,9 +465,14 @@ func (s *LinearSettings) SetConditionExpr(val OptString) {
 	s.ConditionExpr = val
 }
 
-// SetAutoAddBots sets the value of AutoAddBots.
-func (s *LinearSettings) SetAutoAddBots(val []string) {
-	s.AutoAddBots = val
+// SetAutoAddMembers sets the value of AutoAddMembers.
+func (s *LinearSettings) SetAutoAddMembers(val []string) {
+	s.AutoAddMembers = val
+}
+
+// SetTeamId sets the value of TeamId.
+func (s *LinearSettings) SetTeamId(val string) {
+	s.TeamId = val
 }
 
 // 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
@@ -482,13 +518,19 @@ func (s *LinearSettingsCreationMode) UnmarshalText(data []byte) error {
 	}
 }
 
-// Linear settings plus context for the settings UI.
+// All of an org's Linear configs plus context for the settings UI.
 // Ref: #/components/schemas/LinearSettingsResponse
 type LinearSettingsResponse struct {
 	// Whether Linear is connected at the workspace level.
-	Connected    bool           `json:"connected"`
-	Settings     LinearSettings `json:"settings"`
-	SampleEvents []SampleEvent  `json:"sampleEvents"`
+	Connected bool `json:"connected"`
+	// The org's named channel-creation configs.
+	Configs []LinearSettings `json:"configs"`
+	// Synced Linear teams and their workflow states, for the "applies to" team picker and the
+	// trigger-status dropdown.
+	Teams []LinearTeamState `json:"teams"`
+	// Synced Slack workspace members (bots + humans), for the auto-add bot/member pickers.
+	SlackMembers []SlackMember `json:"slackMembers"`
+	SampleEvents []SampleEvent `json:"sampleEvents"`
 }
 
 // GetConnected returns the value of Connected.
@@ -496,9 +538,19 @@ func (s *LinearSettingsResponse) GetConnected() bool {
 	return s.Connected
 }
 
-// GetSettings returns the value of Settings.
-func (s *LinearSettingsResponse) GetSettings() LinearSettings {
-	return s.Settings
+// GetConfigs returns the value of Configs.
+func (s *LinearSettingsResponse) GetConfigs() []LinearSettings {
+	return s.Configs
+}
+
+// GetTeams returns the value of Teams.
+func (s *LinearSettingsResponse) GetTeams() []LinearTeamState {
+	return s.Teams
+}
+
+// GetSlackMembers returns the value of SlackMembers.
+func (s *LinearSettingsResponse) GetSlackMembers() []SlackMember {
+	return s.SlackMembers
 }
 
 // GetSampleEvents returns the value of SampleEvents.
@@ -511,9 +563,19 @@ func (s *LinearSettingsResponse) SetConnected(val bool) {
 	s.Connected = val
 }
 
-// SetSettings sets the value of Settings.
-func (s *LinearSettingsResponse) SetSettings(val LinearSettings) {
-	s.Settings = val
+// SetConfigs sets the value of Configs.
+func (s *LinearSettingsResponse) SetConfigs(val []LinearSettings) {
+	s.Configs = val
+}
+
+// SetTeams sets the value of Teams.
+func (s *LinearSettingsResponse) SetTeams(val []LinearTeamState) {
+	s.Teams = val
+}
+
+// SetSlackMembers sets the value of SlackMembers.
+func (s *LinearSettingsResponse) SetSlackMembers(val []SlackMember) {
+	s.SlackMembers = val
 }
 
 // SetSampleEvents sets the value of SampleEvents.
@@ -521,8 +583,110 @@ func (s *LinearSettingsResponse) SetSampleEvents(val []SampleEvent) {
 	s.SampleEvents = val
 }
 
-func (*LinearSettingsResponse) getLinearSettingsRes()  {}
-func (*LinearSettingsResponse) saveLinearSettingsRes() {}
+func (*LinearSettingsResponse) createLinearSettingsRes() {}
+func (*LinearSettingsResponse) deleteLinearSettingsRes() {}
+func (*LinearSettingsResponse) getLinearSettingsRes()    {}
+func (*LinearSettingsResponse) syncSettingsRes()         {}
+func (*LinearSettingsResponse) updateLinearSettingsRes() {}
+
+// A Linear team plus its synced workflow states.
+// Ref: #/components/schemas/LinearTeamState
+type LinearTeamState struct {
+	TeamId   string                `json:"teamId"`
+	TeamKey  OptString             `json:"teamKey"`
+	TeamName string                `json:"teamName"`
+	States   []LinearWorkflowState `json:"states"`
+}
+
+// GetTeamId returns the value of TeamId.
+func (s *LinearTeamState) GetTeamId() string {
+	return s.TeamId
+}
+
+// GetTeamKey returns the value of TeamKey.
+func (s *LinearTeamState) GetTeamKey() OptString {
+	return s.TeamKey
+}
+
+// GetTeamName returns the value of TeamName.
+func (s *LinearTeamState) GetTeamName() string {
+	return s.TeamName
+}
+
+// GetStates returns the value of States.
+func (s *LinearTeamState) GetStates() []LinearWorkflowState {
+	return s.States
+}
+
+// SetTeamId sets the value of TeamId.
+func (s *LinearTeamState) SetTeamId(val string) {
+	s.TeamId = val
+}
+
+// SetTeamKey sets the value of TeamKey.
+func (s *LinearTeamState) SetTeamKey(val OptString) {
+	s.TeamKey = val
+}
+
+// SetTeamName sets the value of TeamName.
+func (s *LinearTeamState) SetTeamName(val string) {
+	s.TeamName = val
+}
+
+// SetStates sets the value of States.
+func (s *LinearTeamState) SetStates(val []LinearWorkflowState) {
+	s.States = val
+}
+
+// One workflow state (issue status) of a Linear team.
+// Ref: #/components/schemas/LinearWorkflowState
+type LinearWorkflowState struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Linear's state category (e.g. backlog, unstarted, started, completed, canceled).
+	Type  string    `json:"type"`
+	Color OptString `json:"color"`
+}
+
+// GetID returns the value of ID.
+func (s *LinearWorkflowState) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *LinearWorkflowState) GetName() string {
+	return s.Name
+}
+
+// GetType returns the value of Type.
+func (s *LinearWorkflowState) GetType() string {
+	return s.Type
+}
+
+// GetColor returns the value of Color.
+func (s *LinearWorkflowState) GetColor() OptString {
+	return s.Color
+}
+
+// SetID sets the value of ID.
+func (s *LinearWorkflowState) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *LinearWorkflowState) SetName(val string) {
+	s.Name = val
+}
+
+// SetType sets the value of Type.
+func (s *LinearWorkflowState) SetType(val string) {
+	s.Type = val
+}
+
+// SetColor sets the value of Color.
+func (s *LinearWorkflowState) SetColor(val OptString) {
+	s.Color = val
+}
 
 // A list of members for the active organization.
 // Ref: #/components/schemas/MemberListResponse
@@ -828,14 +992,6 @@ func (s *SampleEvent) SetRaw(val string) {
 	s.Raw = val
 }
 
-type SaveLinearSettingsBadRequest Error
-
-func (*SaveLinearSettingsBadRequest) saveLinearSettingsRes() {}
-
-type SaveLinearSettingsUnauthorized Error
-
-func (*SaveLinearSettingsUnauthorized) saveLinearSettingsRes() {}
-
 // The organization the user chose during the org-selection step.
 // Ref: #/components/schemas/SelectOrgRequest
 type SelectOrgRequest struct {
@@ -851,6 +1007,57 @@ func (s *SelectOrgRequest) GetOrganizationId() string {
 // SetOrganizationId sets the value of OrganizationId.
 func (s *SelectOrgRequest) SetOrganizationId(val string) {
 	s.OrganizationId = val
+}
+
+// A synced Slack workspace member (bot/app or human).
+// Ref: #/components/schemas/SlackMember
+type SlackMember struct {
+	// Slack member id (U…); what conversations.invite needs.
+	MemberId string `json:"memberId"`
+	// Display/real name, falling back to the handle.
+	Name    string    `json:"name"`
+	IconUrl OptString `json:"iconUrl"`
+	IsBot   bool      `json:"isBot"`
+}
+
+// GetMemberId returns the value of MemberId.
+func (s *SlackMember) GetMemberId() string {
+	return s.MemberId
+}
+
+// GetName returns the value of Name.
+func (s *SlackMember) GetName() string {
+	return s.Name
+}
+
+// GetIconUrl returns the value of IconUrl.
+func (s *SlackMember) GetIconUrl() OptString {
+	return s.IconUrl
+}
+
+// GetIsBot returns the value of IsBot.
+func (s *SlackMember) GetIsBot() bool {
+	return s.IsBot
+}
+
+// SetMemberId sets the value of MemberId.
+func (s *SlackMember) SetMemberId(val string) {
+	s.MemberId = val
+}
+
+// SetName sets the value of Name.
+func (s *SlackMember) SetName(val string) {
+	s.Name = val
+}
+
+// SetIconUrl sets the value of IconUrl.
+func (s *SlackMember) SetIconUrl(val OptString) {
+	s.IconUrl = val
+}
+
+// SetIsBot sets the value of IsBot.
+func (s *SlackMember) SetIsBot(val bool) {
+	s.IsBot = val
 }
 
 // A template-test request. Provide exactly one event source: sampleId (a built-in sample event) or
@@ -955,6 +1162,18 @@ func (*TestLinearTemplateBadRequest) testLinearTemplateRes() {}
 type TestLinearTemplateUnauthorized Error
 
 func (*TestLinearTemplateUnauthorized) testLinearTemplateRes() {}
+
+type UpdateLinearSettingsBadRequest Error
+
+func (*UpdateLinearSettingsBadRequest) updateLinearSettingsRes() {}
+
+type UpdateLinearSettingsNotFound Error
+
+func (*UpdateLinearSettingsNotFound) updateLinearSettingsRes() {}
+
+type UpdateLinearSettingsUnauthorized Error
+
+func (*UpdateLinearSettingsUnauthorized) updateLinearSettingsRes() {}
 
 // The authenticated WorkOS user and their active organization context.
 // Ref: #/components/schemas/UserResponse

@@ -24,6 +24,26 @@ func (UnimplementedHandler) CreateInvitation(ctx context.Context, req *CreateInv
 	return r, ht.ErrNotImplemented
 }
 
+// CreateLinearSettings implements createLinearSettings operation.
+//
+// Creates a new config. The name template and condition are validated (parsed) before saving; a
+// malformed template — or a team already used by another config — returns 400. Returns the
+// refreshed configs + context.
+//
+// POST /integrations/linear/settings
+func (UnimplementedHandler) CreateLinearSettings(ctx context.Context, req *LinearSettings) (r CreateLinearSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DeleteLinearSettings implements deleteLinearSettings operation.
+//
+// Removes the config (and its team mappings). Returns the refreshed configs + context.
+//
+// DELETE /integrations/linear/settings/{settingId}
+func (UnimplementedHandler) DeleteLinearSettings(ctx context.Context, params DeleteLinearSettingsParams) (r DeleteLinearSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DisconnectIntegration implements disconnectIntegration operation.
 //
 // Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -48,9 +68,9 @@ func (UnimplementedHandler) GetIntegrationStatus(ctx context.Context) (r GetInte
 
 // GetLinearSettings implements getLinearSettings operation.
 //
-// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
-// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
-// built-in sample events for the test panel.
+// Returns all of the org's Linear → Slack channel-creation configs, whether Linear is connected at
+// the workspace level, the org's synced Linear teams and their workflow states (for the team picker +
+// status dropdown), and the built-in sample events for the test panel.
 //
 // GET /integrations/linear/settings
 func (UnimplementedHandler) GetLinearSettings(ctx context.Context) (r GetLinearSettingsRes, _ error) {
@@ -131,16 +151,6 @@ func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
-// SaveLinearSettings implements saveLinearSettings operation.
-//
-// Persists the org's Linear settings. The name template and condition are validated (parsed) before
-// saving; a malformed template returns 400.
-//
-// PUT /integrations/linear/settings
-func (UnimplementedHandler) SaveLinearSettings(ctx context.Context, req *LinearSettings) (r SaveLinearSettingsRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // SelectOrg implements selectOrg operation.
 //
 // Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -148,6 +158,17 @@ func (UnimplementedHandler) SaveLinearSettings(ctx context.Context, req *LinearS
 //
 // POST /auth/select-org
 func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest) (r SelectOrgRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SyncSettings implements syncSettings operation.
+//
+// Fetches Linear team workflow states AND Slack workspace members (bots + humans) in parallel and
+// replaces the stored snapshots. Returns the refreshed configs + context (updated teams and members).
+// Backs the "Sync" button in the settings UI, for when new statuses/members aren't showing yet.
+//
+// POST /integrations/settings/sync
+func (UnimplementedHandler) SyncSettings(ctx context.Context) (r SyncSettingsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -160,6 +181,16 @@ func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest
 //
 // POST /integrations/linear/settings/test
 func (UnimplementedHandler) TestLinearTemplate(ctx context.Context, req *TemplateTestRequest) (r TestLinearTemplateRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateLinearSettings implements updateLinearSettings operation.
+//
+// Updates the config identified by settingId. Same validation as create; a team already used by
+// another config returns 400. Returns the refreshed configs + context.
+//
+// PUT /integrations/linear/settings/{settingId}
+func (UnimplementedHandler) UpdateLinearSettings(ctx context.Context, req *LinearSettings, params UpdateLinearSettingsParams) (r UpdateLinearSettingsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

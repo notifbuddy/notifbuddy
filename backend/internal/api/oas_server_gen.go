@@ -16,6 +16,20 @@ type Handler interface {
 	//
 	// POST /invitations
 	CreateInvitation(ctx context.Context, req *CreateInvitationRequest) (CreateInvitationRes, error)
+	// CreateLinearSettings implements createLinearSettings operation.
+	//
+	// Creates a new config. The name template and condition are validated (parsed) before saving; a
+	// malformed template — or a team already used by another config — returns 400. Returns the
+	// refreshed configs + context.
+	//
+	// POST /integrations/linear/settings
+	CreateLinearSettings(ctx context.Context, req *LinearSettings) (CreateLinearSettingsRes, error)
+	// DeleteLinearSettings implements deleteLinearSettings operation.
+	//
+	// Removes the config (and its team mappings). Returns the refreshed configs + context.
+	//
+	// DELETE /integrations/linear/settings/{settingId}
+	DeleteLinearSettings(ctx context.Context, params DeleteLinearSettingsParams) (DeleteLinearSettingsRes, error)
 	// DisconnectIntegration implements disconnectIntegration operation.
 	//
 	// Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -34,9 +48,9 @@ type Handler interface {
 	GetIntegrationStatus(ctx context.Context) (GetIntegrationStatusRes, error)
 	// GetLinearSettings implements getLinearSettings operation.
 	//
-	// Returns the org's Linear → Slack channel-creation rules (creation mode, trigger status, name
-	// template, condition, auto-add bots), whether Linear is connected at the workspace level, and the
-	// built-in sample events for the test panel.
+	// Returns all of the org's Linear → Slack channel-creation configs, whether Linear is connected at
+	// the workspace level, the org's synced Linear teams and their workflow states (for the team picker +
+	// status dropdown), and the built-in sample events for the test panel.
 	//
 	// GET /integrations/linear/settings
 	GetLinearSettings(ctx context.Context) (GetLinearSettingsRes, error)
@@ -93,13 +107,6 @@ type Handler interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
-	// SaveLinearSettings implements saveLinearSettings operation.
-	//
-	// Persists the org's Linear settings. The name template and condition are validated (parsed) before
-	// saving; a malformed template returns 400.
-	//
-	// PUT /integrations/linear/settings
-	SaveLinearSettings(ctx context.Context, req *LinearSettings) (SaveLinearSettingsRes, error)
 	// SelectOrg implements selectOrg operation.
 	//
 	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -107,6 +114,14 @@ type Handler interface {
 	//
 	// POST /auth/select-org
 	SelectOrg(ctx context.Context, req *SelectOrgRequest) (SelectOrgRes, error)
+	// SyncSettings implements syncSettings operation.
+	//
+	// Fetches Linear team workflow states AND Slack workspace members (bots + humans) in parallel and
+	// replaces the stored snapshots. Returns the refreshed configs + context (updated teams and members).
+	// Backs the "Sync" button in the settings UI, for when new statuses/members aren't showing yet.
+	//
+	// POST /integrations/settings/sync
+	SyncSettings(ctx context.Context) (SyncSettingsRes, error)
 	// TestLinearTemplate implements testLinearTemplate operation.
 	//
 	// Renders nameTemplate and evaluates condition against the supplied event. Provide either a sampleId
@@ -116,6 +131,13 @@ type Handler interface {
 	//
 	// POST /integrations/linear/settings/test
 	TestLinearTemplate(ctx context.Context, req *TemplateTestRequest) (TestLinearTemplateRes, error)
+	// UpdateLinearSettings implements updateLinearSettings operation.
+	//
+	// Updates the config identified by settingId. Same validation as create; a team already used by
+	// another config returns 400. Returns the refreshed configs + context.
+	//
+	// PUT /integrations/linear/settings/{settingId}
+	UpdateLinearSettings(ctx context.Context, req *LinearSettings, params UpdateLinearSettingsParams) (UpdateLinearSettingsRes, error)
 	// VerifyEmail implements verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires

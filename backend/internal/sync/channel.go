@@ -64,12 +64,13 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 		Trigger:       trigger,
 	})
 
-	// Auto-add bots (best-effort). Bots are configured as Slack user ids.
-	if len(settings.AutoAddBots) > 0 {
-		if err := e.slack.InviteUsers(ctx, token, channelID, settings.AutoAddBots); err != nil {
-			log.Printf("sync: ensureChannel: invite bots: %v", err)
+	// Auto-add configured members (bots + people; all Slack member ids) via a
+	// single conversations.invite call.
+	if len(settings.AutoAddMembers) > 0 {
+		if err := e.slack.InviteUsers(ctx, token, channelID, settings.AutoAddMembers); err != nil {
+			log.Printf("sync: ensureChannel: invite members: %v", err)
 		} else {
-			e.fireBots(ctx, orgID, channelID, settings.AutoAddBots)
+			e.fireBots(ctx, orgID, channelID, settings.AutoAddMembers)
 		}
 	}
 }

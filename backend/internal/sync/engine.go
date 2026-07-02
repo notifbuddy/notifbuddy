@@ -46,7 +46,9 @@ type Integrations interface {
 	SlackBotToken(ctx context.Context, orgID string) (string, error)
 	LinearCreateComment(ctx context.Context, orgID string, in integrations.LinearCreateCommentInput) (integrations.LinearComment, error)
 	LinearIssueByID(ctx context.Context, orgID, issueID string) (integrations.LinearIssue, error)
-	GetLinearSettings(ctx context.Context, orgID string) (integrations.LinearSettings, error)
+	// SettingForTeam resolves the config that applies to a Linear team, or
+	// store.ErrNotFound when the team isn't mapped to any config (→ do nothing).
+	SettingForTeam(ctx context.Context, orgID, teamID string) (integrations.LinearSettings, error)
 }
 
 // Store is the persistence surface the engine needs: reading stored webhook
@@ -65,6 +67,10 @@ type Store interface {
 	RecordMirroredMessage(ctx context.Context, m store.MirroredMessage) error
 	LinkBySlackTS(ctx context.Context, orgID, channelID, ts string) (store.MirroredMessage, error)
 	LinkByLinearComment(ctx context.Context, orgID, commentID string) (store.MirroredMessage, error)
+
+	// PatchLinearTeamState applies a single WorkflowState webhook to a team's
+	// synced status snapshot (upsert, or remove when removed=true).
+	PatchLinearTeamState(ctx context.Context, orgID, teamID string, st store.LinearWorkflowState, removed bool) error
 }
 
 // Engine wires the stores, Slack/Linear action clients, the intent classifier

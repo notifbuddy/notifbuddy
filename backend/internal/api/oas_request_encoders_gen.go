@@ -24,7 +24,7 @@ func encodeCreateInvitationRequest(
 	return nil
 }
 
-func encodeSaveLinearSettingsRequest(
+func encodeCreateLinearSettingsRequest(
 	req *LinearSettings,
 	r *http.Request,
 ) error {
@@ -54,6 +54,20 @@ func encodeSelectOrgRequest(
 
 func encodeTestLinearTemplateRequest(
 	req *TemplateTestRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUpdateLinearSettingsRequest(
+	req *LinearSettings,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

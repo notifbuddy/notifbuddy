@@ -19,6 +19,7 @@ import (
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
 	"xolo/backend/internal/pubsub"
+	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
 )
@@ -38,6 +39,7 @@ type Service struct {
 	resolve SessionResolver
 	pub     pubsub.Publisher
 	tmpl    template.Engine
+	slack   slackapi.Client
 }
 
 // New builds the integrations service. store/enc may be nil when the app runs
@@ -47,7 +49,15 @@ func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve Sessi
 	if pub == nil {
 		pub = pubsub.Nop
 	}
-	return &Service{store: st, enc: enc, cfg: cfg, resolve: resolve, pub: pub, tmpl: template.New()}
+	return &Service{
+		store:   st,
+		enc:     enc,
+		cfg:     cfg,
+		resolve: resolve,
+		pub:     pub,
+		tmpl:    template.New(),
+		slack:   slackapi.New(),
+	}
 }
 
 // Enabled reports whether persistence (and thus integrations) is available.

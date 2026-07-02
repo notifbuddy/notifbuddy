@@ -72,6 +72,9 @@ type Client interface {
 	// auth.test), used by the sync engine's loop guard to drop the bot's own
 	// message events.
 	AuthTestUserID(ctx context.Context, token string) (string, error)
+	// ListUsers returns every member of the workspace (bots and humans), used to
+	// populate the auto-add pickers. It walks Slack's cursor pagination.
+	ListUsers(ctx context.Context, token string) ([]User, error)
 }
 
 // httpClient is the default Client, talking to https://slack.com/api. It is
@@ -193,6 +196,42 @@ func (c *httpClient) AuthTestUserID(ctx context.Context, token string) (string, 
 	return out.UserID, nil
 }
 
+func (c *httpClient) ListUsers(ctx context.Context, token string) ([]User, error) {
+	// users.list is cursor-paginated (Slack recommends <=200/page). Walk every
+	// page via response_metadata.next_cursor until it comes back empty. Cap the
+	// page count as a runaway guard for very large workspaces.
+	var users []User
+	cursor := ""
+	for range 100 {
+		form := url.Values{}
+		form.Set("limit", "200")
+		if cursor != "" {
+			form.Set("cursor", cursor)
+		}
+		var out struct {
+			slackOK
+			Members  []slackUser `json:"members"`
+			Metadata struct {
+				NextCursor string `json:"next_cursor"`
+			} `json:"response_metadata"`
+		}
+		if err := c.callForm(ctx, token, "users.list", form, &out); err != nil {
+			return nil, err
+		}
+		for _, m := range out.Members {
+			if m.Deleted {
+				continue // deactivated users can't be invited; don't offer them
+			}
+			users = append(users, m.toUser())
+		}
+		cursor = out.Metadata.NextCursor
+		if cursor == "" {
+			break
+		}
+	}
+	return users, nil
+}
+
 // slackOK is embedded in every response to surface the Web API's uniform
 // {ok, error} envelope.
 type slackOK struct {
@@ -204,6 +243,7 @@ type slackUser struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	IsBot   bool   `json:"is_bot"`
+	Deleted bool   `json:"deleted"`
 	Profile struct {
 		RealName string `json:"real_name"`
 		Email    string `json:"email"`

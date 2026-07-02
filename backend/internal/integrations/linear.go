@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"xolo/backend/internal/store"
 )
@@ -118,6 +119,22 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save linear connection", http.StatusInternalServerError)
 		return
 	}
+
+	// Best-effort: sync the workspace's team workflow states so the settings UI
+	// has real status options immediately. Only for a workspace install (the app
+	// token can read every team). Runs detached — the request context ends at the
+	// redirect below, so we use a fresh bounded context and never block the user.
+	if in.Level == store.LevelWorkspace {
+		orgID := st.OrgID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := s.SyncLinearTeamStates(ctx, orgID); err != nil {
+				log.Printf("integrations: initial linear team-state sync for org %s: %v", orgID, err)
+			}
+		}()
+	}
+
 	http.Redirect(w, r, s.redirectAfter("linear", "connected"), http.StatusFound)
 }
 
@@ -267,12 +284,13 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 }
 
 // LinearIssue is the subset of a Linear issue the sync engine needs (for
-// channel naming/status checks).
+// channel naming/status checks and resolving which team's config applies).
 type LinearIssue struct {
 	ID         string
 	Identifier string // e.g. "SKO-178"
 	Title      string
 	StateName  string // workflow state name (e.g. "Done")
+	TeamID     string // owning team's id (resolves the applicable config)
 }
 
 // LinearIssueByID fetches an issue by id using the org's workspace token.
@@ -282,7 +300,7 @@ func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (L
 		return LinearIssue{}, err
 	}
 	const query = `query($id: String!) {
-		issue(id: $id) { id identifier title state { name } }
+		issue(id: $id) { id identifier title state { name } team { id } }
 	}`
 	var resp struct {
 		Data struct {
@@ -293,6 +311,9 @@ func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (L
 				State      struct {
 					Name string `json:"name"`
 				} `json:"state"`
+				Team struct {
+					ID string `json:"id"`
+				} `json:"team"`
 			} `json:"issue"`
 		} `json:"data"`
 	}
@@ -300,7 +321,83 @@ func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (L
 		return LinearIssue{}, err
 	}
 	i := resp.Data.Issue
-	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name}, nil
+	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name, TeamID: i.Team.ID}, nil
+}
+
+// LinearWorkflowState is one workflow state (issue status) of a team.
+type LinearWorkflowState struct {
+	ID       string
+	Name     string
+	Type     string
+	Color    string
+	Position float64
+}
+
+// LinearTeamStates is a team plus its workflow states, as fetched from Linear.
+type LinearTeamStates struct {
+	TeamID   string
+	TeamKey  string
+	TeamName string
+	States   []LinearWorkflowState
+}
+
+// LinearTeamStates fetches every team in the workspace with its workflow states
+// using the org's workspace token. Used to sync the status options for the
+// settings UI. Linear caps page size; 250 comfortably covers a workspace's teams
+// and each team's states (both are small sets in practice).
+func (s *Service) LinearTeamStates(ctx context.Context, orgID string) ([]LinearTeamStates, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	// Keep page sizes modest: Linear enforces a query-complexity budget and
+	// rejects overly broad nested pagination with a 400. A workspace's teams and
+	// each team's states are small sets, so these bounds are comfortable while
+	// staying well under the complexity ceiling.
+	const query = `query {
+		teams(first: 100) {
+			nodes {
+				id key name
+				states(first: 50) { nodes { id name type color position } }
+			}
+		}
+	}`
+	var resp struct {
+		Data struct {
+			Teams struct {
+				Nodes []struct {
+					ID     string `json:"id"`
+					Key    string `json:"key"`
+					Name   string `json:"name"`
+					States struct {
+						Nodes []struct {
+							ID       string  `json:"id"`
+							Name     string  `json:"name"`
+							Type     string  `json:"type"`
+							Color    string  `json:"color"`
+							Position float64 `json:"position"`
+						} `json:"nodes"`
+					} `json:"states"`
+				} `json:"nodes"`
+			} `json:"teams"`
+		} `json:"data"`
+	}
+	if err := s.linearGraphQL(ctx, token, query, nil, &resp); err != nil {
+		return nil, err
+	}
+	out := make([]LinearTeamStates, 0, len(resp.Data.Teams.Nodes))
+	for _, t := range resp.Data.Teams.Nodes {
+		states := make([]LinearWorkflowState, 0, len(t.States.Nodes))
+		for _, st := range t.States.Nodes {
+			states = append(states, LinearWorkflowState{
+				ID: st.ID, Name: st.Name, Type: st.Type, Color: st.Color, Position: st.Position,
+			})
+		}
+		out = append(out, LinearTeamStates{
+			TeamID: t.ID, TeamKey: t.Key, TeamName: t.Name, States: states,
+		})
+	}
+	return out, nil
 }
 
 // linearGraphQL executes a GraphQL query/mutation against Linear's API with the
@@ -325,14 +422,14 @@ func (s *Service) linearGraphQL(ctx context.Context, token, query string, variab
 		return fmt.Errorf("integrations: linear graphql: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("integrations: linear graphql: status %d", resp.StatusCode)
-	}
-	// Decode into a wrapper that also captures top-level GraphQL errors, then
-	// decode the data portion into the caller's out.
-	raw, err := io.ReadAll(resp.Body)
+	// Read the body once; on a non-200, Linear returns a JSON error body that
+	// names the offending field/arg, so include it rather than just the status.
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return fmt.Errorf("integrations: linear graphql: read body: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("integrations: linear graphql: status %d: %s", resp.StatusCode, string(raw))
 	}
 	var errCheck struct {
 		Errors []struct {

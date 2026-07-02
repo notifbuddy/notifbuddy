@@ -125,6 +125,47 @@ func TestInviteUsers_EmptyIsNoop(t *testing.T) {
 	}
 }
 
+func TestListUsers_PaginatesAndFilters(t *testing.T) {
+	// Page 1 returns a next_cursor; page 2 returns none. Includes a bot, a human,
+	// and a deleted user (which must be dropped).
+	page := 0
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		cursor := r.FormValue("cursor")
+		if page == 0 {
+			if cursor != "" {
+				t.Errorf("first call should have no cursor, got %q", cursor)
+			}
+			page++
+			_, _ = w.Write([]byte(`{"ok":true,"members":[
+				{"id":"UBOT","name":"claude","is_bot":true,"profile":{"real_name":"Claude","image_192":"https://x/i.png"}},
+				{"id":"UDEL","name":"gone","deleted":true}
+			],"response_metadata":{"next_cursor":"CUR2"}}`))
+			return
+		}
+		if cursor != "CUR2" {
+			t.Errorf("second call cursor = %q, want CUR2", cursor)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"members":[
+			{"id":"UHUMAN","name":"ada","is_bot":false,"profile":{"real_name":"Ada Lovelace"}}
+		],"response_metadata":{"next_cursor":""}}`))
+	})
+
+	users, err := c.ListUsers(context.Background(), "t")
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("want 2 users (deleted dropped), got %d: %+v", len(users), users)
+	}
+	if users[0].ID != "UBOT" || !users[0].IsBot || users[0].Name != "Claude" {
+		t.Errorf("bot user = %+v", users[0])
+	}
+	if users[1].ID != "UHUMAN" || users[1].IsBot || users[1].Name != "Ada Lovelace" {
+		t.Errorf("human user = %+v", users[1])
+	}
+}
+
 func TestLookupUserByEmail_MapsProfile(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"ok":true,"user":{"id":"U1","name":"ada","profile":{"real_name":"Ada Lovelace","email":"ada@x.io","image_192":"https://x.io/a.png"}}}`))

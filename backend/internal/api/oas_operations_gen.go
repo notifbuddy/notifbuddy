@@ -7,6 +7,8 @@ type OperationName = string
 
 const (
 	CreateInvitationOperation      OperationName = "CreateInvitation"
+	CreateLinearSettingsOperation  OperationName = "CreateLinearSettings"
+	DeleteLinearSettingsOperation  OperationName = "DeleteLinearSettings"
 	DisconnectIntegrationOperation OperationName = "DisconnectIntegration"
 	GetIntegrationStatusOperation  OperationName = "GetIntegrationStatus"
 	GetLinearSettingsOperation     OperationName = "GetLinearSettings"
@@ -17,8 +19,9 @@ const (
 	ListLinearWebhooksOperation    OperationName = "ListLinearWebhooks"
 	ListMembersOperation           OperationName = "ListMembers"
 	PingOperation                  OperationName = "Ping"
-	SaveLinearSettingsOperation    OperationName = "SaveLinearSettings"
 	SelectOrgOperation             OperationName = "SelectOrg"
+	SyncSettingsOperation          OperationName = "SyncSettings"
 	TestLinearTemplateOperation    OperationName = "TestLinearTemplate"
+	UpdateLinearSettingsOperation  OperationName = "UpdateLinearSettings"
 	VerifyEmailOperation           OperationName = "VerifyEmail"
 )

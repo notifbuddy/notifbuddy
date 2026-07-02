@@ -1,0 +1,33 @@
+{
+  "event_type": "linear",
+  "linear": {
+    "action": "create",
+    "actor": {
+      "email": "user@example.com",
+      "id": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "name": "Ada Lovelace",
+      "type": "user",
+      "url": "https://linear.app/skogai/profiles/skogix"
+    },
+    "createdAt": "2026-04-18T14:06:29.000Z",
+    "type": "WorkflowState",
+    "organizationId": "b1e3f0f4-1c2d-4a5b-9e6f-7a8b9c0d1e2f",
+    "webhookId": "sample-webhook-id",
+    "webhookTimestamp": 1776470789000,
+    "data": {
+      "id": "065a2424-81d9-479d-84b8-ea8b1f20cf67",
+      "name": "In Review",
+      "type": "started",
+      "color": "#5e6ad2",
+      "position": 1.5,
+      "createdAt": "2026-04-18T14:06:29.000Z",
+      "updatedAt": "2026-04-18T14:06:29.000Z",
+      "team": {
+        "id": "ac4c7f2d-98ae-438f-b85a-33374856fd1b",
+        "key": "SKO",
+        "name": "SkogAI"
+      },
+      "teamId": "ac4c7f2d-98ae-438f-b85a-33374856fd1b"
+    }
+  }
+}

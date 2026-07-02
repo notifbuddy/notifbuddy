@@ -269,20 +269,70 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Linear channel-creation settings for the active organization
-         * @description Returns the org's Linear → Slack channel-creation rules (creation mode,
-         *     trigger status, name template, condition, auto-add bots), whether Linear
-         *     is connected at the workspace level, and the built-in sample events for
-         *     the test panel.
+         * Linear channel-creation configs for the active organization
+         * @description Returns all of the org's Linear → Slack channel-creation configs, whether
+         *     Linear is connected at the workspace level, the org's synced Linear teams
+         *     and their workflow states (for the team picker + status dropdown), and the
+         *     built-in sample events for the test panel.
          */
         get: operations["getLinearSettings"];
+        put?: never;
         /**
-         * Save Linear channel-creation settings
-         * @description Persists the org's Linear settings. The name template and condition are
-         *     validated (parsed) before saving; a malformed template returns 400.
+         * Create a Linear channel-creation config
+         * @description Creates a new config. The name template and condition are validated
+         *     (parsed) before saving; a malformed template — or a team already used by
+         *     another config — returns 400. Returns the refreshed configs + context.
          */
-        put: operations["saveLinearSettings"];
+        post: operations["createLinearSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/linear/settings/{settingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update a Linear channel-creation config
+         * @description Updates the config identified by settingId. Same validation as create; a
+         *     team already used by another config returns 400. Returns the refreshed
+         *     configs + context.
+         */
+        put: operations["updateLinearSettings"];
         post?: never;
+        /**
+         * Delete a Linear channel-creation config
+         * @description Removes the config (and its team mappings). Returns the refreshed configs + context.
+         */
+        delete: operations["deleteLinearSettings"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/settings/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-sync Linear teams/statuses and Slack members
+         * @description Fetches Linear team workflow states AND Slack workspace members (bots +
+         *     humans) in parallel and replaces the stored snapshots. Returns the
+         *     refreshed configs + context (updated teams and members). Backs the "Sync"
+         *     button in the settings UI, for when new statuses/members aren't showing yet.
+         */
+        post: operations["syncSettings"];
         delete?: never;
         options?: never;
         head?: never;
@@ -544,8 +594,17 @@ export interface components {
              */
             message: string;
         };
-        /** @description An organization's Linear → Slack channel-creation rules. */
+        /**
+         * @description A Linear → Slack channel-creation config scoped to a single Linear team
+         *     (teamId). The team is the config's identity; a team has at most one config.
+         */
         LinearSettings: {
+            /**
+             * @description Stable id of this config. Omitted/empty when creating; returned on read
+             *     and required in the URL for update/delete.
+             * @example 4b2f6c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b
+             */
+            settingId?: string;
             /**
              * @description 'status' auto-creates a channel when an issue reaches triggerStatus;
              *     'manual' only creates via @notifbuddy.
@@ -569,13 +628,18 @@ export interface components {
              */
             conditionExpr?: string;
             /**
-             * @description Bots to auto-add on channel creation.
+             * @description Slack member ids (U…) — bots and people — to auto-add on channel creation.
              * @example [
-             *       "claude",
-             *       "linear"
+             *       "U0123BOT",
+             *       "U0456HUMAN"
              *     ]
              */
-            autoAddBots: string[];
+            autoAddMembers: string[];
+            /**
+             * @description The Linear team this config applies to.
+             * @example ac4c7f2d-98ae-438f-b85a-33374856fd1b
+             */
+            teamId: string;
         };
         /** @description A built-in example event for the settings test panel. */
         SampleEvent: {
@@ -586,11 +650,62 @@ export interface components {
             /** @description The event envelope JSON (as a string). */
             raw: string;
         };
-        /** @description Linear settings plus context for the settings UI. */
+        /** @description One workflow state (issue status) of a Linear team. */
+        LinearWorkflowState: {
+            /** @example 065a2424-81d9-479d-84b8-ea8b1f20cf67 */
+            id: string;
+            /** @example In Progress */
+            name: string;
+            /**
+             * @description Linear's state category (e.g. backlog, unstarted, started, completed, canceled).
+             * @example started
+             */
+            type: string;
+            /** @example #5e6ad2 */
+            color?: string;
+        };
+        /** @description A Linear team plus its synced workflow states. */
+        LinearTeamState: {
+            /** @example ac4c7f2d-98ae-438f-b85a-33374856fd1b */
+            teamId: string;
+            /** @example SKO */
+            teamKey?: string;
+            /** @example SkogAI */
+            teamName: string;
+            states: components["schemas"]["LinearWorkflowState"][];
+        };
+        /** @description A synced Slack workspace member (bot/app or human). */
+        SlackMember: {
+            /**
+             * @description Slack member id (U…); what conversations.invite needs.
+             * @example U0123BOT
+             */
+            memberId: string;
+            /**
+             * @description Display/real name, falling back to the handle.
+             * @example Claude
+             */
+            name: string;
+            /** @example https://example.com/avatar.png */
+            iconUrl?: string;
+            isBot: boolean;
+        };
+        /** @description All of an org's Linear configs plus context for the settings UI. */
         LinearSettingsResponse: {
             /** @description Whether Linear is connected at the workspace level. */
             connected: boolean;
-            settings: components["schemas"]["LinearSettings"];
+            /** @description The org's named channel-creation configs. */
+            configs: components["schemas"]["LinearSettings"][];
+            /**
+             * @description Synced Linear teams and their workflow states, for the "applies to"
+             *     team picker and the trigger-status dropdown.
+             */
+            teams: components["schemas"]["LinearTeamState"][];
+            /**
+             * @description Synced Slack workspace members (bots + humans), for the auto-add
+             *     bot/member pickers.
+             */
+            slackMembers: components["schemas"]["SlackMember"][];
             sampleEvents: components["schemas"]["SampleEvent"][];
         };
         /**
@@ -1013,7 +1128,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current settings + context. */
+            /** @description Current configs + context. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1033,7 +1148,7 @@ export interface operations {
             };
         };
     };
-    saveLinearSettings: {
+    createLinearSettings: {
         parameters: {
             query?: never;
             header?: never;
@@ -1046,7 +1161,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Saved; returns the refreshed settings + context. */
+            /** @description Created; returns the refreshed configs + context. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1055,13 +1170,126 @@ export interface operations {
                     "application/json": components["schemas"]["LinearSettingsResponse"];
                 };
             };
-            /** @description Invalid settings (e.g. unparseable template/condition). */
+            /** @description Invalid config (bad template/condition, or a team conflict). */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                settingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearSettings"];
+            };
+        };
+        responses: {
+            /** @description Updated; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description Invalid config (bad template/condition, or a team conflict). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such config for this org. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                settingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    syncSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synced; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
                 };
             };
             /** @description No valid session. */
