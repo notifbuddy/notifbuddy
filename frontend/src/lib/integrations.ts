@@ -87,39 +87,97 @@ export type WebhookEvent = {
 };
 
 // ---- Linear settings ----
+//
+// An org can have several named configs. Each config's rules (creation mode,
+// trigger status, template, condition, bots) apply to a single Linear team
+// (teamId); a team belongs to at most one config. The server validates that
+// uniqueness and returns a 400 if a team is claimed twice.
 
 export type LinearSettings = {
+	settingId?: string;
+	teamId: string;
 	creationMode: 'status' | 'manual';
 	triggerStatus?: string;
 	nameTemplate?: string;
 	conditionExpr?: string;
-	autoAddBots: string[];
+	autoAddMembers: string[];
 };
 
 export type SampleEvent = { id: string; label: string; raw: string };
 
+export type LinearWorkflowState = { id: string; name: string; type: string; color?: string };
+export type LinearTeamState = {
+	teamId: string;
+	teamKey?: string;
+	teamName: string;
+	states: LinearWorkflowState[];
+};
+
+// A synced Slack workspace member (bot/app or human) for the auto-add pickers.
+export type SlackMember = { memberId: string; name: string; iconUrl?: string; isBot: boolean };
+
 export type LinearSettingsState = {
 	connected: boolean;
-	settings: LinearSettings;
+	configs: LinearSettings[];
+	teams: LinearTeamState[];
+	slackMembers: SlackMember[];
 	sampleEvents: SampleEvent[];
 };
 
 export type TemplateTestResult = { name: string; conditionResult: boolean; error?: string };
 
-// Fetch the org's Linear settings + connection state + sample events.
+// Fetch the org's Linear configs + connection state + synced teams + samples.
 export async function fetchLinearSettings(): Promise<LinearSettingsState | null> {
 	const { data, error } = await api.GET('/integrations/linear/settings');
 	if (error || !data) return null;
 	return data as LinearSettingsState;
 }
 
-// Save the org's Linear settings; returns the refreshed state or null on error.
-export async function saveLinearSettings(
+// Create a new config; returns the refreshed state, or an error message on 400.
+export async function createLinearSettings(
 	settings: LinearSettings
+): Promise<{ state?: LinearSettingsState; error?: string }> {
+	const { data, error } = await api.POST('/integrations/linear/settings', { body: settings });
+	if (error) return { error: linearError(error) };
+	return { state: data as LinearSettingsState };
+}
+
+// Update an existing config (by settingId); returns the refreshed state or error.
+export async function updateLinearSettings(
+	settingId: string,
+	settings: LinearSettings
+): Promise<{ state?: LinearSettingsState; error?: string }> {
+	const { data, error } = await api.PUT('/integrations/linear/settings/{settingId}', {
+		params: { path: { settingId } },
+		body: settings
+	});
+	if (error) return { error: linearError(error) };
+	return { state: data as LinearSettingsState };
+}
+
+// Delete a config; returns the refreshed state or null on error.
+export async function deleteLinearSettings(
+	settingId: string
 ): Promise<LinearSettingsState | null> {
-	const { data, error } = await api.PUT('/integrations/linear/settings', { body: settings });
+	const { data, error } = await api.DELETE('/integrations/linear/settings/{settingId}', {
+		params: { path: { settingId } }
+	});
 	if (error || !data) return null;
 	return data as LinearSettingsState;
+}
+
+// Re-sync Linear teams/statuses and Slack members in parallel; returns the
+// refreshed state.
+export async function syncSettings(): Promise<LinearSettingsState | null> {
+	const { data, error } = await api.POST('/integrations/settings/sync', {});
+	if (error || !data) return null;
+	return data as LinearSettingsState;
+}
+
+// Pull a human message out of a spec Error body (e.g. a team-conflict 400).
+function linearError(error: unknown): string {
+	const msg = (error as { message?: string })?.message;
+	return msg && msg.trim() ? msg : 'Save failed — check your settings.';
 }
 
 // Test a name template + condition against a sample (by id) or a pasted event.

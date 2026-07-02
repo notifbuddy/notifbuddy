@@ -16,18 +16,16 @@ import (
 //go:embed sampledata/*.json
 var sampleEventsFS embed.FS
 
-// LinearSettings is the service-level view of an org's Linear channel rules.
+// LinearSettings is the service-level view of one Linear channel-rule config,
+// scoped to a single Linear team (TeamID). The team is the config's identity.
 type LinearSettings struct {
-	CreationMode  string   `json:"creationMode"`  // "status" | "manual"
-	TriggerStatus string   `json:"triggerStatus"` // workflow state name (status mode)
-	NameTemplate  string   `json:"nameTemplate"`
-	ConditionExpr string   `json:"conditionExpr"`
-	AutoAddBots   []string `json:"autoAddBots"`
-}
-
-// defaultLinearSettings is returned when an org hasn't saved any yet.
-func defaultLinearSettings() LinearSettings {
-	return LinearSettings{CreationMode: "manual", AutoAddBots: []string{}}
+	SettingID      string   `json:"settingId,omitempty"`
+	TeamID         string   `json:"teamId"`
+	CreationMode   string   `json:"creationMode"`  // "status" | "manual"
+	TriggerStatus  string   `json:"triggerStatus"` // workflow state name (status mode)
+	NameTemplate   string   `json:"nameTemplate"`
+	ConditionExpr  string   `json:"conditionExpr"`
+	AutoAddMembers []string `json:"autoAddMembers"` // Slack member ids (bots + people)
 }
 
 // LinearSyncReady reports whether the org can actually run the Linear → Slack
@@ -49,37 +47,86 @@ func (s *Service) connectedAtWorkspace(ctx context.Context, orgID string, provid
 	return err == nil
 }
 
-// GetLinearSettings returns the org's saved Linear settings, or defaults.
-func (s *Service) GetLinearSettings(ctx context.Context, orgID string) (LinearSettings, error) {
+// ListLinearSettings returns all of an org's named configs (empty slice when
+// none saved yet, or when integrations aren't configured).
+func (s *Service) ListLinearSettings(ctx context.Context, orgID string) ([]LinearSettings, error) {
 	if !s.Enabled() {
-		return defaultLinearSettings(), nil
+		return []LinearSettings{}, nil
 	}
-	row, err := s.store.GetLinearSettings(ctx, orgID)
-	if errors.Is(err, store.ErrNotFound) {
-		return defaultLinearSettings(), nil
+	rows, err := s.store.ListLinearSettings(ctx, orgID)
+	if err != nil {
+		return nil, err
 	}
+	out := make([]LinearSettings, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, fromStoreLinearSettings(r))
+	}
+	return out, nil
+}
+
+// SettingForTeam returns the config that applies to a Linear team, or
+// store.ErrNotFound when the team is unmapped. The sync engine treats
+// ErrNotFound as "do nothing" for that team's events.
+func (s *Service) SettingForTeam(ctx context.Context, orgID, teamID string) (LinearSettings, error) {
+	if !s.Enabled() {
+		return LinearSettings{}, store.ErrNotFound
+	}
+	row, err := s.store.SettingForTeam(ctx, orgID, teamID)
 	if err != nil {
 		return LinearSettings{}, err
 	}
-	bots := row.AutoAddBots
-	if bots == nil {
-		bots = []string{}
-	}
-	return LinearSettings{
-		CreationMode:  orDefault(row.CreationMode, "manual"),
-		TriggerStatus: row.TriggerStatus,
-		NameTemplate:  row.NameTemplate,
-		ConditionExpr: row.ConditionExpr,
-		AutoAddBots:   bots,
-	}, nil
+	return fromStoreLinearSettings(*row), nil
 }
 
-// SaveLinearSettings validates and persists the org's Linear settings. Templates
-// are validated by parsing them, so a malformed template/condition is rejected
-// up front rather than failing silently at channel-creation time.
-func (s *Service) SaveLinearSettings(ctx context.Context, orgID string, in LinearSettings) error {
+// SaveLinearSetting validates and persists one config (create when SettingID is
+// empty, else update). Templates are parsed up front so a malformed
+// template/condition is rejected here rather than failing at channel-creation
+// time. A team already owned by another config surfaces as a descriptive error.
+// Returns the saved config (with its SettingID).
+func (s *Service) SaveLinearSetting(ctx context.Context, orgID string, in LinearSettings) (LinearSettings, error) {
+	if !s.Enabled() {
+		return LinearSettings{}, fmt.Errorf("integrations: not configured")
+	}
+	if err := s.validateLinearSettings(in); err != nil {
+		return LinearSettings{}, err
+	}
+	settingID, err := s.store.SaveLinearSetting(ctx, store.LinearSettings{
+		SettingID:      in.SettingID,
+		OrgID:          orgID,
+		TeamID:         in.TeamID,
+		CreationMode:   in.CreationMode,
+		TriggerStatus:  in.TriggerStatus,
+		NameTemplate:   in.NameTemplate,
+		ConditionExpr:  in.ConditionExpr,
+		AutoAddMembers: orEmptySlice(in.AutoAddMembers),
+	})
+	if err != nil {
+		var mapped store.ErrTeamAlreadyMapped
+		if errors.As(err, &mapped) {
+			return LinearSettings{}, fmt.Errorf("team is already used by another config")
+		}
+		return LinearSettings{}, err
+	}
+	saved, err := s.store.GetLinearSettingByID(ctx, orgID, settingID)
+	if err != nil {
+		return LinearSettings{}, err
+	}
+	return fromStoreLinearSettings(*saved), nil
+}
+
+// DeleteLinearSetting removes a config (and its team mappings) for the org.
+func (s *Service) DeleteLinearSetting(ctx context.Context, orgID, settingID string) error {
 	if !s.Enabled() {
 		return fmt.Errorf("integrations: not configured")
+	}
+	return s.store.DeleteLinearSetting(ctx, orgID, settingID)
+}
+
+// validateLinearSettings enforces the mode/status/template rules shared by
+// create and update.
+func (s *Service) validateLinearSettings(in LinearSettings) error {
+	if strings.TrimSpace(in.TeamID) == "" {
+		return fmt.Errorf("a team is required")
 	}
 	if in.CreationMode != "status" && in.CreationMode != "manual" {
 		return fmt.Errorf("invalid creation mode %q", in.CreationMode)
@@ -100,18 +147,89 @@ func (s *Service) SaveLinearSettings(ctx context.Context, orgID string, in Linea
 			return fmt.Errorf("condition: %w", err)
 		}
 	}
-	bots := in.AutoAddBots
-	if bots == nil {
-		bots = []string{}
+	return nil
+}
+
+// fromStoreLinearSettings maps a store row to the service DTO.
+func fromStoreLinearSettings(r store.LinearSettings) LinearSettings {
+	return LinearSettings{
+		SettingID:      r.SettingID,
+		TeamID:         r.TeamID,
+		CreationMode:   orDefault(r.CreationMode, "manual"),
+		TriggerStatus:  r.TriggerStatus,
+		NameTemplate:   r.NameTemplate,
+		ConditionExpr:  r.ConditionExpr,
+		AutoAddMembers: orEmptySlice(r.AutoAddMembers),
 	}
-	return s.store.UpsertLinearSettings(ctx, store.LinearSettings{
-		OrgID:         orgID,
-		CreationMode:  in.CreationMode,
-		TriggerStatus: in.TriggerStatus,
-		NameTemplate:  in.NameTemplate,
-		ConditionExpr: in.ConditionExpr,
-		AutoAddBots:   bots,
-	})
+}
+
+// orEmptySlice returns a non-nil empty slice for nil input (so JSON encodes [],
+// not null, and DB writes get a concrete array).
+func orEmptySlice(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
+// --- Team workflow-state sync ------------------------------------------------
+
+// LinearTeamStatesView is a team plus its workflow states, for the settings UI.
+type LinearTeamStatesView struct {
+	TeamID   string                `json:"teamId"`
+	TeamKey  string                `json:"teamKey"`
+	TeamName string                `json:"teamName"`
+	States   []LinearWorkflowState `json:"states"`
+}
+
+// SyncLinearTeamStates fetches every team's workflow states from Linear and
+// replaces the org's stored snapshot. Called on connect and on demand.
+func (s *Service) SyncLinearTeamStates(ctx context.Context, orgID string) error {
+	if !s.Enabled() {
+		return fmt.Errorf("integrations: not configured")
+	}
+	teams, err := s.LinearTeamStates(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	rows := make([]store.LinearTeamStates, 0, len(teams))
+	for _, t := range teams {
+		states := make([]store.LinearWorkflowState, 0, len(t.States))
+		for _, st := range t.States {
+			states = append(states, store.LinearWorkflowState{
+				ID: st.ID, Name: st.Name, Type: st.Type, Color: st.Color, Position: st.Position,
+			})
+		}
+		rows = append(rows, store.LinearTeamStates{
+			OrgID: orgID, TeamID: t.TeamID, TeamKey: t.TeamKey, TeamName: t.TeamName, States: states,
+		})
+	}
+	return s.store.ReplaceLinearTeamStates(ctx, orgID, rows)
+}
+
+// GetLinearTeamStates returns the org's synced team states for the settings UI
+// (empty slice when nothing synced yet).
+func (s *Service) GetLinearTeamStates(ctx context.Context, orgID string) ([]LinearTeamStatesView, error) {
+	if !s.Enabled() {
+		return []LinearTeamStatesView{}, nil
+	}
+	rows, err := s.store.GetLinearTeamStates(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LinearTeamStatesView, 0, len(rows))
+	for _, r := range rows {
+		states := make([]LinearWorkflowState, 0, len(r.States))
+		for _, st := range r.States {
+			states = append(states, LinearWorkflowState{
+				ID: st.ID, Name: st.Name, Type: st.Type, Color: st.Color, Position: st.Position,
+			})
+		}
+		out = append(out, LinearTeamStatesView{
+			TeamID: r.TeamID, TeamKey: r.TeamKey, TeamName: r.TeamName, States: states,
+		})
+	}
+	return out, nil
 }
 
 // TemplateTestResult is the outcome of testing a name template + condition

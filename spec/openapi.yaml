@@ -319,15 +319,15 @@ paths:
   /integrations/linear/settings:
     get:
       operationId: getLinearSettings
-      summary: Linear channel-creation settings for the active organization
+      summary: Linear channel-creation configs for the active organization
       description: |
-        Returns the org's Linear → Slack channel-creation rules (creation mode,
-        trigger status, name template, condition, auto-add bots), whether Linear
-        is connected at the workspace level, and the built-in sample events for
-        the test panel.
+        Returns all of the org's Linear → Slack channel-creation configs, whether
+        Linear is connected at the workspace level, the org's synced Linear teams
+        and their workflow states (for the team picker + status dropdown), and the
+        built-in sample events for the test panel.
       responses:
         "200":
-          description: Current settings + context.
+          description: Current configs + context.
           content:
             application/json:
               schema:
@@ -338,12 +338,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-    put:
-      operationId: saveLinearSettings
-      summary: Save Linear channel-creation settings
+    post:
+      operationId: createLinearSettings
+      summary: Create a Linear channel-creation config
       description: |
-        Persists the org's Linear settings. The name template and condition are
-        validated (parsed) before saving; a malformed template returns 400.
+        Creates a new config. The name template and condition are validated
+        (parsed) before saving; a malformed template — or a team already used by
+        another config — returns 400. Returns the refreshed configs + context.
       requestBody:
         required: true
         content:
@@ -352,17 +353,107 @@ paths:
               $ref: "#/components/schemas/LinearSettings"
       responses:
         "200":
-          description: Saved; returns the refreshed settings + context.
+          description: Created; returns the refreshed configs + context.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinearSettingsResponse"
         "400":
-          description: Invalid settings (e.g. unparseable template/condition).
+          description: Invalid config (bad template/condition, or a team conflict).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /integrations/linear/settings/{settingId}:
+    put:
+      operationId: updateLinearSettings
+      summary: Update a Linear channel-creation config
+      description: |
+        Updates the config identified by settingId. Same validation as create; a
+        team already used by another config returns 400. Returns the refreshed
+        configs + context.
+      parameters:
+        - name: settingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinearSettings"
+      responses:
+        "200":
+          description: Updated; returns the refreshed configs + context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinearSettingsResponse"
+        "400":
+          description: Invalid config (bad template/condition, or a team conflict).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such config for this org.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteLinearSettings
+      summary: Delete a Linear channel-creation config
+      description: Removes the config (and its team mappings). Returns the refreshed configs + context.
+      parameters:
+        - name: settingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted; returns the refreshed configs + context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinearSettingsResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /integrations/settings/sync:
+    post:
+      operationId: syncSettings
+      summary: Re-sync Linear teams/statuses and Slack members
+      description: |
+        Fetches Linear team workflow states AND Slack workspace members (bots +
+        humans) in parallel and replaces the stored snapshots. Returns the
+        refreshed configs + context (updated teams and members). Backs the "Sync"
+        button in the settings UI, for when new statuses/members aren't showing yet.
+      responses:
+        "200":
+          description: Synced; returns the refreshed configs + context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinearSettingsResponse"
         "401":
           description: No valid session.
           content:
@@ -688,8 +779,16 @@ components:
         - message
     LinearSettings:
       type: object
-      description: An organization's Linear → Slack channel-creation rules.
+      description: |
+        A Linear → Slack channel-creation config scoped to a single Linear team
+        (teamId). The team is the config's identity; a team has at most one config.
       properties:
+        settingId:
+          type: string
+          description: |
+            Stable id of this config. Omitted/empty when creating; returned on read
+            and required in the URL for update/delete.
+          example: 4b2f6c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b
         creationMode:
           type: string
           description: |
@@ -709,15 +808,20 @@ components:
           type: string
           description: GitHub-Actions-expression that must be true for creation.
           example: linear.action == 'update'
-        autoAddBots:
+        autoAddMembers:
           type: array
-          description: Bots to auto-add on channel creation.
+          description: Slack member ids (U…) — bots and people — to auto-add on channel creation.
           items:
             type: string
-          example: ["claude", "linear"]
+          example: ["U0123BOT", "U0456HUMAN"]
+        teamId:
+          type: string
+          description: The Linear team this config applies to.
+          example: ac4c7f2d-98ae-438f-b85a-33374856fd1b
       required:
         - creationMode
-        - autoAddBots
+        - autoAddMembers
+        - teamId
     SampleEvent:
       type: object
       description: A built-in example event for the settings test panel.
@@ -735,22 +839,104 @@ components:
         - id
         - label
         - raw
+    LinearWorkflowState:
+      type: object
+      description: One workflow state (issue status) of a Linear team.
+      properties:
+        id:
+          type: string
+          example: 065a2424-81d9-479d-84b8-ea8b1f20cf67
+        name:
+          type: string
+          example: In Progress
+        type:
+          type: string
+          description: Linear's state category (e.g. backlog, unstarted, started, completed, canceled).
+          example: started
+        color:
+          type: string
+          example: "#5e6ad2"
+      required:
+        - id
+        - name
+        - type
+    LinearTeamState:
+      type: object
+      description: A Linear team plus its synced workflow states.
+      properties:
+        teamId:
+          type: string
+          example: ac4c7f2d-98ae-438f-b85a-33374856fd1b
+        teamKey:
+          type: string
+          example: SKO
+        teamName:
+          type: string
+          example: SkogAI
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinearWorkflowState"
+      required:
+        - teamId
+        - teamName
+        - states
+    SlackMember:
+      type: object
+      description: A synced Slack workspace member (bot/app or human).
+      properties:
+        memberId:
+          type: string
+          description: Slack member id (U…); what conversations.invite needs.
+          example: U0123BOT
+        name:
+          type: string
+          description: Display/real name, falling back to the handle.
+          example: Claude
+        iconUrl:
+          type: string
+          example: https://example.com/avatar.png
+        isBot:
+          type: boolean
+      required:
+        - memberId
+        - name
+        - isBot
     LinearSettingsResponse:
       type: object
-      description: Linear settings plus context for the settings UI.
+      description: All of an org's Linear configs plus context for the settings UI.
       properties:
         connected:
           type: boolean
           description: Whether Linear is connected at the workspace level.
-        settings:
-          $ref: "#/components/schemas/LinearSettings"
+        configs:
+          type: array
+          description: The org's named channel-creation configs.
+          items:
+            $ref: "#/components/schemas/LinearSettings"
+        teams:
+          type: array
+          description: |
+            Synced Linear teams and their workflow states, for the "applies to"
+            team picker and the trigger-status dropdown.
+          items:
+            $ref: "#/components/schemas/LinearTeamState"
+        slackMembers:
+          type: array
+          description: |
+            Synced Slack workspace members (bots + humans), for the auto-add
+            bot/member pickers.
+          items:
+            $ref: "#/components/schemas/SlackMember"
         sampleEvents:
           type: array
           items:
             $ref: "#/components/schemas/SampleEvent"
       required:
         - connected
-        - settings
+        - configs
+        - teams
+        - slackMembers
         - sampleEvents
     TemplateTestRequest:
       type: object

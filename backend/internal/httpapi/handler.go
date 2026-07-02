@@ -2,11 +2,14 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"log"
+	"sync"
 
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
 )
 
@@ -260,25 +263,91 @@ func (h Handler) GetLinearSettings(ctx context.Context) (api.GetLinearSettingsRe
 	return resp, nil
 }
 
-// SaveLinearSettings implements `saveLinearSettings`: PUT /integrations/linear/settings.
-func (h Handler) SaveLinearSettings(ctx context.Context, req *api.LinearSettings) (api.SaveLinearSettingsRes, error) {
+// CreateLinearSettings implements `createLinearSettings`: POST /integrations/linear/settings.
+func (h Handler) CreateLinearSettings(ctx context.Context, req *api.LinearSettings) (api.CreateLinearSettingsRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
-		return &api.SaveLinearSettingsUnauthorized{Message: "unauthorized"}, nil
+		return &api.CreateLinearSettingsUnauthorized{Message: "unauthorized"}, nil
 	}
-	in := integrations.LinearSettings{
-		CreationMode:  string(req.CreationMode),
-		TriggerStatus: req.TriggerStatus.Or(""),
-		NameTemplate:  req.NameTemplate.Or(""),
-		ConditionExpr: req.ConditionExpr.Or(""),
-		AutoAddBots:   req.AutoAddBots,
-	}
-	if err := h.integrations.SaveLinearSettings(ctx, user.OrgID, in); err != nil {
-		return &api.SaveLinearSettingsBadRequest{Message: err.Error()}, nil
+	in := fromAPILinearSettings(req)
+	in.SettingID = "" // create ignores any supplied id
+	if _, err := h.integrations.SaveLinearSetting(ctx, user.OrgID, in); err != nil {
+		return &api.CreateLinearSettingsBadRequest{Message: err.Error()}, nil
 	}
 	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
 	if err != nil {
-		return &api.SaveLinearSettingsBadRequest{Message: "failed to read linear settings"}, nil
+		return &api.CreateLinearSettingsBadRequest{Message: "failed to read linear settings"}, nil
+	}
+	return resp, nil
+}
+
+// UpdateLinearSettings implements `updateLinearSettings`: PUT /integrations/linear/settings/{settingId}.
+func (h Handler) UpdateLinearSettings(ctx context.Context, req *api.LinearSettings, params api.UpdateLinearSettingsParams) (api.UpdateLinearSettingsRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.UpdateLinearSettingsUnauthorized{Message: "unauthorized"}, nil
+	}
+	in := fromAPILinearSettings(req)
+	in.SettingID = params.SettingId // the URL is authoritative for which config to update
+	if _, err := h.integrations.SaveLinearSetting(ctx, user.OrgID, in); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return &api.UpdateLinearSettingsNotFound{Message: "no such config"}, nil
+		}
+		return &api.UpdateLinearSettingsBadRequest{Message: err.Error()}, nil
+	}
+	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
+	if err != nil {
+		return &api.UpdateLinearSettingsBadRequest{Message: "failed to read linear settings"}, nil
+	}
+	return resp, nil
+}
+
+// DeleteLinearSettings implements `deleteLinearSettings`: DELETE /integrations/linear/settings/{settingId}.
+func (h Handler) DeleteLinearSettings(ctx context.Context, params api.DeleteLinearSettingsParams) (api.DeleteLinearSettingsRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	if err := h.integrations.DeleteLinearSetting(ctx, user.OrgID, params.SettingId); err != nil {
+		log.Printf("httpapi: delete linear setting %s for org %s: %v", params.SettingId, user.OrgID, err)
+		return &api.Error{Message: "failed to delete config"}, nil
+	}
+	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
+	if err != nil {
+		return &api.Error{Message: "failed to read linear settings"}, nil
+	}
+	return resp, nil
+}
+
+// SyncSettings implements `syncSettings`: POST /integrations/settings/sync.
+// It re-syncs Linear team states and Slack members in parallel, then returns the
+// refreshed settings. Each sync is non-fatal (logged) so a failure in one still
+// returns whatever is stored.
+func (h Handler) SyncSettings(ctx context.Context) (api.SyncSettingsRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	orgID := user.OrgID
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := h.integrations.SyncLinearTeamStates(ctx, orgID); err != nil {
+			log.Printf("httpapi: sync linear team states for org %s: %v", orgID, err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if err := h.integrations.SyncSlackMembers(ctx, orgID); err != nil {
+			log.Printf("httpapi: sync slack members for org %s: %v", orgID, err)
+		}
+	}()
+	wg.Wait()
+
+	resp, err := h.linearSettingsResponse(ctx, orgID)
+	if err != nil {
+		return &api.Error{Message: "failed to read linear settings"}, nil
 	}
 	return resp, nil
 }
@@ -315,10 +384,19 @@ func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRe
 	return out, nil
 }
 
-// linearSettingsResponse builds the GET/PUT response (settings + connected flag
-// + sample events) for an org.
+// linearSettingsResponse builds the shared response for every settings endpoint:
+// all of the org's configs, the connected flag, the synced teams (for the team
+// picker + status dropdown), and the sample events.
 func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api.LinearSettingsResponse, error) {
-	settings, err := h.integrations.GetLinearSettings(ctx, orgID)
+	configs, err := h.integrations.ListLinearSettings(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	teams, err := h.integrations.GetLinearTeamStates(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	members, err := h.integrations.GetSlackMembers(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -330,8 +408,19 @@ func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api
 		// "Connected" here means the org is ready to run the sync — both Linear
 		// and Slack connected at the workspace level, since the rules create
 		// Slack channels from Linear issues.
-		Connected: h.integrations.LinearSyncReady(ctx, orgID),
-		Settings:  toAPILinearSettings(settings),
+		Connected:    h.integrations.LinearSyncReady(ctx, orgID),
+		Configs:      make([]api.LinearSettings, 0, len(configs)),
+		Teams:        make([]api.LinearTeamState, 0, len(teams)),
+		SlackMembers: make([]api.SlackMember, 0, len(members)),
+	}
+	for _, c := range configs {
+		resp.Configs = append(resp.Configs, toAPILinearSettings(c))
+	}
+	for _, t := range teams {
+		resp.Teams = append(resp.Teams, toAPILinearTeamState(t))
+	}
+	for _, m := range members {
+		resp.SlackMembers = append(resp.SlackMembers, toAPISlackMember(m))
 	}
 	for _, s := range samples {
 		resp.SampleEvents = append(resp.SampleEvents, api.SampleEvent{ID: s.ID, Label: s.Label, Raw: s.Raw})
@@ -339,14 +428,28 @@ func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api
 	return resp, nil
 }
 
-// toAPILinearSettings maps the service settings to the generated type.
+// fromAPILinearSettings maps a request DTO to the service config.
+func fromAPILinearSettings(req *api.LinearSettings) integrations.LinearSettings {
+	return integrations.LinearSettings{
+		SettingID:      req.SettingId.Or(""),
+		TeamID:         req.TeamId,
+		CreationMode:   string(req.CreationMode),
+		TriggerStatus:  req.TriggerStatus.Or(""),
+		NameTemplate:   req.NameTemplate.Or(""),
+		ConditionExpr:  req.ConditionExpr.Or(""),
+		AutoAddMembers: orEmptyStrings(req.AutoAddMembers),
+	}
+}
+
+// toAPILinearSettings maps a service config to the generated type.
 func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
 	out := api.LinearSettings{
-		CreationMode: api.LinearSettingsCreationMode(s.CreationMode),
-		AutoAddBots:  s.AutoAddBots,
+		CreationMode:   api.LinearSettingsCreationMode(s.CreationMode),
+		AutoAddMembers: orEmptyStrings(s.AutoAddMembers),
+		TeamId:         s.TeamID,
 	}
-	if out.AutoAddBots == nil {
-		out.AutoAddBots = []string{}
+	if s.SettingID != "" {
+		out.SettingId = api.NewOptString(s.SettingID)
 	}
 	if s.TriggerStatus != "" {
 		out.TriggerStatus = api.NewOptString(s.TriggerStatus)
@@ -356,6 +459,43 @@ func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
 	}
 	if s.ConditionExpr != "" {
 		out.ConditionExpr = api.NewOptString(s.ConditionExpr)
+	}
+	return out
+}
+
+// toAPISlackMember maps a synced Slack member to the generated type.
+func toAPISlackMember(m integrations.SlackMemberView) api.SlackMember {
+	out := api.SlackMember{MemberId: m.MemberID, Name: m.Name, IsBot: m.IsBot}
+	if m.IconURL != "" {
+		out.IconUrl = api.NewOptString(m.IconURL)
+	}
+	return out
+}
+
+// orEmptyStrings returns a non-nil empty slice for nil input.
+func orEmptyStrings(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
+// toAPILinearTeamState maps a synced team + its states to the generated type.
+func toAPILinearTeamState(t integrations.LinearTeamStatesView) api.LinearTeamState {
+	out := api.LinearTeamState{
+		TeamId:   t.TeamID,
+		TeamName: t.TeamName,
+		States:   make([]api.LinearWorkflowState, 0, len(t.States)),
+	}
+	if t.TeamKey != "" {
+		out.TeamKey = api.NewOptString(t.TeamKey)
+	}
+	for _, st := range t.States {
+		ws := api.LinearWorkflowState{ID: st.ID, Name: st.Name, Type: st.Type}
+		if st.Color != "" {
+			ws.Color = api.NewOptString(st.Color)
+		}
+		out.States = append(out.States, ws)
 	}
 	return out
 }

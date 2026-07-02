@@ -27,8 +27,12 @@ usecase for this though.~~
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
 - ~~Update the login page, it just says Sign in with WorkOS~~
+- can we sync the icons for the linear statues as well?
+- can we add pics for members and bots as well
 - Add settings icon to take to linear, github, etc.'s settings page.
 - Invitation needs rework.
+- Explore linear's multi team flows, understand how mutiple teams work are common workspace things, team
+  specific things. How do we configure our system to allow multiple teams to integrate.
 - Add stripe account and create billing integration.
 - Open discord/slack community for support.
 - fix onboarding

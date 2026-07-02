@@ -11,17 +11,20 @@ import (
 )
 
 var (
-	rn17AllowedHeaders = map[string]string{
-		"POST": "Content-Type",
-	}
 	rn19AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn7AllowedHeaders = map[string]string{
-		"PUT": "Content-Type",
-	}
-	rn18AllowedHeaders = map[string]string{
+	rn23AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
+	}
+	rn3AllowedHeaders = map[string]string{
+		"POST": "Content-Type",
+	}
+	rn22AllowedHeaders = map[string]string{
+		"POST": "Content-Type",
+	}
+	rn5AllowedHeaders = map[string]string{
+		"PUT": "Content-Type",
 	}
 	rn1AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
@@ -132,7 +135,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn17AllowedHeaders,
+								allowedHeaders: rn19AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -157,7 +160,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn19AllowedHeaders,
+								allowedHeaders: rn23AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -242,13 +245,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								switch r.Method {
 								case "GET":
 									s.handleGetLinearSettingsRequest([0]string{}, elemIsEscaped, w, r)
-								case "PUT":
-									s.handleSaveLinearSettingsRequest([0]string{}, elemIsEscaped, w, r)
+								case "POST":
+									s.handleCreateLinearSettingsRequest([0]string{}, elemIsEscaped, w, r)
 								default:
 									s.notAllowed(w, r, notAllowedParams{
-										allowedMethods: "GET,PUT",
-										allowedHeaders: rn7AllowedHeaders,
-										acceptPost:     "",
+										allowedMethods: "GET,POST",
+										allowedHeaders: rn3AllowedHeaders,
+										acceptPost:     "application/json",
 										acceptPatch:    "",
 									})
 								}
@@ -256,24 +259,70 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								return
 							}
 							switch elem[0] {
-							case '/': // Prefix: "/test"
+							case '/': // Prefix: "/"
 
-								if l := len("/test"); len(elem) >= l && elem[0:l] == "/test" {
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
 									elem = elem[l:]
 								} else {
 									break
 								}
 
 								if len(elem) == 0 {
+									break
+								}
+								switch elem[0] {
+								case 't': // Prefix: "test"
+									origElem := elem
+									if l := len("test"); len(elem) >= l && elem[0:l] == "test" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch r.Method {
+										case "POST":
+											s.handleTestLinearTemplateRequest([0]string{}, elemIsEscaped, w, r)
+										default:
+											s.notAllowed(w, r, notAllowedParams{
+												allowedMethods: "POST",
+												allowedHeaders: rn22AllowedHeaders,
+												acceptPost:     "application/json",
+												acceptPatch:    "",
+											})
+										}
+
+										return
+									}
+
+									elem = origElem
+								}
+								// Param: "settingId"
+								// Leaf parameter, slashes are prohibited
+								idx := strings.IndexByte(elem, '/')
+								if idx >= 0 {
+									break
+								}
+								args[0] = elem
+								elem = ""
+
+								if len(elem) == 0 {
 									// Leaf node.
 									switch r.Method {
-									case "POST":
-										s.handleTestLinearTemplateRequest([0]string{}, elemIsEscaped, w, r)
+									case "DELETE":
+										s.handleDeleteLinearSettingsRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									case "PUT":
+										s.handleUpdateLinearSettingsRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
 									default:
 										s.notAllowed(w, r, notAllowedParams{
-											allowedMethods: "POST",
-											allowedHeaders: rn18AllowedHeaders,
-											acceptPost:     "application/json",
+											allowedMethods: "DELETE,PUT",
+											allowedHeaders: rn5AllowedHeaders,
+											acceptPost:     "",
 											acceptPatch:    "",
 										})
 									}
@@ -311,29 +360,68 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						}
 
 						elem = origElem
-					case 's': // Prefix: "status"
+					case 's': // Prefix: "s"
 						origElem := elem
-						if l := len("status"); len(elem) >= l && elem[0:l] == "status" {
+						if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
 						if len(elem) == 0 {
-							// Leaf node.
-							switch r.Method {
-							case "GET":
-								s.handleGetIntegrationStatusRequest([0]string{}, elemIsEscaped, w, r)
-							default:
-								s.notAllowed(w, r, notAllowedParams{
-									allowedMethods: "GET",
-									allowedHeaders: nil,
-									acceptPost:     "",
-									acceptPatch:    "",
-								})
+							break
+						}
+						switch elem[0] {
+						case 'e': // Prefix: "ettings/sync"
+
+							if l := len("ettings/sync"); len(elem) >= l && elem[0:l] == "ettings/sync" {
+								elem = elem[l:]
+							} else {
+								break
 							}
 
-							return
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "POST":
+									s.handleSyncSettingsRequest([0]string{}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "POST",
+										allowedHeaders: nil,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
+						case 't': // Prefix: "tatus"
+
+							if l := len("tatus"); len(elem) >= l && elem[0:l] == "tatus" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "GET":
+									s.handleGetIntegrationStatusRequest([0]string{}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "GET",
+										allowedHeaders: nil,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
 						}
 
 						elem = origElem
@@ -748,17 +836,17 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								switch method {
 								case "GET":
 									r.name = GetLinearSettingsOperation
-									r.summary = "Linear channel-creation settings for the active organization"
+									r.summary = "Linear channel-creation configs for the active organization"
 									r.operationID = "getLinearSettings"
 									r.operationGroup = ""
 									r.pathPattern = "/integrations/linear/settings"
 									r.args = args
 									r.count = 0
 									return r, true
-								case "PUT":
-									r.name = SaveLinearSettingsOperation
-									r.summary = "Save Linear channel-creation settings"
-									r.operationID = "saveLinearSettings"
+								case "POST":
+									r.name = CreateLinearSettingsOperation
+									r.summary = "Create a Linear channel-creation config"
+									r.operationID = "createLinearSettings"
 									r.operationGroup = ""
 									r.pathPattern = "/integrations/linear/settings"
 									r.args = args
@@ -769,25 +857,74 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								}
 							}
 							switch elem[0] {
-							case '/': // Prefix: "/test"
+							case '/': // Prefix: "/"
 
-								if l := len("/test"); len(elem) >= l && elem[0:l] == "/test" {
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
 									elem = elem[l:]
 								} else {
 									break
 								}
 
 								if len(elem) == 0 {
+									break
+								}
+								switch elem[0] {
+								case 't': // Prefix: "test"
+									origElem := elem
+									if l := len("test"); len(elem) >= l && elem[0:l] == "test" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch method {
+										case "POST":
+											r.name = TestLinearTemplateOperation
+											r.summary = "Test a name template + condition against a sample or pasted event"
+											r.operationID = "testLinearTemplate"
+											r.operationGroup = ""
+											r.pathPattern = "/integrations/linear/settings/test"
+											r.args = args
+											r.count = 0
+											return r, true
+										default:
+											return
+										}
+									}
+
+									elem = origElem
+								}
+								// Param: "settingId"
+								// Leaf parameter, slashes are prohibited
+								idx := strings.IndexByte(elem, '/')
+								if idx >= 0 {
+									break
+								}
+								args[0] = elem
+								elem = ""
+
+								if len(elem) == 0 {
 									// Leaf node.
 									switch method {
-									case "POST":
-										r.name = TestLinearTemplateOperation
-										r.summary = "Test a name template + condition against a sample or pasted event"
-										r.operationID = "testLinearTemplate"
+									case "DELETE":
+										r.name = DeleteLinearSettingsOperation
+										r.summary = "Delete a Linear channel-creation config"
+										r.operationID = "deleteLinearSettings"
 										r.operationGroup = ""
-										r.pathPattern = "/integrations/linear/settings/test"
+										r.pathPattern = "/integrations/linear/settings/{settingId}"
 										r.args = args
-										r.count = 0
+										r.count = 1
+										return r, true
+									case "PUT":
+										r.name = UpdateLinearSettingsOperation
+										r.summary = "Update a Linear channel-creation config"
+										r.operationID = "updateLinearSettings"
+										r.operationGroup = ""
+										r.pathPattern = "/integrations/linear/settings/{settingId}"
+										r.args = args
+										r.count = 1
 										return r, true
 									default:
 										return
@@ -824,29 +961,68 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 						}
 
 						elem = origElem
-					case 's': // Prefix: "status"
+					case 's': // Prefix: "s"
 						origElem := elem
-						if l := len("status"); len(elem) >= l && elem[0:l] == "status" {
+						if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
 						if len(elem) == 0 {
-							// Leaf node.
-							switch method {
-							case "GET":
-								r.name = GetIntegrationStatusOperation
-								r.summary = "Integration connection status for the active organization"
-								r.operationID = "getIntegrationStatus"
-								r.operationGroup = ""
-								r.pathPattern = "/integrations/status"
-								r.args = args
-								r.count = 0
-								return r, true
-							default:
-								return
+							break
+						}
+						switch elem[0] {
+						case 'e': // Prefix: "ettings/sync"
+
+							if l := len("ettings/sync"); len(elem) >= l && elem[0:l] == "ettings/sync" {
+								elem = elem[l:]
+							} else {
+								break
 							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "POST":
+									r.name = SyncSettingsOperation
+									r.summary = "Re-sync Linear teams/statuses and Slack members"
+									r.operationID = "syncSettings"
+									r.operationGroup = ""
+									r.pathPattern = "/integrations/settings/sync"
+									r.args = args
+									r.count = 0
+									return r, true
+								default:
+									return
+								}
+							}
+
+						case 't': // Prefix: "tatus"
+
+							if l := len("tatus"); len(elem) >= l && elem[0:l] == "tatus" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "GET":
+									r.name = GetIntegrationStatusOperation
+									r.summary = "Integration connection status for the active organization"
+									r.operationID = "getIntegrationStatus"
+									r.operationGroup = ""
+									r.pathPattern = "/integrations/status"
+									r.args = args
+									r.count = 0
+									return r, true
+								default:
+									return
+								}
+							}
+
 						}
 
 						elem = origElem
