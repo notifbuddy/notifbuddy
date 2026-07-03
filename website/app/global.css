@@ -16,8 +16,11 @@
   --color-fd-popover-foreground: var(--popover-foreground);
   --color-fd-primary: var(--primary);
   --color-fd-primary-foreground: var(--primary-foreground);
-  --color-fd-secondary: var(--secondary);
-  --color-fd-secondary-foreground: var(--secondary-foreground);
+  /* Fumadocs uses `secondary` as a quiet chrome surface (e.g. the page-action
+     buttons), not a brand color. Our brand --secondary is a saturated teal, so
+     map fd's secondary to the neutral muted surface instead. */
+  --color-fd-secondary: var(--muted);
+  --color-fd-secondary-foreground: var(--muted-foreground);
   --color-fd-muted: var(--muted);
   --color-fd-muted-foreground: var(--muted-foreground);
   --color-fd-accent: var(--accent);
