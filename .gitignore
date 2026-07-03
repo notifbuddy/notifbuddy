@@ -8,6 +8,13 @@ frontend/build/
 frontend/.svelte-kit/
 frontend/.env.local
 
+# Docs site (Next.js / Fumadocs)
+userdocs/node_modules/
+userdocs/.next/
+userdocs/.source/
+userdocs/out/
+userdocs/.env*.local
+
 # OS / editor
 .DS_Store
 
