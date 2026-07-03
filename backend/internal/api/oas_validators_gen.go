@@ -170,6 +170,8 @@ func (s LinearSettingsCreationMode) Validate() error {
 		return nil
 	case "manual":
 		return nil
+	case "condition":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

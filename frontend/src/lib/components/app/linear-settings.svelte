@@ -8,7 +8,6 @@
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import * as Field from '$lib/components/ui/field';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
@@ -61,6 +60,9 @@
 	let syncing = $state(false);
 
 	const memberName = (id: string) => slackMembers.find((m) => m.memberId === id)?.name ?? id;
+
+	const creationModeLabel = (mode: string) =>
+		mode === 'status' ? 'On issue status' : mode === 'condition' ? 'On condition' : 'Manual only';
 
 	// [experimental] Per-provider status for the empty-state check badges.
 	let status = $state<IntegrationState | null>(null);
@@ -474,42 +476,42 @@
 						<!-- Rules -->
 						<Field.FieldGroup>
 							<Field.Field>
-								<Field.FieldTitle>Channel creation</Field.FieldTitle>
-								<Field.FieldDescription>
-									Open a channel automatically when an issue reaches a status, or only when someone
-									asks <code class="text-xs">@notifbuddy</code>.
-								</Field.FieldDescription>
-								<ToggleGroup.Root
+								<Field.FieldLabel>Channel creation</Field.FieldLabel>
+								<Field.FieldDescription>How a Slack channel opens for this team's issues.</Field.FieldDescription>
+								<Select.Root
 									type="single"
-									variant="outline"
-									spacing={2}
 									value={d.creationMode}
 									onValueChange={(v) => {
 										if (v) {
-											d.creationMode = v as 'manual' | 'status';
+											d.creationMode = v as 'manual' | 'status' | 'condition';
 											markEdited(d);
 										}
 									}}
 								>
-									<ToggleGroup.Item
-										value="manual"
-										class="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:border-primary"
-									>
-										Manual
-									</ToggleGroup.Item>
-									<ToggleGroup.Item
-										value="status"
-										class="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:border-primary"
-									>
-										On issue status
-									</ToggleGroup.Item>
-								</ToggleGroup.Root>
-							</Field.Field>
+									<Select.Trigger class="w-full">{creationModeLabel(d.creationMode)}</Select.Trigger>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value="manual" label="Manual only">Manual only</Select.Item>
+											<Select.Item value="status" label="On issue status">On issue status</Select.Item>
+											<Select.Item value="condition" label="On condition">On condition</Select.Item>
+										</Select.Group>
+									</Select.Content>
+								</Select.Root>
+								<!-- Helper explains the selected mode so the follow-up field below reads as
+								     "configure this mode", not a standalone option. -->
+								<Field.FieldDescription>
+									{#if d.creationMode === 'manual'}
+										Channels only open when someone asks <code class="text-xs">@notifbuddy</code> in
+										Slack.
+									{:else if d.creationMode === 'status'}
+										A channel opens when an issue reaches the workflow state below.
+									{:else}
+										A channel opens whenever the condition below is true.
+									{/if}
+								</Field.FieldDescription>
 
-							{#if d.creationMode === 'status'}
-								{@const statusKey = d.key}
-								<Field.Field>
-									<Field.FieldLabel>Trigger status</Field.FieldLabel>
+								{#if d.creationMode === 'status'}
+									{@const statusKey = d.key}
 									{#if statusOptions.length > 0}
 										<!-- Single-select combobox over the team's synced statuses. -->
 										<Popover.Root
@@ -543,6 +545,7 @@
 																	onSelect={() => {
 																		d.triggerStatus = name;
 																		statusOpen[statusKey] = false;
+																		markEdited(d);
 																	}}
 																>
 																	<CheckIcon
@@ -556,18 +559,30 @@
 												</Command.Root>
 											</Popover.Content>
 										</Popover.Root>
-										<Field.FieldDescription>
-											The workflow state that triggers creation.
-										</Field.FieldDescription>
 									{:else}
 										<!-- Nothing synced yet: fall back to a plain text field. -->
-										<Input bind:value={d.triggerStatus} placeholder="In Progress" />
+										<Input
+											bind:value={d.triggerStatus}
+											placeholder="In Progress"
+											oninput={() => markEdited(d)}
+										/>
 										<Field.FieldDescription>
 											No synced statuses yet. Type the exact workflow state name, or Sync above.
 										</Field.FieldDescription>
 									{/if}
-								</Field.Field>
-							{/if}
+								{:else if d.creationMode === 'condition'}
+									<Textarea
+										bind:value={d.conditionExpr}
+										class="min-h-20 font-mono text-xs"
+										placeholder={"linear.data.state.name == 'Done'"}
+										oninput={() => markEdited(d)}
+									/>
+									<Field.FieldDescription>
+										A GitHub Actions expression evaluated against the event. The channel opens when it's
+										true.
+									</Field.FieldDescription>
+								{/if}
+							</Field.Field>
 
 							<Field.FieldSeparator />
 
@@ -580,19 +595,6 @@
 									oninput={() => markEdited(d)}
 								/>
 								<Field.FieldDescription>Template for the new channel's name.</Field.FieldDescription>
-							</Field.Field>
-
-							<Field.Field>
-								<Field.FieldLabel>Creation condition</Field.FieldLabel>
-								<Textarea
-									bind:value={d.conditionExpr}
-									class="min-h-20 font-mono text-xs"
-									placeholder={"linear.action == 'update' && linear.data.state.name == 'Done'"}
-									oninput={() => markEdited(d)}
-								/>
-								<Field.FieldDescription>
-									Must evaluate to true for a channel to be created. Leave empty to always create.
-								</Field.FieldDescription>
 							</Field.Field>
 
 							<Field.FieldSeparator />

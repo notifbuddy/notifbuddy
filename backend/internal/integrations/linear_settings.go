@@ -21,7 +21,7 @@ var sampleEventsFS embed.FS
 type LinearSettings struct {
 	SettingID      string   `json:"settingId,omitempty"`
 	TeamID         string   `json:"teamId"`
-	CreationMode   string   `json:"creationMode"`  // "status" | "manual"
+	CreationMode   string   `json:"creationMode"`  // "status" | "manual" | "condition"
 	TriggerStatus  string   `json:"triggerStatus"` // workflow state name (status mode)
 	NameTemplate   string   `json:"nameTemplate"`
 	ConditionExpr  string   `json:"conditionExpr"`
@@ -128,11 +128,14 @@ func (s *Service) validateLinearSettings(in LinearSettings) error {
 	if strings.TrimSpace(in.TeamID) == "" {
 		return fmt.Errorf("a team is required")
 	}
-	if in.CreationMode != "status" && in.CreationMode != "manual" {
+	if in.CreationMode != "status" && in.CreationMode != "manual" && in.CreationMode != "condition" {
 		return fmt.Errorf("invalid creation mode %q", in.CreationMode)
 	}
 	if in.CreationMode == "status" && strings.TrimSpace(in.TriggerStatus) == "" {
 		return fmt.Errorf("trigger status is required when creation mode is 'status'")
+	}
+	if in.CreationMode == "condition" && strings.TrimSpace(in.ConditionExpr) == "" {
+		return fmt.Errorf("a condition is required when creation mode is 'on condition'")
 	}
 	// Validate templates by rendering/evaluating against an empty event: a parse
 	// error surfaces here; a missing-field (null) does not.

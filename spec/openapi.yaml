@@ -793,8 +793,9 @@ components:
           type: string
           description: |
             'status' auto-creates a channel when an issue reaches triggerStatus;
+            'condition' auto-creates when conditionExpr evaluates true;
             'manual' only creates via @notifbuddy.
-          enum: [status, manual]
+          enum: [status, manual, condition]
           example: manual
         triggerStatus:
           type: string

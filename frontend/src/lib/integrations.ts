@@ -96,7 +96,7 @@ export type WebhookEvent = {
 export type LinearSettings = {
 	settingId?: string;
 	teamId: string;
-	creationMode: 'status' | 'manual';
+	creationMode: 'status' | 'manual' | 'condition';
 	triggerStatus?: string;
 	nameTemplate?: string;
 	conditionExpr?: string;

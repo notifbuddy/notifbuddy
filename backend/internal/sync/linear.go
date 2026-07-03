@@ -128,11 +128,17 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	if !ok {
 		return // no config applies to this issue's team
 	}
-	if settings.CreationMode != "status" {
+	switch settings.CreationMode {
+	case "status":
+		// Create when the issue reaches the configured workflow state.
+		if !strings.EqualFold(p.Linear.Data.State.Name, settings.TriggerStatus) {
+			return // not the trigger status
+		}
+	case "condition":
+		// Create whenever the condition expression is true; the condition gate in
+		// ensureChannel does the actual evaluation, so nothing to check here.
+	default:
 		return // manual mode: channels are created via @notifbuddy only
-	}
-	if !strings.EqualFold(p.Linear.Data.State.Name, settings.TriggerStatus) {
-		return // not the trigger status
 	}
 	issueID := p.Linear.Data.ID
 	// Idempotency: one channel per issue. If it already exists, do nothing.
@@ -140,7 +146,7 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 		return
 	}
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
-	e.ensureChannel(ctx, orgID, issueID, settings, evt, "status")
+	e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode)
 }
 
 // settingForIssue resolves the config that applies to an issue event's team.

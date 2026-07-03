@@ -406,6 +406,57 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	}
 }
 
+// Condition mode creates a channel on any issue event whose condition is true,
+// regardless of the issue's status.
+func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
+	st := newFakeStore()
+	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
+		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Done"}},
+	}}
+	b, _ := json.Marshal(env)
+	st.linearPayloads["dc1"] = b
+	sl := &fakeSlack{nextChannel: "C_COND"}
+	pub := &spyPub{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:  "condition",
+		ConditionExpr: "linear.data.state.name == 'Done'",
+		NameTemplate:  "tkt-${{ linear.data.identifier }}",
+	}}
+	e := newEngine(st, sl, ig, pub)
+
+	e.OnLinearEvent(context.Background(), linearRef("dc1", "org1"))
+
+	if sl.createdName != "tkt-sko-9" {
+		t.Errorf("channel name = %q, want tkt-sko-9", sl.createdName)
+	}
+	if c, _ := st.ChannelForIssue(context.Background(), "org1", "issue9"); c != "C_COND" {
+		t.Errorf("issue->channel mapping not stored: %q", c)
+	}
+}
+
+// Condition mode must not create a channel when the condition is false.
+func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
+	st := newFakeStore()
+	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		"action": "update", "type": "Issue", "actor": map[string]any{},
+		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
+	}}
+	b, _ := json.Marshal(env)
+	st.linearPayloads["dc2"] = b
+	sl := &fakeSlack{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:  "condition",
+		ConditionExpr: "linear.data.state.name == 'Done'",
+	}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("dc2", "org1"))
+	if sl.createdName != "" {
+		t.Errorf("no channel should be created when the condition is false; created %q", sl.createdName)
+	}
+}
+
 // An issue whose team isn't mapped to any config must be ignored, even when its
 // status would otherwise trigger creation.
 func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
