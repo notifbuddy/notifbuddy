@@ -607,11 +607,12 @@ export interface components {
             settingId?: string;
             /**
              * @description 'status' auto-creates a channel when an issue reaches triggerStatus;
+             *     'condition' auto-creates when conditionExpr evaluates true;
              *     'manual' only creates via @notifbuddy.
              * @example manual
              * @enum {string}
              */
-            creationMode: "status" | "manual";
+            creationMode: "status" | "manual" | "condition";
             /**
              * @description Linear workflow state name that triggers creation (status mode).
              * @example In Progress

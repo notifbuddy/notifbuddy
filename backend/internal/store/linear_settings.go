@@ -28,7 +28,7 @@ type LinearSettings struct {
 	SettingID      string
 	OrgID          string
 	TeamID         string   // the single Linear team this config applies to
-	CreationMode   string   // "status" | "manual"
+	CreationMode   string   // "status" | "manual" | "condition"
 	TriggerStatus  string   // workflow state name that triggers creation (status mode)
 	NameTemplate   string   // GHA-expression channel-name template
 	ConditionExpr  string   // GHA-expression that must be true to create

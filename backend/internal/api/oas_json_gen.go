@@ -1178,6 +1178,8 @@ func (s *LinearSettingsCreationMode) Decode(d *jx.Decoder) error {
 		*s = LinearSettingsCreationModeStatus
 	case LinearSettingsCreationModeManual:
 		*s = LinearSettingsCreationModeManual
+	case LinearSettingsCreationModeCondition:
+		*s = LinearSettingsCreationModeCondition
 	default:
 		*s = LinearSettingsCreationMode(v)
 	}

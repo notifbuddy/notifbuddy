@@ -390,8 +390,8 @@ type LinearSettings struct {
 	// Stable id of this config. Omitted/empty when creating; returned on read and required in the URL for
 	// update/delete.
 	SettingId OptString `json:"settingId"`
-	// 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
-	// @notifbuddy.
+	// 'status' auto-creates a channel when an issue reaches triggerStatus; 'condition' auto-creates when
+	// conditionExpr evaluates true; 'manual' only creates via @notifbuddy.
 	CreationMode LinearSettingsCreationMode `json:"creationMode"`
 	// Linear workflow state name that triggers creation (status mode).
 	TriggerStatus OptString `json:"triggerStatus"`
@@ -475,13 +475,14 @@ func (s *LinearSettings) SetTeamId(val string) {
 	s.TeamId = val
 }
 
-// 'status' auto-creates a channel when an issue reaches triggerStatus; 'manual' only creates via
-// @notifbuddy.
+// 'status' auto-creates a channel when an issue reaches triggerStatus; 'condition' auto-creates when
+// conditionExpr evaluates true; 'manual' only creates via @notifbuddy.
 type LinearSettingsCreationMode string
 
 const (
-	LinearSettingsCreationModeStatus LinearSettingsCreationMode = "status"
-	LinearSettingsCreationModeManual LinearSettingsCreationMode = "manual"
+	LinearSettingsCreationModeStatus    LinearSettingsCreationMode = "status"
+	LinearSettingsCreationModeManual    LinearSettingsCreationMode = "manual"
+	LinearSettingsCreationModeCondition LinearSettingsCreationMode = "condition"
 )
 
 // AllValues returns all LinearSettingsCreationMode values.
@@ -489,6 +490,7 @@ func (LinearSettingsCreationMode) AllValues() []LinearSettingsCreationMode {
 	return []LinearSettingsCreationMode{
 		LinearSettingsCreationModeStatus,
 		LinearSettingsCreationModeManual,
+		LinearSettingsCreationModeCondition,
 	}
 }
 
@@ -498,6 +500,8 @@ func (s LinearSettingsCreationMode) MarshalText() ([]byte, error) {
 	case LinearSettingsCreationModeStatus:
 		return []byte(s), nil
 	case LinearSettingsCreationModeManual:
+		return []byte(s), nil
+	case LinearSettingsCreationModeCondition:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -512,6 +516,9 @@ func (s *LinearSettingsCreationMode) UnmarshalText(data []byte) error {
 		return nil
 	case LinearSettingsCreationModeManual:
 		*s = LinearSettingsCreationModeManual
+		return nil
+	case LinearSettingsCreationModeCondition:
+		*s = LinearSettingsCreationModeCondition
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
