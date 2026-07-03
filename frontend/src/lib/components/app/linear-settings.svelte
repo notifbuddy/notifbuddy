@@ -28,6 +28,7 @@
 	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import JsonEventEditor from './json-event-editor.svelte';
+	import LinearStatusIcon from './linear-status-icon.svelte';
 	import { cn } from '$lib/utils';
 	import {
 		fetchLinearSettings,
@@ -40,6 +41,7 @@
 		statusOf,
 		type LinearSettings,
 		type LinearTeamState,
+		type LinearWorkflowState,
 		type SlackMember,
 		type SampleEvent,
 		type TemplateTestResult,
@@ -146,12 +148,19 @@
 	const teamName = (id: string) => teams.find((t) => t.teamId === id)?.teamName ?? id;
 	const teamKey = (id: string) => teams.find((t) => t.teamId === id)?.teamKey ?? '';
 
-	// Status options are just the config's team's workflow states — no union,
-	// since a config maps to one team and statuses are team-specific.
-	function statusOptionsFor(d: Draft): string[] {
+	// Status options are the config's team's workflow states — no union, since a
+	// config maps to one team and statuses are team-specific. We keep the full
+	// state (name + type + color) so the picker can render Linear's status glyph.
+	function statusOptionsFor(d: Draft): LinearWorkflowState[] {
 		const team = teams.find((t) => t.teamId === d.teamId);
 		if (!team) return [];
-		return [...team.states].map((s) => s.name).sort((a, b) => a.localeCompare(b));
+		return [...team.states].sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	// The full state object for a config's currently-selected trigger status, so the
+	// combobox trigger can show its glyph alongside the name.
+	function selectedStatus(d: Draft): LinearWorkflowState | undefined {
+		return statusOptionsFor(d).find((s) => s.name === d.triggerStatus);
 	}
 
 	// Teams that already have a config (draft) — these are excluded from the
@@ -521,6 +530,7 @@
 										>
 											<Popover.Trigger>
 												{#snippet child({ props })}
+													{@const sel = selectedStatus(d)}
 													<Button
 														{...props}
 														variant="outline"
@@ -528,7 +538,18 @@
 														aria-expanded={statusOpen[statusKey] ?? false}
 														class="w-full justify-between font-normal"
 													>
-														{d.triggerStatus || 'Select a status'}
+														{#if sel}
+															<span class="flex min-w-0 items-center gap-2">
+																<LinearStatusIcon
+																	type={sel.type}
+																	color={sel.color ?? 'currentColor'}
+																	class="shrink-0"
+																/>
+																<span class="truncate">{sel.name}</span>
+															</span>
+														{:else}
+															Select a status
+														{/if}
 														<ChevronsUpDownIcon class="opacity-50" />
 													</Button>
 												{/snippet}
@@ -539,19 +560,24 @@
 													<Command.List>
 														<Command.Empty>No status found.</Command.Empty>
 														<Command.Group>
-															{#each statusOptions as name (name)}
+															{#each statusOptions as state (state.id)}
 																<Command.Item
-																	value={name}
+																	value={state.name}
 																	onSelect={() => {
-																		d.triggerStatus = name;
+																		d.triggerStatus = state.name;
 																		statusOpen[statusKey] = false;
 																		markEdited(d);
 																	}}
 																>
 																	<CheckIcon
-																		class={cn(d.triggerStatus !== name && 'text-transparent')}
+																		class={cn(d.triggerStatus !== state.name && 'text-transparent')}
 																	/>
-																	{name}
+																	<LinearStatusIcon
+																		type={state.type}
+																		color={state.color ?? 'currentColor'}
+																		class="shrink-0"
+																	/>
+																	{state.name}
 																</Command.Item>
 															{/each}
 														</Command.Group>
