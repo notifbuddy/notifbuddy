@@ -181,11 +181,12 @@ func defaultConfig() Config {
 
 // Load reads the YAML config file, expands `$VAR`/`${VAR}` env references in
 // every string field, and validates required values. The path comes from the
-// CONFIG_FILE env var, defaulting to "config.yaml".
+// CONFIG_FILE env var, defaulting to "config.local.yaml" (prod deploys set
+// CONFIG_FILE=config.prod.yaml).
 func Load() (Config, error) {
 	cfg := defaultConfig()
 
-	path := envOr("CONFIG_FILE", "config.yaml")
+	path := envOr("CONFIG_FILE", "config.local.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)

@@ -24,7 +24,7 @@ import (
 )
 
 func main() {
-	// Best-effort load of backend/.env so the env vars referenced by config.yaml
+	// Best-effort load of backend/.env so the env vars referenced by the config
 	// (e.g. $WORKOS_API_KEY) are present without any shell setup. Real env vars
 	// already set take precedence; a missing file is not an error.
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
