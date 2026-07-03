@@ -232,3 +232,19 @@ html > body[data-scroll-locked] {
     letter-spacing: var(--tracking-normal);
   }
 }
+
+/* notifbuddy brand mark (see components/logo.tsx). Brand-kit values: the disc is
+   warm near-black on light / warm paper on dark; the clay dot brightens slightly
+   in dark to hold against the deep canvas. */
+.nb-disc {
+  background: #2a2925;
+}
+.nb-dot {
+  background: oklch(0.64 0.058 45);
+}
+.dark .nb-disc {
+  background: #f3f0e9;
+}
+.dark .nb-dot {
+  background: oklch(0.7 0.06 48);
+}
