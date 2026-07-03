@@ -15,4 +15,3 @@ frontend/.env.local
 .agents/
 .claude/
 .playwright-mcp/
-website
