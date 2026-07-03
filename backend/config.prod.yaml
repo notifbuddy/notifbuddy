@@ -1,0 +1,95 @@
+# PRODUCTION backend configuration for NotifBuddy.
+#
+# Same shape as config.local.yaml, but with production URLs/origins. Sensitive
+# values still reference env vars (`${VAR}`), resolved at startup — a referenced-
+# but-unset variable is a hard error. Select this file with
+# CONFIG_FILE=config.prod.yaml (the Docker image / Cloud Run sets this).
+#
+# ⚠️ FILL IN THE PLACEHOLDER URLs after `infra apply` allocates the Cloud Run
+#    URL (infra output backend_url) and you know the prod frontend origin.
+#    Every OAuth redirect/callback below must also be registered in the
+#    respective provider dashboards (WorkOS, GitHub App, Slack app, Linear app).
+
+server:
+  addr: ":8080" # Cloud Run routes $PORT (default 8080) to this
+
+cors:
+  allow_origin: "https://app.notifbuddy.com" # TODO: exact prod SPA origin (credentialed CORS: no "*")
+
+workos:
+  client_id: "client_01KW191FHXJTNC0X9X9W39DWMX"
+  api_key: "${WORKOS_API_KEY}" # SECRET
+  cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET (>=32 chars)
+  redirect_uri: "https://api.notifbuddy.com/auth/callback" # TODO: prod backend base + /auth/callback; must match a WorkOS dashboard redirect
+  login_provider: "GitHubOAuth"
+
+app:
+  post_login_url: "https://app.notifbuddy.com" # TODO: prod frontend URL the browser lands on after login/logout
+  insecure_cookies: false # keep false in prod (HTTPS only)
+
+database:
+  url: "${DATABASE_URL}" # injected by infra from the Neon connection string
+
+encryption:
+  provider: "local" # "local" (AES-GCM) or "kms"
+  local_key: "${INTEGRATION_ENC_KEY}" # SECRET — base64 32-byte key; MUST be set + stable in prod (empty = ephemeral, loses stored tokens on restart)
+  kms_key_id: ""
+
+pubsub:
+  provider: "memory" # single Cloud Run service → in-process bus is fine; switch to "sns" if you scale out
+  sns_topic_arn: ""
+
+github:
+  app_slug: "notifbuddy" # TODO: prod GitHub App slug (github.com/apps/<slug>)
+  app_id: "4151532" # TODO: prod GitHub App numeric id
+  client_id: "Iv23li54M6KJDfbqwvtu" # TODO: prod App OAuth client id
+  client_secret: "${GITHUB_APP_CLIENT_SECRET}" # SECRET
+  private_key: "${GITHUB_APP_PRIVATE_KEY}" # SECRET — PEM contents
+  webhook_secret: "${GITHUB_WEBHOOK_SECRET}" # SECRET
+  callback_url: "https://api.notifbuddy.com/integrations/github/callback" # TODO: prod backend base
+  user_scopes:
+    - repo
+    - read:user
+  user_callback_url: "https://api.notifbuddy.com/integrations/github/callback" # TODO: prod backend base
+
+slack:
+  client_id: "11457434980017.11440212651047" # TODO: prod Slack app client id
+  client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
+  scopes:
+    - app_mentions:read
+    - channels:manage
+    - channels:history
+    - channels:read
+    - commands
+    - groups:history
+    - groups:write
+    - reactions:write
+    - chat:write
+    - chat:write.public
+    - chat:write.customize
+    - im:history
+    - im:read
+    - im:write
+    - users:read
+    - users:read.email
+    - reactions:read
+    - emoji:read
+  user_scopes:
+    - chat:write
+    - channels:write
+  callback_url: "https://api.notifbuddy.com/integrations/slack/callback" # TODO: prod backend base
+  signing_secret: "${SLACK_SIGNING_SECRET}" # SECRET
+
+linear:
+  client_id: "c7a330b6ba19f5ba1489ef509fa10516" # TODO: prod Linear OAuth app client id
+  client_secret: "${LINEAR_CLIENT_SECRET}" # SECRET
+  scopes:
+    - read
+    - write
+  callback_url: "https://api.notifbuddy.com/integrations/linear/callback" # TODO: prod backend base
+  webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SECRET
+
+cloudflare:
+  account_id: "${CF_ACCOUNT_ID}" # TODO: prod Cloudflare account id
+  api_token: "${CF_API_TOKEN}" # SECRET
+  model: "@cf/meta/llama-3.1-8b-instruct"
