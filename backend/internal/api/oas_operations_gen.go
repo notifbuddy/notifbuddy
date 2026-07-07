@@ -6,10 +6,13 @@ package api
 type OperationName = string
 
 const (
+	CreateBillingCheckoutOperation OperationName = "CreateBillingCheckout"
+	CreateBillingPortalOperation   OperationName = "CreateBillingPortal"
 	CreateInvitationOperation      OperationName = "CreateInvitation"
 	CreateLinearSettingsOperation  OperationName = "CreateLinearSettings"
 	DeleteLinearSettingsOperation  OperationName = "DeleteLinearSettings"
 	DisconnectIntegrationOperation OperationName = "DisconnectIntegration"
+	GetBillingOperation            OperationName = "GetBilling"
 	GetIntegrationStatusOperation  OperationName = "GetIntegrationStatus"
 	GetLinearSettingsOperation     OperationName = "GetLinearSettings"
 	GetMeOperation                 OperationName = "GetMe"
@@ -20,6 +23,7 @@ const (
 	ListMembersOperation           OperationName = "ListMembers"
 	PingOperation                  OperationName = "Ping"
 	SelectOrgOperation             OperationName = "SelectOrg"
+	SubmitOssApplicationOperation  OperationName = "SubmitOssApplication"
 	SyncSettingsOperation          OperationName = "SyncSettings"
 	TestLinearTemplateOperation    OperationName = "TestLinearTemplate"
 	UpdateLinearSettingsOperation  OperationName = "UpdateLinearSettings"

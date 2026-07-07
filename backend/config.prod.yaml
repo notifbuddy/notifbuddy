@@ -22,6 +22,7 @@ workos:
   cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET (>=32 chars)
   redirect_uri: "https://api.notifbuddy.com/auth/callback" # TODO: prod backend base + /auth/callback; must match a WorkOS dashboard redirect
   login_provider: "GitHubOAuth"
+  webhook_secret: "${WORKOS_WEBHOOK_SECRET}" # SECRET — verifies WorkOS-Signature (membership events → seat sync)
 
 app:
   post_login_url: "https://app.notifbuddy.com" # TODO: prod frontend URL the browser lands on after login/logout
@@ -93,3 +94,8 @@ cloudflare:
   account_id: "${CF_ACCOUNT_ID}" # TODO: prod Cloudflare account id
   api_token: "${CF_API_TOKEN}" # SECRET
   model: "@cf/meta/llama-3.1-8b-instruct"
+
+stripe:
+  api_key: "${STRIPE_API_KEY}" # SECRET — live restricted key (rk_live_...)
+  webhook_secret: "${STRIPE_WEBHOOK_SECRET}" # SECRET — from the dashboard webhook endpoint
+  price_id: "" # TODO: live per-seat monthly Price (price_...) for NotifBuddy Pro

@@ -181,6 +181,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/InvitationResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "400":
           description: The request was invalid (e.g. no active organization).
           content:
@@ -358,6 +364,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinearSettingsResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "400":
           description: Invalid config (bad template/condition, or a team conflict).
           content:
@@ -397,6 +409,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinearSettingsResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "400":
           description: Invalid config (bad template/condition, or a team conflict).
           content:
@@ -432,6 +450,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinearSettingsResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           description: No valid session.
           content:
@@ -454,6 +478,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinearSettingsResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           description: No valid session.
           content:
@@ -483,6 +513,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TemplateTestResponse"
+        "402":
+          description: Billing locked — the trial has expired and there is no subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "400":
           description: Neither sampleId nor a valid event was provided.
           content:
@@ -491,6 +527,142 @@ paths:
                 $ref: "#/components/schemas/Error"
         "401":
           description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /billing:
+    get:
+      operationId: getBilling
+      summary: Billing status for the active organization
+      description: |
+        Returns the active organization's billing state: plan, whether features
+        are locked, the trial deadline, and Stripe subscription facts. Lazily
+        starts the 21-day trial on the org's first touch. When the org has an
+        active subscription this also reconciles the Stripe seat quantity with
+        the current member count. The Stripe webhook
+        (POST /billing/stripe/webhook) and the WorkOS membership webhook
+        (POST /auth/workos/webhook) are signature-verified raw routes and not
+        part of this JSON spec.
+      responses:
+        "200":
+          description: The organization's billing status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingStatusResponse"
+        "400":
+          description: The session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /billing/checkout:
+    post:
+      operationId: createBillingCheckout
+      summary: Start a Stripe Checkout session for the Pro plan
+      description: |
+        Creates a Stripe Checkout session (subscription mode) for the Pro plan
+        at the current member count and returns its URL for the browser to
+        redirect to. 409 when the organization already has a live subscription.
+      responses:
+        "200":
+          description: The Checkout session to redirect to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRedirectResponse"
+        "400":
+          description: No active organization, or billing is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The organization already has a live subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /billing/portal:
+    post:
+      operationId: createBillingPortal
+      summary: Open the Stripe Customer Portal
+      description: |
+        Creates a Stripe Billing Portal session for the organization's customer
+        (card updates, cancellation, invoices) and returns its URL. 400 when the
+        organization has never checked out (no Stripe customer yet).
+      responses:
+        "200":
+          description: The portal session to redirect to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRedirectResponse"
+        "400":
+          description: |
+            No active organization, billing is not configured, or the
+            organization has no Stripe customer yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /billing/oss-application:
+    post:
+      operationId: submitOssApplication
+      summary: Apply for the free open-source tier
+      description: |
+        Records an application for the free-forever open-source tier: a sponsor
+        URL (the open-source repo or sponsorship page) plus an optional note.
+        Free usage requires the project to display a "Sponsored by NotifBuddy"
+        tag on its README; reviewers check for it by hand. The
+        application status is reported by GET /billing. 409 when the org is
+        already approved or has a live subscription.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OssApplicationRequest"
+      responses:
+        "200":
+          description: Application recorded; the refreshed billing status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingStatusResponse"
+        "400":
+          description: No active organization, or a missing/invalid sponsor URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Already approved, or a live subscription exists.
           content:
             application/json:
               schema:
@@ -546,9 +718,101 @@ components:
           description: All organizations the user is a member of.
           items:
             $ref: "#/components/schemas/Organization"
+        billing:
+          $ref: "#/components/schemas/BillingSummary"
       required:
         - id
         - email
+    BillingSummary:
+      type: object
+      description: |
+        The active organization's billing state, embedded in /me so the SPA can
+        show the trial banner / lock screen without an extra request.
+      properties:
+        plan:
+          type: string
+          description: The organization's plan.
+          enum: [trial, pro, oss_free, enterprise]
+          example: trial
+        locked:
+          type: boolean
+          description: Whether features are locked (trial expired, no subscription).
+        trialEndsAt:
+          type: string
+          format: date-time
+          description: When the 21-day trial ends/ended.
+          example: "2026-07-28T00:00:00Z"
+      required:
+        - plan
+        - locked
+        - trialEndsAt
+    BillingStatusResponse:
+      type: object
+      description: The active organization's full billing status.
+      properties:
+        plan:
+          type: string
+          description: The organization's plan.
+          enum: [trial, pro, oss_free, enterprise]
+          example: trial
+        locked:
+          type: boolean
+          description: Whether features are locked (trial expired, no subscription).
+        trialEndsAt:
+          type: string
+          format: date-time
+          description: When the 21-day trial ends/ended.
+          example: "2026-07-28T00:00:00Z"
+        subscribed:
+          type: boolean
+          description: Whether a live (non-canceled) Stripe subscription exists.
+        stripeStatus:
+          type: string
+          description: The raw Stripe subscription status, once subscribed.
+          example: active
+        seats:
+          type: integer
+          description: The seat quantity on the Stripe subscription, once subscribed.
+          example: 5
+        priceCentsPerSeat:
+          type: integer
+          description: The Pro price in cents per member per month.
+          example: 999
+        ossApplicationStatus:
+          type: string
+          description: The open-source application state, if one was submitted.
+          enum: [pending, approved, rejected]
+          example: pending
+      required:
+        - plan
+        - locked
+        - trialEndsAt
+        - subscribed
+        - priceCentsPerSeat
+    BillingRedirectResponse:
+      type: object
+      description: A Stripe-hosted page (Checkout or Billing Portal) to redirect to.
+      properties:
+        url:
+          type: string
+          description: The URL the browser should navigate to.
+          example: https://checkout.stripe.com/c/pay/cs_test_...
+      required:
+        - url
+    OssApplicationRequest:
+      type: object
+      description: An application for the free open-source tier.
+      properties:
+        sponsorUrl:
+          type: string
+          description: Link to the open-source repo or sponsorship page.
+          example: https://github.com/acme/widget
+        note:
+          type: string
+          description: Optional context for the reviewer.
+          example: Maintainers of the widget project, ~40 contributors.
+      required:
+        - sponsorUrl
     Organization:
       type: object
       description: A WorkOS organization the user belongs to.

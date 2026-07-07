@@ -3,12 +3,365 @@
 package api
 
 import (
+	"time"
+
 	"github.com/go-faster/errors"
 )
+
+// A Stripe-hosted page (Checkout or Billing Portal) to redirect to.
+// Ref: #/components/schemas/BillingRedirectResponse
+type BillingRedirectResponse struct {
+	// The URL the browser should navigate to.
+	URL string `json:"url"`
+}
+
+// GetURL returns the value of URL.
+func (s *BillingRedirectResponse) GetURL() string {
+	return s.URL
+}
+
+// SetURL sets the value of URL.
+func (s *BillingRedirectResponse) SetURL(val string) {
+	s.URL = val
+}
+
+func (*BillingRedirectResponse) createBillingCheckoutRes() {}
+func (*BillingRedirectResponse) createBillingPortalRes()   {}
+
+// The active organization's full billing status.
+// Ref: #/components/schemas/BillingStatusResponse
+type BillingStatusResponse struct {
+	// The organization's plan.
+	Plan BillingStatusResponsePlan `json:"plan"`
+	// Whether features are locked (trial expired, no subscription).
+	Locked bool `json:"locked"`
+	// When the 21-day trial ends/ended.
+	TrialEndsAt time.Time `json:"trialEndsAt"`
+	// Whether a live (non-canceled) Stripe subscription exists.
+	Subscribed bool `json:"subscribed"`
+	// The raw Stripe subscription status, once subscribed.
+	StripeStatus OptString `json:"stripeStatus"`
+	// The seat quantity on the Stripe subscription, once subscribed.
+	Seats OptInt `json:"seats"`
+	// The Pro price in cents per member per month.
+	PriceCentsPerSeat int `json:"priceCentsPerSeat"`
+	// The open-source application state, if one was submitted.
+	OssApplicationStatus OptBillingStatusResponseOssApplicationStatus `json:"ossApplicationStatus"`
+}
+
+// GetPlan returns the value of Plan.
+func (s *BillingStatusResponse) GetPlan() BillingStatusResponsePlan {
+	return s.Plan
+}
+
+// GetLocked returns the value of Locked.
+func (s *BillingStatusResponse) GetLocked() bool {
+	return s.Locked
+}
+
+// GetTrialEndsAt returns the value of TrialEndsAt.
+func (s *BillingStatusResponse) GetTrialEndsAt() time.Time {
+	return s.TrialEndsAt
+}
+
+// GetSubscribed returns the value of Subscribed.
+func (s *BillingStatusResponse) GetSubscribed() bool {
+	return s.Subscribed
+}
+
+// GetStripeStatus returns the value of StripeStatus.
+func (s *BillingStatusResponse) GetStripeStatus() OptString {
+	return s.StripeStatus
+}
+
+// GetSeats returns the value of Seats.
+func (s *BillingStatusResponse) GetSeats() OptInt {
+	return s.Seats
+}
+
+// GetPriceCentsPerSeat returns the value of PriceCentsPerSeat.
+func (s *BillingStatusResponse) GetPriceCentsPerSeat() int {
+	return s.PriceCentsPerSeat
+}
+
+// GetOssApplicationStatus returns the value of OssApplicationStatus.
+func (s *BillingStatusResponse) GetOssApplicationStatus() OptBillingStatusResponseOssApplicationStatus {
+	return s.OssApplicationStatus
+}
+
+// SetPlan sets the value of Plan.
+func (s *BillingStatusResponse) SetPlan(val BillingStatusResponsePlan) {
+	s.Plan = val
+}
+
+// SetLocked sets the value of Locked.
+func (s *BillingStatusResponse) SetLocked(val bool) {
+	s.Locked = val
+}
+
+// SetTrialEndsAt sets the value of TrialEndsAt.
+func (s *BillingStatusResponse) SetTrialEndsAt(val time.Time) {
+	s.TrialEndsAt = val
+}
+
+// SetSubscribed sets the value of Subscribed.
+func (s *BillingStatusResponse) SetSubscribed(val bool) {
+	s.Subscribed = val
+}
+
+// SetStripeStatus sets the value of StripeStatus.
+func (s *BillingStatusResponse) SetStripeStatus(val OptString) {
+	s.StripeStatus = val
+}
+
+// SetSeats sets the value of Seats.
+func (s *BillingStatusResponse) SetSeats(val OptInt) {
+	s.Seats = val
+}
+
+// SetPriceCentsPerSeat sets the value of PriceCentsPerSeat.
+func (s *BillingStatusResponse) SetPriceCentsPerSeat(val int) {
+	s.PriceCentsPerSeat = val
+}
+
+// SetOssApplicationStatus sets the value of OssApplicationStatus.
+func (s *BillingStatusResponse) SetOssApplicationStatus(val OptBillingStatusResponseOssApplicationStatus) {
+	s.OssApplicationStatus = val
+}
+
+func (*BillingStatusResponse) getBillingRes()           {}
+func (*BillingStatusResponse) submitOssApplicationRes() {}
+
+// The open-source application state, if one was submitted.
+type BillingStatusResponseOssApplicationStatus string
+
+const (
+	BillingStatusResponseOssApplicationStatusPending  BillingStatusResponseOssApplicationStatus = "pending"
+	BillingStatusResponseOssApplicationStatusApproved BillingStatusResponseOssApplicationStatus = "approved"
+	BillingStatusResponseOssApplicationStatusRejected BillingStatusResponseOssApplicationStatus = "rejected"
+)
+
+// AllValues returns all BillingStatusResponseOssApplicationStatus values.
+func (BillingStatusResponseOssApplicationStatus) AllValues() []BillingStatusResponseOssApplicationStatus {
+	return []BillingStatusResponseOssApplicationStatus{
+		BillingStatusResponseOssApplicationStatusPending,
+		BillingStatusResponseOssApplicationStatusApproved,
+		BillingStatusResponseOssApplicationStatusRejected,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BillingStatusResponseOssApplicationStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case BillingStatusResponseOssApplicationStatusPending:
+		return []byte(s), nil
+	case BillingStatusResponseOssApplicationStatusApproved:
+		return []byte(s), nil
+	case BillingStatusResponseOssApplicationStatusRejected:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BillingStatusResponseOssApplicationStatus) UnmarshalText(data []byte) error {
+	switch BillingStatusResponseOssApplicationStatus(data) {
+	case BillingStatusResponseOssApplicationStatusPending:
+		*s = BillingStatusResponseOssApplicationStatusPending
+		return nil
+	case BillingStatusResponseOssApplicationStatusApproved:
+		*s = BillingStatusResponseOssApplicationStatusApproved
+		return nil
+	case BillingStatusResponseOssApplicationStatusRejected:
+		*s = BillingStatusResponseOssApplicationStatusRejected
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// The organization's plan.
+type BillingStatusResponsePlan string
+
+const (
+	BillingStatusResponsePlanTrial      BillingStatusResponsePlan = "trial"
+	BillingStatusResponsePlanPro        BillingStatusResponsePlan = "pro"
+	BillingStatusResponsePlanOssFree    BillingStatusResponsePlan = "oss_free"
+	BillingStatusResponsePlanEnterprise BillingStatusResponsePlan = "enterprise"
+)
+
+// AllValues returns all BillingStatusResponsePlan values.
+func (BillingStatusResponsePlan) AllValues() []BillingStatusResponsePlan {
+	return []BillingStatusResponsePlan{
+		BillingStatusResponsePlanTrial,
+		BillingStatusResponsePlanPro,
+		BillingStatusResponsePlanOssFree,
+		BillingStatusResponsePlanEnterprise,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BillingStatusResponsePlan) MarshalText() ([]byte, error) {
+	switch s {
+	case BillingStatusResponsePlanTrial:
+		return []byte(s), nil
+	case BillingStatusResponsePlanPro:
+		return []byte(s), nil
+	case BillingStatusResponsePlanOssFree:
+		return []byte(s), nil
+	case BillingStatusResponsePlanEnterprise:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BillingStatusResponsePlan) UnmarshalText(data []byte) error {
+	switch BillingStatusResponsePlan(data) {
+	case BillingStatusResponsePlanTrial:
+		*s = BillingStatusResponsePlanTrial
+		return nil
+	case BillingStatusResponsePlanPro:
+		*s = BillingStatusResponsePlanPro
+		return nil
+	case BillingStatusResponsePlanOssFree:
+		*s = BillingStatusResponsePlanOssFree
+		return nil
+	case BillingStatusResponsePlanEnterprise:
+		*s = BillingStatusResponsePlanEnterprise
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// The active organization's billing state, embedded in /me so the SPA can show the trial banner / lock
+// screen without an extra request.
+// Ref: #/components/schemas/BillingSummary
+type BillingSummary struct {
+	// The organization's plan.
+	Plan BillingSummaryPlan `json:"plan"`
+	// Whether features are locked (trial expired, no subscription).
+	Locked bool `json:"locked"`
+	// When the 21-day trial ends/ended.
+	TrialEndsAt time.Time `json:"trialEndsAt"`
+}
+
+// GetPlan returns the value of Plan.
+func (s *BillingSummary) GetPlan() BillingSummaryPlan {
+	return s.Plan
+}
+
+// GetLocked returns the value of Locked.
+func (s *BillingSummary) GetLocked() bool {
+	return s.Locked
+}
+
+// GetTrialEndsAt returns the value of TrialEndsAt.
+func (s *BillingSummary) GetTrialEndsAt() time.Time {
+	return s.TrialEndsAt
+}
+
+// SetPlan sets the value of Plan.
+func (s *BillingSummary) SetPlan(val BillingSummaryPlan) {
+	s.Plan = val
+}
+
+// SetLocked sets the value of Locked.
+func (s *BillingSummary) SetLocked(val bool) {
+	s.Locked = val
+}
+
+// SetTrialEndsAt sets the value of TrialEndsAt.
+func (s *BillingSummary) SetTrialEndsAt(val time.Time) {
+	s.TrialEndsAt = val
+}
+
+// The organization's plan.
+type BillingSummaryPlan string
+
+const (
+	BillingSummaryPlanTrial      BillingSummaryPlan = "trial"
+	BillingSummaryPlanPro        BillingSummaryPlan = "pro"
+	BillingSummaryPlanOssFree    BillingSummaryPlan = "oss_free"
+	BillingSummaryPlanEnterprise BillingSummaryPlan = "enterprise"
+)
+
+// AllValues returns all BillingSummaryPlan values.
+func (BillingSummaryPlan) AllValues() []BillingSummaryPlan {
+	return []BillingSummaryPlan{
+		BillingSummaryPlanTrial,
+		BillingSummaryPlanPro,
+		BillingSummaryPlanOssFree,
+		BillingSummaryPlanEnterprise,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BillingSummaryPlan) MarshalText() ([]byte, error) {
+	switch s {
+	case BillingSummaryPlanTrial:
+		return []byte(s), nil
+	case BillingSummaryPlanPro:
+		return []byte(s), nil
+	case BillingSummaryPlanOssFree:
+		return []byte(s), nil
+	case BillingSummaryPlanEnterprise:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BillingSummaryPlan) UnmarshalText(data []byte) error {
+	switch BillingSummaryPlan(data) {
+	case BillingSummaryPlanTrial:
+		*s = BillingSummaryPlanTrial
+		return nil
+	case BillingSummaryPlanPro:
+		*s = BillingSummaryPlanPro
+		return nil
+	case BillingSummaryPlanOssFree:
+		*s = BillingSummaryPlanOssFree
+		return nil
+	case BillingSummaryPlanEnterprise:
+		*s = BillingSummaryPlanEnterprise
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type CreateBillingCheckoutBadRequest Error
+
+func (*CreateBillingCheckoutBadRequest) createBillingCheckoutRes() {}
+
+type CreateBillingCheckoutConflict Error
+
+func (*CreateBillingCheckoutConflict) createBillingCheckoutRes() {}
+
+type CreateBillingCheckoutUnauthorized Error
+
+func (*CreateBillingCheckoutUnauthorized) createBillingCheckoutRes() {}
+
+type CreateBillingPortalBadRequest Error
+
+func (*CreateBillingPortalBadRequest) createBillingPortalRes() {}
+
+type CreateBillingPortalUnauthorized Error
+
+func (*CreateBillingPortalUnauthorized) createBillingPortalRes() {}
 
 type CreateInvitationBadRequest Error
 
 func (*CreateInvitationBadRequest) createInvitationRes() {}
+
+type CreateInvitationPaymentRequired Error
+
+func (*CreateInvitationPaymentRequired) createInvitationRes() {}
 
 // Invite an email address to the caller's active organization.
 // Ref: #/components/schemas/CreateInvitationRequest
@@ -47,9 +400,21 @@ type CreateLinearSettingsBadRequest Error
 
 func (*CreateLinearSettingsBadRequest) createLinearSettingsRes() {}
 
+type CreateLinearSettingsPaymentRequired Error
+
+func (*CreateLinearSettingsPaymentRequired) createLinearSettingsRes() {}
+
 type CreateLinearSettingsUnauthorized Error
 
 func (*CreateLinearSettingsUnauthorized) createLinearSettingsRes() {}
+
+type DeleteLinearSettingsPaymentRequired Error
+
+func (*DeleteLinearSettingsPaymentRequired) deleteLinearSettingsRes() {}
+
+type DeleteLinearSettingsUnauthorized Error
+
+func (*DeleteLinearSettingsUnauthorized) deleteLinearSettingsRes() {}
 
 type DisconnectIntegrationLevel string
 
@@ -157,7 +522,6 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*Error) deleteLinearSettingsRes()  {}
 func (*Error) disconnectIntegrationRes() {}
 func (*Error) getIntegrationStatusRes()  {}
 func (*Error) getLinearSettingsRes()     {}
@@ -169,8 +533,15 @@ func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
 func (*Error) pingRes()                  {}
 func (*Error) selectOrgRes()             {}
-func (*Error) syncSettingsRes()          {}
 func (*Error) verifyEmailRes()           {}
+
+type GetBillingBadRequest Error
+
+func (*GetBillingBadRequest) getBillingRes() {}
+
+type GetBillingUnauthorized Error
+
+func (*GetBillingUnauthorized) getBillingRes() {}
 
 // The connection state of a single integration provider at one level.
 // Ref: #/components/schemas/IntegrationStatus
@@ -790,6 +1161,98 @@ func (s *MemberResponse) SetRole(val OptString) {
 	s.Role = val
 }
 
+// NewOptBillingStatusResponseOssApplicationStatus returns new OptBillingStatusResponseOssApplicationStatus with value set to v.
+func NewOptBillingStatusResponseOssApplicationStatus(v BillingStatusResponseOssApplicationStatus) OptBillingStatusResponseOssApplicationStatus {
+	return OptBillingStatusResponseOssApplicationStatus{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBillingStatusResponseOssApplicationStatus is optional BillingStatusResponseOssApplicationStatus.
+type OptBillingStatusResponseOssApplicationStatus struct {
+	Value BillingStatusResponseOssApplicationStatus
+	Set   bool
+}
+
+// IsSet returns true if OptBillingStatusResponseOssApplicationStatus was set.
+func (o OptBillingStatusResponseOssApplicationStatus) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBillingStatusResponseOssApplicationStatus) Reset() {
+	var v BillingStatusResponseOssApplicationStatus
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBillingStatusResponseOssApplicationStatus) SetTo(v BillingStatusResponseOssApplicationStatus) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBillingStatusResponseOssApplicationStatus) Get() (v BillingStatusResponseOssApplicationStatus, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBillingStatusResponseOssApplicationStatus) Or(d BillingStatusResponseOssApplicationStatus) BillingStatusResponseOssApplicationStatus {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptBillingSummary returns new OptBillingSummary with value set to v.
+func NewOptBillingSummary(v BillingSummary) OptBillingSummary {
+	return OptBillingSummary{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBillingSummary is optional BillingSummary.
+type OptBillingSummary struct {
+	Value BillingSummary
+	Set   bool
+}
+
+// IsSet returns true if OptBillingSummary was set.
+func (o OptBillingSummary) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBillingSummary) Reset() {
+	var v BillingSummary
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBillingSummary) SetTo(v BillingSummary) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBillingSummary) Get() (v BillingSummary, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBillingSummary) Or(d BillingSummary) BillingSummary {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptDisconnectIntegrationLevel returns new OptDisconnectIntegrationLevel with value set to v.
 func NewOptDisconnectIntegrationLevel(v DisconnectIntegrationLevel) OptDisconnectIntegrationLevel {
 	return OptDisconnectIntegrationLevel{
@@ -830,6 +1293,52 @@ func (o OptDisconnectIntegrationLevel) Get() (v DisconnectIntegrationLevel, ok b
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDisconnectIntegrationLevel) Or(d DisconnectIntegrationLevel) DisconnectIntegrationLevel {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt returns new OptInt with value set to v.
+func NewOptInt(v int) OptInt {
+	return OptInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt is optional int.
+type OptInt struct {
+	Value int
+	Set   bool
+}
+
+// IsSet returns true if OptInt was set.
+func (o OptInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt) SetTo(v int) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt) Get() (v int, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt) Or(d int) int {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -921,6 +1430,35 @@ func (s *Organization) SetName(val string) {
 // SetRole sets the value of Role.
 func (s *Organization) SetRole(val OptString) {
 	s.Role = val
+}
+
+// An application for the free open-source tier.
+// Ref: #/components/schemas/OssApplicationRequest
+type OssApplicationRequest struct {
+	// Link to the open-source repo or sponsorship page.
+	SponsorUrl string `json:"sponsorUrl"`
+	// Optional context for the reviewer.
+	Note OptString `json:"note"`
+}
+
+// GetSponsorUrl returns the value of SponsorUrl.
+func (s *OssApplicationRequest) GetSponsorUrl() string {
+	return s.SponsorUrl
+}
+
+// GetNote returns the value of Note.
+func (s *OssApplicationRequest) GetNote() OptString {
+	return s.Note
+}
+
+// SetSponsorUrl sets the value of SponsorUrl.
+func (s *OssApplicationRequest) SetSponsorUrl(val string) {
+	s.SponsorUrl = val
+}
+
+// SetNote sets the value of Note.
+func (s *OssApplicationRequest) SetNote(val OptString) {
+	s.Note = val
 }
 
 // The organizations a user may choose between during org selection.
@@ -1067,6 +1605,26 @@ func (s *SlackMember) SetIsBot(val bool) {
 	s.IsBot = val
 }
 
+type SubmitOssApplicationBadRequest Error
+
+func (*SubmitOssApplicationBadRequest) submitOssApplicationRes() {}
+
+type SubmitOssApplicationConflict Error
+
+func (*SubmitOssApplicationConflict) submitOssApplicationRes() {}
+
+type SubmitOssApplicationUnauthorized Error
+
+func (*SubmitOssApplicationUnauthorized) submitOssApplicationRes() {}
+
+type SyncSettingsPaymentRequired Error
+
+func (*SyncSettingsPaymentRequired) syncSettingsRes() {}
+
+type SyncSettingsUnauthorized Error
+
+func (*SyncSettingsUnauthorized) syncSettingsRes() {}
+
 // A template-test request. Provide exactly one event source: sampleId (a built-in sample event) or
 // event (a raw envelope JSON string).
 // Ref: #/components/schemas/TemplateTestRequest
@@ -1166,6 +1724,10 @@ type TestLinearTemplateBadRequest Error
 
 func (*TestLinearTemplateBadRequest) testLinearTemplateRes() {}
 
+type TestLinearTemplatePaymentRequired Error
+
+func (*TestLinearTemplatePaymentRequired) testLinearTemplateRes() {}
+
 type TestLinearTemplateUnauthorized Error
 
 func (*TestLinearTemplateUnauthorized) testLinearTemplateRes() {}
@@ -1177,6 +1739,10 @@ func (*UpdateLinearSettingsBadRequest) updateLinearSettingsRes() {}
 type UpdateLinearSettingsNotFound Error
 
 func (*UpdateLinearSettingsNotFound) updateLinearSettingsRes() {}
+
+type UpdateLinearSettingsPaymentRequired Error
+
+func (*UpdateLinearSettingsPaymentRequired) updateLinearSettingsRes() {}
 
 type UpdateLinearSettingsUnauthorized Error
 
@@ -1201,7 +1767,8 @@ type UserResponse struct {
 	// The user's role within the active organization, if any.
 	Role OptString `json:"role"`
 	// All organizations the user is a member of.
-	Organizations []Organization `json:"organizations"`
+	Organizations []Organization    `json:"organizations"`
+	Billing       OptBillingSummary `json:"billing"`
 }
 
 // GetID returns the value of ID.
@@ -1244,6 +1811,11 @@ func (s *UserResponse) GetOrganizations() []Organization {
 	return s.Organizations
 }
 
+// GetBilling returns the value of Billing.
+func (s *UserResponse) GetBilling() OptBillingSummary {
+	return s.Billing
+}
+
 // SetID sets the value of ID.
 func (s *UserResponse) SetID(val string) {
 	s.ID = val
@@ -1282,6 +1854,11 @@ func (s *UserResponse) SetRole(val OptString) {
 // SetOrganizations sets the value of Organizations.
 func (s *UserResponse) SetOrganizations(val []Organization) {
 	s.Organizations = val
+}
+
+// SetBilling sets the value of Billing.
+func (s *UserResponse) SetBilling(val OptBillingSummary) {
+	s.Billing = val
 }
 
 func (*UserResponse) getMeRes()       {}

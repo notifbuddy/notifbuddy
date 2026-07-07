@@ -8,6 +8,7 @@ import (
 
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
+	"xolo/backend/internal/billing"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
@@ -27,15 +28,33 @@ import (
 type Handler struct {
 	auth         *auth.Service
 	integrations *integrations.Service
+	billing      *billing.Service
 }
 
 // New builds the API handler with its service dependencies.
-func New(authService *auth.Service, intgService *integrations.Service) *Handler {
-	return &Handler{auth: authService, integrations: intgService}
+func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service) *Handler {
+	return &Handler{auth: authService, integrations: intgService, billing: billingService}
 }
 
 // invitationListLimit caps how many invitations GET /invitations returns.
 const invitationListLimit = 50
+
+// billingLockedMsg is the shared 402 body for billing-gated operations.
+const billingLockedMsg = "trial expired — subscribe to keep using NotifBuddy"
+
+// orgLocked reports whether the org's billing gates feature mutations (trial
+// expired and no subscription). Fails open: a billing hiccup must not take the
+// product down.
+func (h Handler) orgLocked(ctx context.Context, orgID string) bool {
+	if orgID == "" {
+		return false
+	}
+	status, err := h.billing.StatusForOrg(ctx, orgID)
+	if err != nil {
+		return false
+	}
+	return status.Locked
+}
 
 // orgListLimit caps how many of a user's organizations /me returns.
 const orgListLimit = 50
@@ -168,6 +187,9 @@ func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitation
 	if user.OrgID == "" {
 		return &api.CreateInvitationBadRequest{Message: "no active organization to invite to"}, nil
 	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.CreateInvitationPaymentRequired{Message: billingLockedMsg}, nil
+	}
 	role := ""
 	if r, ok := req.Role.Get(); ok {
 		role = r
@@ -269,6 +291,9 @@ func (h Handler) CreateLinearSettings(ctx context.Context, req *api.LinearSettin
 	if user == nil {
 		return &api.CreateLinearSettingsUnauthorized{Message: "unauthorized"}, nil
 	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.CreateLinearSettingsPaymentRequired{Message: billingLockedMsg}, nil
+	}
 	in := fromAPILinearSettings(req)
 	in.SettingID = "" // create ignores any supplied id
 	if _, err := h.integrations.SaveLinearSetting(ctx, user.OrgID, in); err != nil {
@@ -286,6 +311,9 @@ func (h Handler) UpdateLinearSettings(ctx context.Context, req *api.LinearSettin
 	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.UpdateLinearSettingsUnauthorized{Message: "unauthorized"}, nil
+	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.UpdateLinearSettingsPaymentRequired{Message: billingLockedMsg}, nil
 	}
 	in := fromAPILinearSettings(req)
 	in.SettingID = params.SettingId // the URL is authoritative for which config to update
@@ -306,15 +334,18 @@ func (h Handler) UpdateLinearSettings(ctx context.Context, req *api.LinearSettin
 func (h Handler) DeleteLinearSettings(ctx context.Context, params api.DeleteLinearSettingsParams) (api.DeleteLinearSettingsRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
-		return &api.Error{Message: "unauthorized"}, nil
+		return &api.DeleteLinearSettingsUnauthorized{Message: "unauthorized"}, nil
+	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.DeleteLinearSettingsPaymentRequired{Message: billingLockedMsg}, nil
 	}
 	if err := h.integrations.DeleteLinearSetting(ctx, user.OrgID, params.SettingId); err != nil {
 		log.Printf("httpapi: delete linear setting %s for org %s: %v", params.SettingId, user.OrgID, err)
-		return &api.Error{Message: "failed to delete config"}, nil
+		return &api.DeleteLinearSettingsUnauthorized{Message: "failed to delete config"}, nil
 	}
 	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
 	if err != nil {
-		return &api.Error{Message: "failed to read linear settings"}, nil
+		return &api.DeleteLinearSettingsUnauthorized{Message: "failed to read linear settings"}, nil
 	}
 	return resp, nil
 }
@@ -326,7 +357,10 @@ func (h Handler) DeleteLinearSettings(ctx context.Context, params api.DeleteLine
 func (h Handler) SyncSettings(ctx context.Context) (api.SyncSettingsRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
-		return &api.Error{Message: "unauthorized"}, nil
+		return &api.SyncSettingsUnauthorized{Message: "unauthorized"}, nil
+	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.SyncSettingsPaymentRequired{Message: billingLockedMsg}, nil
 	}
 	orgID := user.OrgID
 	var wg sync.WaitGroup
@@ -347,7 +381,7 @@ func (h Handler) SyncSettings(ctx context.Context) (api.SyncSettingsRes, error) 
 
 	resp, err := h.linearSettingsResponse(ctx, orgID)
 	if err != nil {
-		return &api.Error{Message: "failed to read linear settings"}, nil
+		return &api.SyncSettingsUnauthorized{Message: "failed to read linear settings"}, nil
 	}
 	return resp, nil
 }
@@ -357,6 +391,9 @@ func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRe
 	user := auth.UserFromContext(ctx)
 	if user == nil {
 		return &api.TestLinearTemplateUnauthorized{Message: "unauthorized"}, nil
+	}
+	if h.orgLocked(ctx, user.OrgID) {
+		return &api.TestLinearTemplatePaymentRequired{Message: billingLockedMsg}, nil
 	}
 	// Resolve the event: a built-in sample id or a pasted raw JSON envelope.
 	var rawEvent []byte
@@ -562,6 +599,19 @@ func (h Handler) toUserResponse(ctx context.Context, user *auth.SessionUser) *ap
 			org.Role = api.NewOptString(m.Role)
 		}
 		resp.Organizations = append(resp.Organizations, org)
+	}
+	// Embed the active org's billing summary so the SPA can show the trial
+	// banner / lock screen without a second request. Best-effort: /me must
+	// keep working when billing is unconfigured (no database). This is also
+	// what lazily starts a fresh org's 21-day trial.
+	if user.OrgID != "" {
+		if status, err := h.billing.StatusForOrg(ctx, user.OrgID); err == nil {
+			resp.Billing = api.NewOptBillingSummary(api.BillingSummary{
+				Plan:        api.BillingSummaryPlan(status.Plan),
+				Locked:      status.Locked,
+				TrialEndsAt: status.TrialEndsAt,
+			})
+		}
 	}
 	return resp
 }

@@ -45,6 +45,10 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) {
 	if ref.OrgID == "" {
 		return
 	}
+	if e.orgLocked(ctx, ref.OrgID) {
+		log.Printf("sync: slack event %s: org %s locked (billing); dropped", ref.EventID, ref.OrgID)
+		return
+	}
 
 	raw, err := e.store.SlackWebhookPayload(ctx, ref.EventID)
 	if err != nil {

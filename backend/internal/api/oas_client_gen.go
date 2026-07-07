@@ -28,6 +28,22 @@ func trimTrailingSlashes(u *url.URL) {
 
 // Invoker invokes operations described by OpenAPI v3 specification.
 type Invoker interface {
+	// CreateBillingCheckout invokes createBillingCheckout operation.
+	//
+	// Creates a Stripe Checkout session (subscription mode) for the Pro plan at the current member count
+	// and returns its URL for the browser to redirect to. 409 when the organization already has a live
+	// subscription.
+	//
+	// POST /billing/checkout
+	CreateBillingCheckout(ctx context.Context) (CreateBillingCheckoutRes, error)
+	// CreateBillingPortal invokes createBillingPortal operation.
+	//
+	// Creates a Stripe Billing Portal session for the organization's customer (card updates, cancellation,
+	// invoices) and returns its URL. 400 when the organization has never checked out (no Stripe customer
+	// yet).
+	//
+	// POST /billing/portal
+	CreateBillingPortal(ctx context.Context) (CreateBillingPortalRes, error)
 	// CreateInvitation invokes createInvitation operation.
 	//
 	// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
@@ -58,6 +74,17 @@ type Invoker interface {
 	//
 	// POST /integrations/{provider}/disconnect
 	DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (DisconnectIntegrationRes, error)
+	// GetBilling invokes getBilling operation.
+	//
+	// Returns the active organization's billing state: plan, whether features are locked, the trial
+	// deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
+	// When the org has an active subscription this also reconciles the Stripe seat quantity with the
+	// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
+	// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
+	// spec.
+	//
+	// GET /billing
+	GetBilling(ctx context.Context) (GetBillingRes, error)
 	// GetIntegrationStatus invokes getIntegrationStatus operation.
 	//
 	// Returns the connection state of each supported integration (GitHub, Slack, Linear) for the caller's
@@ -134,6 +161,15 @@ type Invoker interface {
 	//
 	// POST /auth/select-org
 	SelectOrg(ctx context.Context, request *SelectOrgRequest) (SelectOrgRes, error)
+	// SubmitOssApplication invokes submitOssApplication operation.
+	//
+	// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
+	// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
+	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
+	// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+	//
+	// POST /billing/oss-application
+	SubmitOssApplication(ctx context.Context, request *OssApplicationRequest) (SubmitOssApplicationRes, error)
 	// SyncSettings invokes syncSettings operation.
 	//
 	// Fetches Linear team workflow states AND Slack workspace members (bots + humans) in parallel and
@@ -207,6 +243,170 @@ func (c *Client) requestURL(ctx context.Context) *url.URL {
 		return c.serverURL
 	}
 	return u
+}
+
+// CreateBillingCheckout invokes createBillingCheckout operation.
+//
+// Creates a Stripe Checkout session (subscription mode) for the Pro plan at the current member count
+// and returns its URL for the browser to redirect to. 409 when the organization already has a live
+// subscription.
+//
+// POST /billing/checkout
+func (c *Client) CreateBillingCheckout(ctx context.Context) (CreateBillingCheckoutRes, error) {
+	res, err := c.sendCreateBillingCheckout(ctx)
+	return res, err
+}
+
+func (c *Client) sendCreateBillingCheckout(ctx context.Context) (res CreateBillingCheckoutRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("createBillingCheckout"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/billing/checkout"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, CreateBillingCheckoutOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/billing/checkout"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeCreateBillingCheckoutResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// CreateBillingPortal invokes createBillingPortal operation.
+//
+// Creates a Stripe Billing Portal session for the organization's customer (card updates, cancellation,
+// invoices) and returns its URL. 400 when the organization has never checked out (no Stripe customer
+// yet).
+//
+// POST /billing/portal
+func (c *Client) CreateBillingPortal(ctx context.Context) (CreateBillingPortalRes, error) {
+	res, err := c.sendCreateBillingPortal(ctx)
+	return res, err
+}
+
+func (c *Client) sendCreateBillingPortal(ctx context.Context) (res CreateBillingPortalRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("createBillingPortal"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/billing/portal"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, CreateBillingPortalOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/billing/portal"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeCreateBillingPortalResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
 }
 
 // CreateInvitation invokes createInvitation operation.
@@ -592,6 +792,91 @@ func (c *Client) sendDisconnectIntegration(ctx context.Context, params Disconnec
 
 	stage = "DecodeResponse"
 	result, err := decodeDisconnectIntegrationResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetBilling invokes getBilling operation.
+//
+// Returns the active organization's billing state: plan, whether features are locked, the trial
+// deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
+// When the org has an active subscription this also reconciles the Stripe seat quantity with the
+// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
+// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
+// spec.
+//
+// GET /billing
+func (c *Client) GetBilling(ctx context.Context) (GetBillingRes, error) {
+	res, err := c.sendGetBilling(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetBilling(ctx context.Context) (res GetBillingRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getBilling"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/billing"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetBillingOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/billing"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetBillingResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -1411,6 +1696,92 @@ func (c *Client) sendSelectOrg(ctx context.Context, request *SelectOrgRequest) (
 
 	stage = "DecodeResponse"
 	result, err := decodeSelectOrgResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// SubmitOssApplication invokes submitOssApplication operation.
+//
+// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
+// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
+// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
+// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+//
+// POST /billing/oss-application
+func (c *Client) SubmitOssApplication(ctx context.Context, request *OssApplicationRequest) (SubmitOssApplicationRes, error) {
+	res, err := c.sendSubmitOssApplication(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendSubmitOssApplication(ctx context.Context, request *OssApplicationRequest) (res SubmitOssApplicationRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("submitOssApplication"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/billing/oss-application"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, SubmitOssApplicationOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/billing/oss-application"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeSubmitOssApplicationRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeSubmitOssApplicationResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

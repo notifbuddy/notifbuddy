@@ -30,6 +30,7 @@ type Config struct {
 	Slack      SlackConfig      `yaml:"slack"`
 	Linear     LinearConfig     `yaml:"linear"`
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
+	Stripe     StripeConfig     `yaml:"stripe"`
 }
 
 type ServerConfig struct {
@@ -54,6 +55,10 @@ type WorkOSConfig struct {
 	RedirectURI string `yaml:"redirect_uri"`
 	// LoginProvider, when set, sends users straight to one AuthKit provider.
 	LoginProvider string `yaml:"login_provider"`
+	// WebhookSecret verifies incoming WorkOS webhook signatures
+	// (WorkOS-Signature header; organization_membership events drive seat
+	// sync). SECRET — env ref. Empty disables the endpoint.
+	WebhookSecret string `yaml:"webhook_secret"`
 }
 
 type AppConfig struct {
@@ -157,6 +162,19 @@ type CloudflareConfig struct {
 	// Model is the Workers AI text-generation model id (e.g.
 	// "@cf/meta/llama-3.2-1b-instruct"). Swappable without code changes.
 	Model string `yaml:"model"`
+}
+
+type StripeConfig struct {
+	// APIKey authorizes Stripe API calls. Use a RESTRICTED key (rk_...) with
+	// write on Customers/Checkout Sessions/Subscriptions/Billing Portal only.
+	// SECRET — env ref. Empty means billing checkout is not configured.
+	APIKey string `yaml:"api_key"`
+	// WebhookSecret verifies incoming Stripe webhook signatures
+	// (Stripe-Signature header). SECRET — env ref. Empty disables the endpoint.
+	WebhookSecret string `yaml:"webhook_secret"`
+	// PriceID is the per-seat monthly Price (price_...) for the Pro plan,
+	// created once per environment in the Stripe dashboard.
+	PriceID string `yaml:"price_id"`
 }
 
 // defaultConfig returns built-in defaults applied before the YAML file is

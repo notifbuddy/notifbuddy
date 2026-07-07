@@ -22,6 +22,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import UserIcon from '@lucide/svelte/icons/user';
+	import CreditCardIcon from '@lucide/svelte/icons/credit-card';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { page } from '$app/state';
 	import {
@@ -159,6 +160,14 @@
 								<a href="/settings/organization" {...props}>
 									<BuildingIcon />
 									Organization
+								</a>
+							{/snippet}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item>
+							{#snippet child({ props })}
+								<a href="/settings/billing" {...props}>
+									<CreditCardIcon />
+									Billing
 								</a>
 							{/snippet}
 						</DropdownMenu.Item>

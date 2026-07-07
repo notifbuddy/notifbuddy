@@ -20,6 +20,7 @@ workos:
   cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET — resolved from env (>=32 chars)
   redirect_uri: "http://localhost:8080/auth/callback" # must match a dashboard redirect
   login_provider: "GitHubOAuth" # skip AuthKit selector; required for single-provider setups. "" to show selector.
+  webhook_secret: "${WORKOS_WEBHOOK_SECRET}" # SECRET — verifies WorkOS-Signature (membership events → seat sync); empty disables the endpoint
 
 app:
   post_login_url: "http://localhost:5173" # where the browser lands after login/logout
@@ -102,3 +103,16 @@ cloudflare:
   account_id: "${CF_ACCOUNT_ID}" # Cloudflare account id running Workers AI
   api_token: "${CF_API_TOKEN}" # SECRET — Bearer token for the Workers AI REST API
   model: "@cf/meta/llama-3.1-8b-instruct" # text-generation model id; swappable
+
+stripe:
+  # Billing (Pro plan checkout + Customer Portal). Use a RESTRICTED key
+  # (rk_test_...) with write on Customers/Checkout Sessions/Subscriptions/
+  # Billing Portal only. Empty disables checkout (trial still works).
+  api_key: "${STRIPE_API_KEY}" # SECRET
+  # Webhook signing secret. Locally, run:
+  #   stripe listen --latest --forward-to localhost:8080/billing/stripe/webhook
+  # and use the whsec_... it prints. Empty disables the webhook endpoint.
+  webhook_secret: "${STRIPE_WEBHOOK_SECRET}" # SECRET
+  # The per-seat monthly Price (price_...) for "NotifBuddy Pro" ($9.99/mo),
+  # created once in the Stripe dashboard (test mode).
+  price_id: "price_1TqWa7E2Q2xv6Jme2jStvy93" # NB: the price_... id, not the prod_... product id

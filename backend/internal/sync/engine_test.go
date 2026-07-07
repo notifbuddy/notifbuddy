@@ -202,7 +202,7 @@ func (p *spyPub) has(topic string) bool {
 
 // newEngine builds an engine over the fakes.
 func newEngine(st Store, sl SlackActions, ig Integrations, pub pubsub.Publisher) *Engine {
-	return New(st, sl, ig, nil, pub)
+	return New(st, sl, ig, nil, pub, nil)
 }
 
 // --- helpers ----------------------------------------------------------------
