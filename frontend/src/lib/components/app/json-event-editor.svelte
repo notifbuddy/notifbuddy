@@ -46,11 +46,14 @@
 
 	const theme = $derived(colorMode.current === 'light' ? LIGHT_THEME : DARK_THEME);
 
-	// Rendered highlighted HTML. A trailing newline keeps the last line's height in
-	// sync with the textarea (which reserves a line after a final \n).
+	// Rendered highlighted HTML. Always append a newline: a textarea gives a
+	// trailing \n a real, caret-reachable empty line, but in the highlighted pre
+	// that final empty line is a zero-height line box. The extra \n turns it into
+	// a real line so both layers have the same content height — otherwise the
+	// scroll ranges diverge and clicks land one line off near the bottom.
 	const highlighted = $derived.by(() => {
 		if (!highlighter) return '';
-		const code = value.endsWith('\n') ? value : value + '\n';
+		const code = value + '\n';
 		return highlighter.codeToHtml(code, {
 			lang: 'json',
 			theme,
@@ -237,6 +240,12 @@
 	/* Editable layer on top: transparent text so the highlight shows through, but
 	   a visible caret. Same metrics as the <pre>. */
 	.json-editor__textarea {
+		/* Block, not the default inline-block: an inline textarea sits on a text
+		   baseline, so the body grows a few px taller (descender space) than the
+		   textarea itself. The pre (inset: 0) fills that taller box, its scroll
+		   range ends up shorter, and syncScroll clamps — misaligning the layers
+		   when scrolled to the bottom. */
+		display: block;
 		position: relative;
 		width: 100%;
 		height: 100%;
