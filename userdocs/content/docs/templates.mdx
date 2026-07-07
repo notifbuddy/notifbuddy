@@ -39,6 +39,14 @@ Literals: strings (`'...'`), numbers, `true`, `false`, `null`.
 
 String functions are case-insensitive. Names are case-insensitive.
 
+## Extension functions (Handlebars-style)
+
+Beyond the GitHub Actions dialect, we add Handlebars-style string helpers. More will be added over time.
+
+| Function | Does |
+| --- | --- |
+| `lowercase(str)` | Lowercase a string |
+
 ## Not supported
 
 CI-only functions error if used: `hashFiles`, `success`, `always`, `cancelled`, `failure`.
@@ -52,6 +60,6 @@ linear.data.state.name == 'Done'
 # bugs only
 contains(join(linear.data.labels.*.name), 'bug')
 
-# name by identifier
-tkt-${{ linear.data.identifier }}
+# name by identifier (the default channel-name template)
+tkt-${{ lowercase(linear.data.identifier) }}
 ```

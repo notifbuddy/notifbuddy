@@ -16,6 +16,9 @@
 // toJSON, fromJSON. The CI-only functions (hashFiles, success, always,
 // cancelled, failure) are intentionally unsupported and raise an error rather
 // than silently returning false — there is no CI context to evaluate them.
+//
+// Beyond the GitHub Actions dialect, the engine adds Handlebars-style string
+// helpers (currently lowercase) for template-side text shaping.
 package template
 
 import (

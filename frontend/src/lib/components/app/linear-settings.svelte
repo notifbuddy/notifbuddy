@@ -98,6 +98,10 @@
 	let keySeq = 0;
 	const nextKey = () => `draft-${keySeq++}`;
 
+	// Default channel-name template for new configs; also the input placeholder
+	// so the two never drift. lowercase() is one of our hbs-style helpers.
+	const DEFAULT_NAME_TEMPLATE = 'tkt-${{ lowercase(linear.data.identifier) }}';
+
 	function toDraft(s: LinearSettings): Draft {
 		return {
 			key: nextKey(),
@@ -180,7 +184,7 @@
 				teamId,
 				creationMode: 'manual',
 				triggerStatus: '',
-				nameTemplate: '',
+				nameTemplate: DEFAULT_NAME_TEMPLATE,
 				conditionExpr: '',
 				autoAddMembers: []
 			}
@@ -617,7 +621,7 @@
 								<Input
 									bind:value={d.nameTemplate}
 									class="font-mono text-xs"
-									placeholder="tkt-${'{{'} linear.data.identifier {'}}'}"
+									placeholder={DEFAULT_NAME_TEMPLATE}
 									oninput={() => markEdited(d)}
 								/>
 								<Field.FieldDescription>Template for the new channel's name.</Field.FieldDescription>

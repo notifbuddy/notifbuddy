@@ -64,6 +64,13 @@ func callFunction(name string, args []any) (any, error) {
 			return nil, err
 		}
 		return fnFromJSON(coerceString(args[0]))
+	// Handlebars-style extension helpers: not part of the GitHub Actions
+	// dialect. New string helpers (uppercase, capitalize, …) go here.
+	case "lowercase":
+		if err := wantArgs(name, args, 1); err != nil {
+			return nil, err
+		}
+		return strings.ToLower(coerceString(args[0])), nil
 	default:
 		return nil, fmt.Errorf("template: unknown function %s()", name)
 	}

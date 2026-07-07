@@ -180,6 +180,7 @@ func TestRender(t *testing.T) {
 		{"${{ format('{0}/{1}', 'a', 'b') }}", "a/b"},
 		{"${{ join(linear.data.labels.*.name, '-') }}", "bug-sync"},
 		{"flag-${{ linear.data.number > 40 }}", "flag-true"},
+		{"tkt-${{ lowercase(linear.data.identifier) }}", "tkt-eng-42"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.tmpl, func(t *testing.T) {
@@ -209,6 +210,9 @@ func TestFunctions(t *testing.T) {
 		{"startsWith('hello', 'he')", true},
 		{"endsWith('hello', 'lo')", true},
 		{"contains('hello', 'ell')", true},
+		{"lowercase('HeLLo')", "hello"},
+		{"LOWERCASE('X')", "x"},
+		{"lowercase(42)", "42"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.expr, func(t *testing.T) {
@@ -238,19 +242,20 @@ func looseDeepEqual(a, b any) bool {
 
 func TestParseAndEvalErrors(t *testing.T) {
 	bad := []string{
-		"1 +",            // unexpected end
-		"(1",             // unterminated paren
-		"a[",             // unterminated index
-		"'unterminated",  // unterminated string
-		"1 = 1",          // single =
-		"true & false",   // single &
-		"true | false",   // single |
-		"@",              // bad char
-		"contains('a')",  // wrong arity
-		"success()",      // CI-only function
-		"hashFiles('x')", // CI-only function
-		"nope('a','b')",  // unknown function
-		"1 2",            // trailing token
+		"1 +",                // unexpected end
+		"(1",                 // unterminated paren
+		"a[",                 // unterminated index
+		"'unterminated",      // unterminated string
+		"1 = 1",              // single =
+		"true & false",       // single &
+		"true | false",       // single |
+		"@",                  // bad char
+		"contains('a')",      // wrong arity
+		"lowercase('a','b')", // wrong arity
+		"success()",          // CI-only function
+		"hashFiles('x')",     // CI-only function
+		"nope('a','b')",      // unknown function
+		"1 2",                // trailing token
 	}
 	for _, expr := range bad {
 		t.Run(expr, func(t *testing.T) {
