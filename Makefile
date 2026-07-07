@@ -1,4 +1,4 @@
-.PHONY: help generate gen-go gen-ts dev dev-backend dev-frontend build build-backend build-frontend install clean
+.PHONY: help generate gen-go gen-ts dev dev-backend dev-frontend dev-docs build build-backend build-frontend install clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -26,6 +26,9 @@ dev-backend: ## Run the Go API server on :8080
 
 dev-frontend: ## Run the SvelteKit dev server on :5173
 	cd frontend && npm run dev
+
+dev-docs: ## Run the docs server
+	cd userdocs && npm run dev
 
 ## ---- Build ----
 
