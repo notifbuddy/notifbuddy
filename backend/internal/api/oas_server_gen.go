@@ -8,6 +8,22 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateBillingCheckout implements createBillingCheckout operation.
+	//
+	// Creates a Stripe Checkout session (subscription mode) for the Pro plan at the current member count
+	// and returns its URL for the browser to redirect to. 409 when the organization already has a live
+	// subscription.
+	//
+	// POST /billing/checkout
+	CreateBillingCheckout(ctx context.Context) (CreateBillingCheckoutRes, error)
+	// CreateBillingPortal implements createBillingPortal operation.
+	//
+	// Creates a Stripe Billing Portal session for the organization's customer (card updates, cancellation,
+	// invoices) and returns its URL. 400 when the organization has never checked out (no Stripe customer
+	// yet).
+	//
+	// POST /billing/portal
+	CreateBillingPortal(ctx context.Context) (CreateBillingPortalRes, error)
 	// CreateInvitation implements createInvitation operation.
 	//
 	// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
@@ -38,6 +54,17 @@ type Handler interface {
 	//
 	// POST /integrations/{provider}/disconnect
 	DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (DisconnectIntegrationRes, error)
+	// GetBilling implements getBilling operation.
+	//
+	// Returns the active organization's billing state: plan, whether features are locked, the trial
+	// deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
+	// When the org has an active subscription this also reconciles the Stripe seat quantity with the
+	// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
+	// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
+	// spec.
+	//
+	// GET /billing
+	GetBilling(ctx context.Context) (GetBillingRes, error)
 	// GetIntegrationStatus implements getIntegrationStatus operation.
 	//
 	// Returns the connection state of each supported integration (GitHub, Slack, Linear) for the caller's
@@ -114,6 +141,15 @@ type Handler interface {
 	//
 	// POST /auth/select-org
 	SelectOrg(ctx context.Context, req *SelectOrgRequest) (SelectOrgRes, error)
+	// SubmitOssApplication implements submitOssApplication operation.
+	//
+	// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
+	// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
+	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
+	// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+	//
+	// POST /billing/oss-application
+	SubmitOssApplication(ctx context.Context, req *OssApplicationRequest) (SubmitOssApplicationRes, error)
 	// SyncSettings implements syncSettings operation.
 	//
 	// Fetches Linear team workflow states AND Slack workspace members (bots + humans) in parallel and

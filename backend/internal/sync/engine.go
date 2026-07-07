@@ -73,6 +73,11 @@ type Store interface {
 	PatchLinearTeamState(ctx context.Context, orgID, teamID string, st store.LinearWorkflowState, removed bool) error
 }
 
+// LockedCheck reports whether an org's billing has features locked (trial
+// expired, no subscription). The sync engine drops inbound events for locked
+// orgs — this is the product's valuable path. nil means never locked.
+type LockedCheck func(ctx context.Context, orgID string) bool
+
 // Engine wires the stores, Slack/Linear action clients, the intent classifier
 // (for @notifbuddy commands), the template engine (channel naming/conditions),
 // and the publisher (processing topics). It is safe for concurrent use.
@@ -83,11 +88,13 @@ type Engine struct {
 	classifier intent.Classifier
 	tmpl       template.Engine
 	pub        pubsub.Publisher
+	locked     LockedCheck
 }
 
 // New builds the engine. pub may be nil (pubsub.Nop is used); the classifier may
-// be nil (@notifbuddy commands then resolve to no-action).
-func New(st Store, slack SlackActions, intg Integrations, classifier intent.Classifier, pub pubsub.Publisher) *Engine {
+// be nil (@notifbuddy commands then resolve to no-action); locked may be nil
+// (no billing enforcement).
+func New(st Store, slack SlackActions, intg Integrations, classifier intent.Classifier, pub pubsub.Publisher, locked LockedCheck) *Engine {
 	if pub == nil {
 		pub = pubsub.Nop
 	}
@@ -98,7 +105,13 @@ func New(st Store, slack SlackActions, intg Integrations, classifier intent.Clas
 		classifier: classifier,
 		tmpl:       template.New(),
 		pub:        pub,
+		locked:     locked,
 	}
+}
+
+// orgLocked reports whether billing enforcement should drop this org's events.
+func (e *Engine) orgLocked(ctx context.Context, orgID string) bool {
+	return e.locked != nil && e.locked(ctx, orgID)
 }
 
 // publish fires a processing topic best-effort; a failure is logged, never

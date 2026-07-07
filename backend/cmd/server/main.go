@@ -12,6 +12,7 @@ import (
 
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
+	"xolo/backend/internal/billing"
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
 	"xolo/backend/internal/httpapi"
@@ -77,20 +78,40 @@ func main() {
 	// configured (Enabled() == false), reporting "not configured".
 	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
 
+	// Billing (Stripe): 21-day trials + per-seat Pro subscriptions. Seat counts
+	// come from WorkOS org memberships via the auth service. Runs with a nil
+	// store when no DB is configured, reporting "not configured".
+	billingSvc := billing.New(st, cfg, func(ctx context.Context, orgID string) (int, error) {
+		members, err := authSvc.ListOrganizationMembers(ctx, orgID, 200)
+		if err != nil {
+			return 0, err
+		}
+		return len(members), nil
+	})
+
 	// Sync engine: subscribes to the Linear/Slack ingestion topics and performs
 	// the bidirectional sync (channel creation, comment mirroring). Only wired
 	// when there is a store and an in-memory bus to subscribe on; the SNS path
 	// consumes via a separate worker (not built here).
 	if st != nil && bus != nil {
 		classifier := intent.NewCloudflareClassifier(cfg.Cloudflare)
-		engine := syncengine.New(st, slackapi.New(), intgSvc, classifier, publisher)
+		// Billing enforcement: locked orgs (expired trial, no subscription)
+		// have their inbound events dropped instead of synced.
+		orgLocked := func(ctx context.Context, orgID string) bool {
+			status, err := billingSvc.StatusForOrg(ctx, orgID)
+			if err != nil {
+				return false // never let a billing hiccup break the product path
+			}
+			return status.Locked
+		}
+		engine := syncengine.New(st, slackapi.New(), intgSvc, classifier, publisher, orgLocked)
 		bus.Subscribe(integrations.LinearWebhookTopic, engine.OnLinearEvent)
 		bus.Subscribe(integrations.SlackWebhookTopic, engine.OnSlackEvent)
 		log.Printf("sync engine subscribed to linear + slack ingestion topics")
 	}
 
 	// API handler (implements the ogen interface) + the generated server.
-	apiHandler := httpapi.New(authSvc, intgSvc)
+	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc)
 	srv, err := api.NewServer(apiHandler)
 	if err != nil {
 		log.Fatalf("create server: %v", err)
@@ -102,19 +123,35 @@ func main() {
 	// endpoints see the authenticated user. The integration *callbacks* rely on
 	// the sealed OAuth state rather than the session, but running them under the
 	// same middleware is harmless.
+	// gateBilling wraps a browser-redirect handler so locked orgs (expired
+	// trial, no subscription) get a 402 instead of connecting integrations.
+	gateBilling := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if orgID, _ := auth.OrgUserFromRequest(r); orgID != "" {
+				if status, err := billingSvc.StatusForOrg(r.Context(), orgID); err == nil && status.Locked {
+					http.Error(w, "trial expired — subscribe to keep using NotifBuddy", http.StatusPaymentRequired)
+					return
+				}
+			}
+			next(w, r)
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("GET /auth/callback", authSvc.HandleCallback)
 	mux.HandleFunc("GET /auth/logout", authSvc.HandleLogout)
-	mux.HandleFunc("GET /integrations/github/connect", intgSvc.HandleGitHubConnect)
+	mux.HandleFunc("GET /integrations/github/connect", gateBilling(intgSvc.HandleGitHubConnect))
 	mux.HandleFunc("GET /integrations/github/callback", intgSvc.HandleGitHubCallback)
 	mux.HandleFunc("POST /integrations/github/webhook", intgSvc.HandleGitHubWebhook)
-	mux.HandleFunc("GET /integrations/slack/connect", intgSvc.HandleSlackConnect)
+	mux.HandleFunc("GET /integrations/slack/connect", gateBilling(intgSvc.HandleSlackConnect))
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
 	mux.HandleFunc("POST /integrations/slack/webhook", intgSvc.HandleSlackWebhook)
-	mux.HandleFunc("GET /integrations/linear/connect", intgSvc.HandleLinearConnect)
+	mux.HandleFunc("GET /integrations/linear/connect", gateBilling(intgSvc.HandleLinearConnect))
 	mux.HandleFunc("GET /integrations/linear/callback", intgSvc.HandleLinearCallback)
 	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
+	mux.HandleFunc("POST /billing/stripe/webhook", billingSvc.HandleStripeWebhook)
+	mux.HandleFunc("POST /auth/workos/webhook", billingSvc.HandleWorkOSWebhook)
 	mux.Handle("/", srv)
 
 	handler := httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin)

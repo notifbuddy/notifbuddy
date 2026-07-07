@@ -13,6 +13,28 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CreateBillingCheckout implements createBillingCheckout operation.
+//
+// Creates a Stripe Checkout session (subscription mode) for the Pro plan at the current member count
+// and returns its URL for the browser to redirect to. 409 when the organization already has a live
+// subscription.
+//
+// POST /billing/checkout
+func (UnimplementedHandler) CreateBillingCheckout(ctx context.Context) (r CreateBillingCheckoutRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateBillingPortal implements createBillingPortal operation.
+//
+// Creates a Stripe Billing Portal session for the organization's customer (card updates, cancellation,
+// invoices) and returns its URL. 400 when the organization has never checked out (no Stripe customer
+// yet).
+//
+// POST /billing/portal
+func (UnimplementedHandler) CreateBillingPortal(ctx context.Context) (r CreateBillingPortalRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateInvitation implements createInvitation operation.
 //
 // Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
@@ -52,6 +74,20 @@ func (UnimplementedHandler) DeleteLinearSettings(ctx context.Context, params Del
 //
 // POST /integrations/{provider}/disconnect
 func (UnimplementedHandler) DisconnectIntegration(ctx context.Context, params DisconnectIntegrationParams) (r DisconnectIntegrationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetBilling implements getBilling operation.
+//
+// Returns the active organization's billing state: plan, whether features are locked, the trial
+// deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
+// When the org has an active subscription this also reconciles the Stripe seat quantity with the
+// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
+// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
+// spec.
+//
+// GET /billing
+func (UnimplementedHandler) GetBilling(ctx context.Context) (r GetBillingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -158,6 +194,18 @@ func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
 //
 // POST /auth/select-org
 func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest) (r SelectOrgRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SubmitOssApplication implements submitOssApplication operation.
+//
+// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
+// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
+// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
+// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+//
+// POST /billing/oss-application
+func (UnimplementedHandler) SubmitOssApplication(ctx context.Context, req *OssApplicationRequest) (r SubmitOssApplicationRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

@@ -90,6 +90,10 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
 	if ref.OrgID == "" {
 		return // can't act without knowing the org
 	}
+	if e.orgLocked(ctx, ref.OrgID) {
+		log.Printf("sync: linear event %s: org %s locked (billing); dropped", ref.DeliveryID, ref.OrgID)
+		return
+	}
 
 	// Load the full stored payload (the ingestion topic carries only routing).
 	raw, err := e.store.LinearWebhookPayload(ctx, ref.DeliveryID)
