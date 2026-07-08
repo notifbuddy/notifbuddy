@@ -311,6 +311,173 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /organization/profile:
+    get:
+      operationId: getOrganizationProfile
+      summary: The active organization's profile
+      description: |
+        Returns the active organization's name and avatar. When no image has
+        been uploaded, avatarUrl is absent and the client renders a generated
+        avatar from avatarSeed. The profile row (and its random seed) is
+        created lazily on first read.
+      responses:
+        "200":
+          description: The organization profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProfileResponse"
+        "400":
+          description: No active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: updateOrganizationProfile
+      summary: Rename the active organization
+      description: |
+        Updates the organization's name in WorkOS. Admin-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrgProfileRequest"
+      responses:
+        "200":
+          description: The updated organization profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProfileResponse"
+        "400":
+          description: The request was invalid (e.g. an empty name).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /organization/avatar:
+    put:
+      operationId: uploadOrganizationAvatar
+      summary: Upload the organization's avatar image
+      description: |
+        Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or
+        WebP; at most 512 KiB decoded — clients should downscale before
+        uploading). Admin-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadOrgAvatarRequest"
+      responses:
+        "200":
+          description: The updated organization profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProfileResponse"
+        "400":
+          description: The image was missing, malformed, an unsupported type, or too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteOrganizationAvatar
+      summary: Remove the uploaded avatar
+      description: |
+        Deletes the uploaded avatar image so the organization falls back to
+        its generated avatar. Admin-only.
+      responses:
+        "200":
+          description: The updated organization profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProfileResponse"
+        "400":
+          description: No active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /organization/avatar/regenerate:
+    post:
+      operationId: regenerateOrganizationAvatar
+      summary: Re-roll the generated avatar
+      description: |
+        Replaces the organization's avatar seed with a fresh random one, so
+        the generated avatar changes. Also clears any uploaded image.
+        Admin-only.
+      responses:
+        "200":
+          description: The updated organization profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProfileResponse"
+        "400":
+          description: No active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /integrations/status:
     get:
       operationId: getIntegrationStatus
@@ -971,6 +1138,54 @@ components:
             $ref: "#/components/schemas/Organization"
       required:
         - organizations
+    OrgProfileResponse:
+      type: object
+      description: The active organization's editable profile.
+      properties:
+        id:
+          type: string
+          description: The WorkOS organization ID.
+          example: org_01H...
+        name:
+          type: string
+          description: The organization's display name.
+          example: Acme Inc.
+        avatarSeed:
+          type: string
+          description: Seed for the client-rendered generated avatar.
+          example: 3f7c2a9d
+        avatarUrl:
+          type: string
+          description: |
+            Data URL of the uploaded avatar image. Absent when no image has
+            been uploaded; render the generated avatar from avatarSeed instead.
+      required:
+        - id
+        - name
+        - avatarSeed
+    UpdateOrgProfileRequest:
+      type: object
+      description: Rename the active organization.
+      properties:
+        name:
+          type: string
+          description: The new organization name.
+          minLength: 1
+          maxLength: 100
+          example: Acme Inc.
+      required:
+        - name
+    UploadOrgAvatarRequest:
+      type: object
+      description: An uploaded avatar image, as a data URL.
+      properties:
+        imageDataUrl:
+          type: string
+          description: |
+            data:image/png;base64,... (PNG, JPEG, or WebP; at most 512 KiB
+            decoded).
+      required:
+        - imageDataUrl
     CreateInvitationRequest:
       type: object
       description: Invite an email address to the caller's active organization.

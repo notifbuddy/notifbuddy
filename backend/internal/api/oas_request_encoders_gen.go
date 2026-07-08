@@ -108,6 +108,34 @@ func encodeUpdateMemberRoleRequest(
 	return nil
 }
 
+func encodeUpdateOrganizationProfileRequest(
+	req *UpdateOrgProfileRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUploadOrganizationAvatarRequest(
+	req *UploadOrgAvatarRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeVerifyEmailRequest(
 	req *VerifyEmailRequest,
 	r *http.Request,

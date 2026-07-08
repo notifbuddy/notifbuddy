@@ -66,6 +66,16 @@ func (UnimplementedHandler) DeleteLinearSettings(ctx context.Context, params Del
 	return r, ht.ErrNotImplemented
 }
 
+// DeleteOrganizationAvatar implements deleteOrganizationAvatar operation.
+//
+// Deletes the uploaded avatar image so the organization falls back to its generated avatar.
+// Admin-only.
+//
+// DELETE /organization/avatar
+func (UnimplementedHandler) DeleteOrganizationAvatar(ctx context.Context) (r DeleteOrganizationAvatarRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DisconnectIntegration implements disconnectIntegration operation.
 //
 // Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -121,6 +131,17 @@ func (UnimplementedHandler) GetLinearSettings(ctx context.Context) (r GetLinearS
 //
 // GET /me
 func (UnimplementedHandler) GetMe(ctx context.Context) (r GetMeRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetOrganizationProfile implements getOrganizationProfile operation.
+//
+// Returns the active organization's name and avatar. When no image has been uploaded, avatarUrl is
+// absent and the client renders a generated avatar from avatarSeed. The profile row (and its random
+// seed) is created lazily on first read.
+//
+// GET /organization/profile
+func (UnimplementedHandler) GetOrganizationProfile(ctx context.Context) (r GetOrganizationProfileRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -184,6 +205,16 @@ func (UnimplementedHandler) ListMembers(ctx context.Context) (r ListMembersRes, 
 //
 // GET /ping
 func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RegenerateOrganizationAvatar implements regenerateOrganizationAvatar operation.
+//
+// Replaces the organization's avatar seed with a fresh random one, so the generated avatar changes.
+// Also clears any uploaded image. Admin-only.
+//
+// POST /organization/avatar/regenerate
+func (UnimplementedHandler) RegenerateOrganizationAvatar(ctx context.Context) (r RegenerateOrganizationAvatarRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -261,6 +292,25 @@ func (UnimplementedHandler) UpdateLinearSettings(ctx context.Context, req *Linea
 //
 // PUT /members/{membershipId}/role
 func (UnimplementedHandler) UpdateMemberRole(ctx context.Context, req *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (r UpdateMemberRoleRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateOrganizationProfile implements updateOrganizationProfile operation.
+//
+// Updates the organization's name in WorkOS. Admin-only.
+//
+// PUT /organization/profile
+func (UnimplementedHandler) UpdateOrganizationProfile(ctx context.Context, req *UpdateOrgProfileRequest) (r UpdateOrganizationProfileRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UploadOrganizationAvatar implements uploadOrganizationAvatar operation.
+//
+// Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or WebP; at most 512 KiB decoded —
+// clients should downscale before uploading). Admin-only.
+//
+// PUT /organization/avatar
+func (UnimplementedHandler) UploadOrganizationAvatar(ctx context.Context, req *UploadOrgAvatarRequest) (r UploadOrganizationAvatarRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

@@ -214,6 +214,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The active organization's profile
+         * @description Returns the active organization's name and avatar. When no image has
+         *     been uploaded, avatarUrl is absent and the client renders a generated
+         *     avatar from avatarSeed. The profile row (and its random seed) is
+         *     created lazily on first read.
+         */
+        get: operations["getOrganizationProfile"];
+        /**
+         * Rename the active organization
+         * @description Updates the organization's name in WorkOS. Admin-only.
+         */
+        put: operations["updateOrganizationProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload the organization's avatar image
+         * @description Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or
+         *     WebP; at most 512 KiB decoded — clients should downscale before
+         *     uploading). Admin-only.
+         */
+        put: operations["uploadOrganizationAvatar"];
+        post?: never;
+        /**
+         * Remove the uploaded avatar
+         * @description Deletes the uploaded avatar image so the organization falls back to
+         *     its generated avatar. Admin-only.
+         */
+        delete: operations["deleteOrganizationAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/avatar/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-roll the generated avatar
+         * @description Replaces the organization's avatar seed with a fresh random one, so
+         *     the generated avatar changes. Also clears any uploaded image.
+         *     Admin-only.
+         */
+        post: operations["regenerateOrganizationAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/status": {
         parameters: {
             query?: never;
@@ -675,6 +751,45 @@ export interface components {
         /** @description The organizations a user may choose between during org selection. */
         PendingOrganizations: {
             organizations: components["schemas"]["Organization"][];
+        };
+        /** @description The active organization's editable profile. */
+        OrgProfileResponse: {
+            /**
+             * @description The WorkOS organization ID.
+             * @example org_01H...
+             */
+            id: string;
+            /**
+             * @description The organization's display name.
+             * @example Acme Inc.
+             */
+            name: string;
+            /**
+             * @description Seed for the client-rendered generated avatar.
+             * @example 3f7c2a9d
+             */
+            avatarSeed: string;
+            /**
+             * @description Data URL of the uploaded avatar image. Absent when no image has
+             *     been uploaded; render the generated avatar from avatarSeed instead.
+             */
+            avatarUrl?: string;
+        };
+        /** @description Rename the active organization. */
+        UpdateOrgProfileRequest: {
+            /**
+             * @description The new organization name.
+             * @example Acme Inc.
+             */
+            name: string;
+        };
+        /** @description An uploaded avatar image, as a data URL. */
+        UploadOrgAvatarRequest: {
+            /**
+             * @description data:image/png;base64,... (PNG, JPEG, or WebP; at most 512 KiB
+             *     decoded).
+             */
+            imageDataUrl: string;
         };
         /** @description Invite an email address to the caller's active organization. */
         CreateInvitationRequest: {
@@ -1349,6 +1464,240 @@ export interface operations {
             };
             /** @description No such membership in the active organization. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOrganizationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfileResponse"];
+                };
+            };
+            /** @description No active organization. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateOrganizationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrgProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated organization profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfileResponse"];
+                };
+            };
+            /** @description The request was invalid (e.g. an empty name). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    uploadOrganizationAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadOrgAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated organization profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfileResponse"];
+                };
+            };
+            /** @description The image was missing, malformed, an unsupported type, or too large. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteOrganizationAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The updated organization profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfileResponse"];
+                };
+            };
+            /** @description No active organization. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    regenerateOrganizationAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The updated organization profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfileResponse"];
+                };
+            };
+            /** @description No active organization. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

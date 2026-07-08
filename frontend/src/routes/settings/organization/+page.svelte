@@ -7,23 +7,34 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Field from '$lib/components/ui/field';
+	import MarbleAvatar from '$lib/components/app/marble-avatar.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import MailIcon from '@lucide/svelte/icons/mail';
 	import XIcon from '@lucide/svelte/icons/x';
+	import DicesIcon from '@lucide/svelte/icons/dices';
+	import UploadIcon from '@lucide/svelte/icons/upload';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { userStore } from '$lib/user.svelte';
+	import { orgProfileStore } from '$lib/org-profile.svelte';
 	import {
 		fetchMembers,
 		fetchInvitations,
 		sendInvitation,
 		updateMemberRole,
 		revokeInvitation,
+		updateOrgName,
+		uploadOrgAvatar,
+		regenerateOrgAvatar,
+		deleteOrgAvatar,
 		memberName,
 		memberInitials,
 		ROLES,
 		type Member,
 		type Invitation,
-		type Role
+		type Role,
+		type OrgProfile
 	} from '$lib/organization';
 
 	const user = $derived(userStore.user);
@@ -32,6 +43,101 @@
 
 	let members = $state<Member[] | null | undefined>(undefined);
 	let invitations = $state<Invitation[] | null | undefined>(undefined);
+
+	// Organization profile (name + avatar). Shared with the top-nav org
+	// switcher via orgProfileStore, so edits here show up there immediately.
+	const profile = $derived(orgProfileStore.profile);
+	let orgName = $state('');
+	let savingName = $state(false);
+	// 'upload' | 'regen' | 'remove' while that avatar action is in flight.
+	let avatarBusy = $state<string | null>(null);
+	let profileError = $state<string | null>(null);
+	let fileInput = $state<HTMLInputElement | null>(null);
+
+	$effect(() => {
+		if (user?.organizationId) orgProfileStore.load(user.organizationId);
+	});
+	// Refill the name input whenever a fresh profile lands (typing doesn't
+	// touch `profile`, so this never clobbers in-progress edits).
+	$effect(() => {
+		orgName = profile?.name ?? '';
+	});
+
+	async function saveName(e: SubmitEvent) {
+		e.preventDefault();
+		savingName = true;
+		profileError = null;
+		const { profile: updated, error } = await updateOrgName(orgName.trim());
+		savingName = false;
+		if (!updated) {
+			profileError = error ?? "Couldn't rename the organization.";
+			return;
+		}
+		orgProfileStore.set(updated);
+		userStore.load(true); // top-nav shows the org name
+	}
+
+	// Downscale an uploaded file to a 256px cover-cropped PNG data URL, so
+	// uploads stay well under the server's size cap.
+	async function toAvatarDataUrl(file: File): Promise<string> {
+		const bmp = await createImageBitmap(file);
+		const size = 256;
+		const canvas = document.createElement('canvas');
+		canvas.width = size;
+		canvas.height = size;
+		const ctx = canvas.getContext('2d')!;
+		const scale = Math.max(size / bmp.width, size / bmp.height);
+		const w = bmp.width * scale;
+		const h = bmp.height * scale;
+		ctx.drawImage(bmp, (size - w) / 2, (size - h) / 2, w, h);
+		return canvas.toDataURL('image/png');
+	}
+
+	async function onAvatarFile(e: Event) {
+		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		if (!file || avatarBusy) return;
+		avatarBusy = 'upload';
+		profileError = null;
+		let updated: OrgProfile | null = null;
+		try {
+			updated = await uploadOrgAvatar(await toAvatarDataUrl(file));
+		} catch {
+			updated = null;
+		}
+		avatarBusy = null;
+		if (fileInput) fileInput.value = '';
+		if (!updated) {
+			profileError = "Couldn't upload that image.";
+			return;
+		}
+		orgProfileStore.set(updated);
+	}
+
+	async function regenerateAvatar() {
+		if (avatarBusy) return;
+		avatarBusy = 'regen';
+		profileError = null;
+		const updated = await regenerateOrgAvatar();
+		avatarBusy = null;
+		if (!updated) {
+			profileError = "Couldn't regenerate the avatar.";
+			return;
+		}
+		orgProfileStore.set(updated);
+	}
+
+	async function removeAvatar() {
+		if (avatarBusy) return;
+		avatarBusy = 'remove';
+		profileError = null;
+		const updated = await deleteOrgAvatar();
+		avatarBusy = null;
+		if (!updated) {
+			profileError = "Couldn't remove the uploaded image.";
+			return;
+		}
+		orgProfileStore.set(updated);
+	}
 
 	// Revoked invitations are dead ends — keep them out of the list. Revoking
 	// one live therefore removes its row.
@@ -116,6 +222,160 @@
 			{#if org}Members and invitations for {org.name}.{:else}Members and invitations.{/if}
 		</p>
 	</div>
+
+	<!-- Organization profile -->
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-base">Profile</Card.Title>
+			<Card.Description>How this organization appears across NotifBuddy.</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			{#if profile === undefined}
+				<div class="flex items-center gap-6">
+					<Skeleton class="size-20 shrink-0 rounded-full" />
+					<div class="flex flex-1 flex-col gap-2">
+						<Skeleton class="h-4 w-16" />
+						<Skeleton class="h-9 w-64 max-w-full" />
+					</div>
+				</div>
+			{:else if profile === null}
+				<p class="text-destructive text-sm">Couldn't load the organization profile.</p>
+			{:else}
+				<div class="flex flex-col gap-6 sm:flex-row sm:items-start">
+					<!-- Avatar + its actions -->
+					<div class="flex shrink-0 flex-col items-center gap-2">
+						{#if profile.avatarUrl}
+							<img
+								src={profile.avatarUrl}
+								alt="Organization avatar"
+								class="size-20 rounded-full object-cover"
+							/>
+						{:else}
+							<MarbleAvatar seed={profile.avatarSeed} class="size-20" />
+						{/if}
+						{#if isAdmin}
+							<input
+								type="file"
+								accept="image/png,image/jpeg,image/webp"
+								class="hidden"
+								bind:this={fileInput}
+								onchange={onAvatarFile}
+							/>
+							<Tooltip.Provider delayDuration={200}>
+								<div class="flex items-center gap-1">
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												<Button
+													{...props}
+													variant="ghost"
+													size="icon-sm"
+													onclick={regenerateAvatar}
+													disabled={avatarBusy !== null}
+													aria-label="Regenerate avatar"
+												>
+													{#if avatarBusy === 'regen'}
+														<LoaderIcon class="animate-spin" />
+													{:else}
+														<DicesIcon />
+													{/if}
+												</Button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>Regenerate avatar</Tooltip.Content>
+									</Tooltip.Root>
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												<Button
+													{...props}
+													variant="ghost"
+													size="icon-sm"
+													onclick={() => fileInput?.click()}
+													disabled={avatarBusy !== null}
+													aria-label="Upload image"
+												>
+													{#if avatarBusy === 'upload'}
+														<LoaderIcon class="animate-spin" />
+													{:else}
+														<UploadIcon />
+													{/if}
+												</Button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>Upload image</Tooltip.Content>
+									</Tooltip.Root>
+									{#if profile.avatarUrl}
+										<Tooltip.Root>
+											<Tooltip.Trigger>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														variant="ghost"
+														size="icon-sm"
+														onclick={removeAvatar}
+														disabled={avatarBusy !== null}
+														aria-label="Remove uploaded image"
+													>
+														{#if avatarBusy === 'remove'}
+															<LoaderIcon class="animate-spin" />
+														{:else}
+															<Trash2Icon />
+														{/if}
+													</Button>
+												{/snippet}
+											</Tooltip.Trigger>
+											<Tooltip.Content>Remove uploaded image</Tooltip.Content>
+										</Tooltip.Root>
+									{/if}
+								</div>
+							</Tooltip.Provider>
+						{/if}
+					</div>
+
+					<!-- Name -->
+					<div class="min-w-0 flex-1">
+						{#if isAdmin}
+							<form class="flex flex-col gap-4" onsubmit={saveName}>
+								<Field.FieldGroup>
+									<Field.Field>
+										<Field.FieldLabel for="org-name">Name</Field.FieldLabel>
+										<div class="flex gap-2">
+											<Input
+												id="org-name"
+												class="max-w-sm"
+												bind:value={orgName}
+												disabled={savingName}
+												required
+											/>
+											<Button
+												type="submit"
+												variant="outline"
+												disabled={savingName || orgName.trim() === '' || orgName.trim() === profile.name}
+											>
+												{#if savingName}
+													<LoaderIcon data-icon="inline-start" class="animate-spin" />
+													Saving…
+												{:else}
+													Save
+												{/if}
+											</Button>
+										</div>
+									</Field.Field>
+								</Field.FieldGroup>
+							</form>
+						{:else}
+							<div class="flex flex-col gap-1">
+								<span class="text-sm font-medium">Name</span>
+								<span class="text-muted-foreground text-sm">{profile.name}</span>
+							</div>
+						{/if}
+					</div>
+				</div>
+				{#if profileError}<p class="text-destructive mt-3 text-sm">{profileError}</p>{/if}
+			{/if}
+		</Card.Content>
+	</Card.Root>
 
 	<!-- Members -->
 	<Card.Root>

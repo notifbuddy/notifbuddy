@@ -492,6 +492,38 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 	return out, nil
 }
 
+// GetOrganizationName returns the organization's display name from WorkOS.
+func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
+	org, err := a.client.Organizations().Get(ctx, orgID)
+	if err != nil {
+		log.Printf("auth: get organization %q failed: %v", orgID, err)
+		return "", err
+	}
+	return org.Name, nil
+}
+
+// UserMessageError wraps a WorkOS-provided message that is safe and useful to
+// show to the end user (e.g. "Default test organizations cannot be updated.").
+type UserMessageError struct{ Msg string }
+
+func (e UserMessageError) Error() string { return e.Msg }
+
+// UpdateOrganizationName renames the organization in WorkOS and returns the
+// stored name. WorkOS rejections come back as a UserMessageError so handlers
+// can surface the reason.
+func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string) (string, error) {
+	org, err := a.client.Organizations().Update(ctx, orgID, &workos.OrganizationsUpdateParams{Name: &name})
+	if err != nil {
+		log.Printf("auth: update organization %q name failed: %v", orgID, err)
+		var apiErr *workos.APIError
+		if errors.As(err, &apiErr) && apiErr.Message != "" {
+			return "", UserMessageError{Msg: apiErr.Message}
+		}
+		return "", err
+	}
+	return org.Name, nil
+}
+
 // memberFromMembership joins a WorkOS membership with the underlying user's
 // identity. Best-effort: a failed user lookup still yields a Member with the
 // IDs and role the membership already carries.

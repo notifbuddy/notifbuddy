@@ -111,7 +111,7 @@ func main() {
 	}
 
 	// API handler (implements the ogen interface) + the generated server.
-	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc)
+	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc, st)
 	srv, err := api.NewServer(apiHandler)
 	if err != nil {
 		log.Fatalf("create server: %v", err)

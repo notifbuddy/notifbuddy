@@ -29,11 +29,12 @@ type Handler struct {
 	auth         *auth.Service
 	integrations *integrations.Service
 	billing      *billing.Service
+	store        *store.Store
 }
 
 // New builds the API handler with its service dependencies.
-func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service) *Handler {
-	return &Handler{auth: authService, integrations: intgService, billing: billingService}
+func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store) *Handler {
+	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st}
 }
 
 // invitationListLimit caps how many invitations GET /invitations returns.
