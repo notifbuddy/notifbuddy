@@ -12,6 +12,10 @@
 	import { mode as colorMode } from 'mode-watcher';
 	import { getLocation, parseTree, findNodeAtLocation, type Segment } from 'jsonc-parser';
 	import { cn } from '$lib/utils';
+	import { Button } from '$lib/components/ui/button';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
 
 	let { value = $bindable(''), class: className }: { value?: string; class?: string } = $props();
 
@@ -82,6 +86,28 @@
 		}
 	}
 
+	// The cursor path as a template expression, e.g. linear.actor[0].email —
+	// what the copy button puts on the clipboard, ready to paste into the
+	// channel-name/condition templates (GitHub Actions expression syntax, so
+	// no JSONPath `$.` prefix). Keys that aren't identifier-safe use the
+	// expressions' bracket form (['weird key']).
+	const pathText = $derived.by(() => {
+		let out = '';
+		for (const seg of cursorPath) {
+			if (typeof seg === 'number') out += `[${seg}]`;
+			else if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(seg)) out += out ? `.${seg}` : seg;
+			else out += `['${seg.replace(/'/g, "\\'")}']`;
+		}
+		return out;
+	});
+
+	let pathCopied = $state(false);
+	async function copyPath() {
+		await navigator.clipboard.writeText(pathText);
+		pathCopied = true;
+		setTimeout(() => (pathCopied = false), 2000);
+	}
+
 	// Move the cursor to a breadcrumb segment's node. We resolve the exact node by
 	// its path prefix (not a text search) so repeated keys like "id"/"createdAt"
 	// navigate to the right one.
@@ -119,6 +145,31 @@
 					<span class="json-editor__crumb json-editor__crumb--index">[{seg}]</span>
 				{/if}
 			{/each}
+			<span class="json-editor__copy">
+				<Tooltip.Provider delayDuration={200}>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="icon-sm"
+									class="size-5"
+									onclick={copyPath}
+									aria-label="Copy path {pathText}"
+								>
+									{#if pathCopied}
+										<CheckIcon />
+									{:else}
+										<CopyIcon />
+									{/if}
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content>{pathCopied ? 'Copied' : 'Copy path'}</Tooltip.Content>
+					</Tooltip.Root>
+				</Tooltip.Provider>
+			</span>
 		{:else}
 			<span class="json-editor__crumb-root">$</span>
 		{/if}
@@ -200,6 +251,15 @@
 	}
 	.json-editor__crumb--index {
 		color: var(--muted-foreground);
+	}
+	/* Copy-path button, inline right after the last crumb. The bar's content
+	   line is ~16px; the 20px button overlaps the padding instead of growing
+	   the bar. */
+	.json-editor__copy {
+		display: flex;
+		align-items: center;
+		margin-block: -0.25rem;
+		margin-left: 0.25rem;
 	}
 
 	/* The editor body: fixed height with internal scroll; the two layers overlap. */
