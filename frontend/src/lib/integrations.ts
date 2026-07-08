@@ -100,6 +100,9 @@ export type LinearSettings = {
 	triggerStatus?: string;
 	nameTemplate?: string;
 	conditionExpr?: string;
+	archiveMode?: 'status' | 'manual' | 'condition';
+	archiveStatus?: string;
+	archiveConditionExpr?: string;
 	autoAddMembers: string[];
 };
 
@@ -124,7 +127,12 @@ export type LinearSettingsState = {
 	sampleEvents: SampleEvent[];
 };
 
-export type TemplateTestResult = { name: string; conditionResult: boolean; error?: string };
+export type TemplateTestResult = {
+	name: string;
+	wouldCreate: boolean;
+	wouldArchive: boolean;
+	error?: string;
+};
 
 // Fetch the org's Linear configs + connection state + synced teams + samples.
 export async function fetchLinearSettings(): Promise<LinearSettingsState | null> {
@@ -180,10 +188,17 @@ function linearError(error: unknown): string {
 	return msg && msg.trim() ? msg : 'Save failed — check your settings.';
 }
 
-// Test a name template + condition against a sample (by id) or a pasted event.
+// Preview what a config would do for a sample (by id) or a pasted event:
+// the rendered channel name plus whether the create/archive triggers fire,
+// evaluated with the sync engine's exact rules.
 export async function testLinearTemplate(req: {
 	nameTemplate?: string;
+	creationMode?: string;
+	triggerStatus?: string;
 	condition?: string;
+	archiveMode?: string;
+	archiveStatus?: string;
+	archiveCondition?: string;
 	sampleId?: string;
 	event?: string;
 }): Promise<TemplateTestResult | null> {

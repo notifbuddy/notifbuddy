@@ -285,6 +285,24 @@ func (s *LinearSettings) Validate() error {
 		})
 	}
 	if err := func() error {
+		if value, ok := s.ArchiveMode.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "archiveMode",
+			Error: err,
+		})
+	}
+	if err := func() error {
 		if s.AutoAddMembers == nil {
 			return errors.New("nil is invalid value")
 		}
@@ -299,6 +317,19 @@ func (s *LinearSettings) Validate() error {
 		return &validate.Error{Fields: failures}
 	}
 	return nil
+}
+
+func (s LinearSettingsArchiveMode) Validate() error {
+	switch s {
+	case "status":
+		return nil
+	case "manual":
+		return nil
+	case "condition":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
 }
 
 func (s LinearSettingsCreationMode) Validate() error {

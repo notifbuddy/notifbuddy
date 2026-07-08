@@ -2257,6 +2257,24 @@ func (s *LinearSettings) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.ArchiveMode.Set {
+			e.FieldStart("archiveMode")
+			s.ArchiveMode.Encode(e)
+		}
+	}
+	{
+		if s.ArchiveStatus.Set {
+			e.FieldStart("archiveStatus")
+			s.ArchiveStatus.Encode(e)
+		}
+	}
+	{
+		if s.ArchiveConditionExpr.Set {
+			e.FieldStart("archiveConditionExpr")
+			s.ArchiveConditionExpr.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("autoAddMembers")
 		e.ArrStart()
 		for _, elem := range s.AutoAddMembers {
@@ -2270,14 +2288,17 @@ func (s *LinearSettings) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfLinearSettings = [7]string{
+var jsonFieldsNameOfLinearSettings = [10]string{
 	0: "settingId",
 	1: "creationMode",
 	2: "triggerStatus",
 	3: "nameTemplate",
 	4: "conditionExpr",
-	5: "autoAddMembers",
-	6: "teamId",
+	5: "archiveMode",
+	6: "archiveStatus",
+	7: "archiveConditionExpr",
+	8: "autoAddMembers",
+	9: "teamId",
 }
 
 // Decode decodes LinearSettings from json.
@@ -2285,7 +2306,7 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode LinearSettings to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -2339,8 +2360,38 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"conditionExpr\"")
 			}
+		case "archiveMode":
+			if err := func() error {
+				s.ArchiveMode.Reset()
+				if err := s.ArchiveMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveMode\"")
+			}
+		case "archiveStatus":
+			if err := func() error {
+				s.ArchiveStatus.Reset()
+				if err := s.ArchiveStatus.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveStatus\"")
+			}
+		case "archiveConditionExpr":
+			if err := func() error {
+				s.ArchiveConditionExpr.Reset()
+				if err := s.ArchiveConditionExpr.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveConditionExpr\"")
+			}
 		case "autoAddMembers":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				s.AutoAddMembers = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -2360,7 +2411,7 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"autoAddMembers\"")
 			}
 		case "teamId":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				v, err := d.Str()
 				s.TeamId = string(v)
@@ -2380,8 +2431,9 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b01100010,
+	for i, mask := range [2]uint8{
+		0b00000010,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2423,6 +2475,48 @@ func (s *LinearSettings) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *LinearSettings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes LinearSettingsArchiveMode as json.
+func (s LinearSettingsArchiveMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes LinearSettingsArchiveMode from json.
+func (s *LinearSettingsArchiveMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LinearSettingsArchiveMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch LinearSettingsArchiveMode(v) {
+	case LinearSettingsArchiveModeStatus:
+		*s = LinearSettingsArchiveModeStatus
+	case LinearSettingsArchiveModeManual:
+		*s = LinearSettingsArchiveModeManual
+	case LinearSettingsArchiveModeCondition:
+		*s = LinearSettingsArchiveModeCondition
+	default:
+		*s = LinearSettingsArchiveMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s LinearSettingsArchiveMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LinearSettingsArchiveMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -3378,6 +3472,39 @@ func (s OptInt) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptInt) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes LinearSettingsArchiveMode as json.
+func (o OptLinearSettingsArchiveMode) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes LinearSettingsArchiveMode from json.
+func (o *OptLinearSettingsArchiveMode) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptLinearSettingsArchiveMode to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptLinearSettingsArchiveMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptLinearSettingsArchiveMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -4929,9 +5056,39 @@ func (s *TemplateTestRequest) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.CreationMode.Set {
+			e.FieldStart("creationMode")
+			s.CreationMode.Encode(e)
+		}
+	}
+	{
+		if s.TriggerStatus.Set {
+			e.FieldStart("triggerStatus")
+			s.TriggerStatus.Encode(e)
+		}
+	}
+	{
 		if s.Condition.Set {
 			e.FieldStart("condition")
 			s.Condition.Encode(e)
+		}
+	}
+	{
+		if s.ArchiveMode.Set {
+			e.FieldStart("archiveMode")
+			s.ArchiveMode.Encode(e)
+		}
+	}
+	{
+		if s.ArchiveStatus.Set {
+			e.FieldStart("archiveStatus")
+			s.ArchiveStatus.Encode(e)
+		}
+	}
+	{
+		if s.ArchiveCondition.Set {
+			e.FieldStart("archiveCondition")
+			s.ArchiveCondition.Encode(e)
 		}
 	}
 	{
@@ -4948,11 +5105,16 @@ func (s *TemplateTestRequest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTemplateTestRequest = [4]string{
+var jsonFieldsNameOfTemplateTestRequest = [9]string{
 	0: "nameTemplate",
-	1: "condition",
-	2: "sampleId",
-	3: "event",
+	1: "creationMode",
+	2: "triggerStatus",
+	3: "condition",
+	4: "archiveMode",
+	5: "archiveStatus",
+	6: "archiveCondition",
+	7: "sampleId",
+	8: "event",
 }
 
 // Decode decodes TemplateTestRequest from json.
@@ -4973,6 +5135,26 @@ func (s *TemplateTestRequest) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"nameTemplate\"")
 			}
+		case "creationMode":
+			if err := func() error {
+				s.CreationMode.Reset()
+				if err := s.CreationMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"creationMode\"")
+			}
+		case "triggerStatus":
+			if err := func() error {
+				s.TriggerStatus.Reset()
+				if err := s.TriggerStatus.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"triggerStatus\"")
+			}
 		case "condition":
 			if err := func() error {
 				s.Condition.Reset()
@@ -4982,6 +5164,36 @@ func (s *TemplateTestRequest) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"condition\"")
+			}
+		case "archiveMode":
+			if err := func() error {
+				s.ArchiveMode.Reset()
+				if err := s.ArchiveMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveMode\"")
+			}
+		case "archiveStatus":
+			if err := func() error {
+				s.ArchiveStatus.Reset()
+				if err := s.ArchiveStatus.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveStatus\"")
+			}
+		case "archiveCondition":
+			if err := func() error {
+				s.ArchiveCondition.Reset()
+				if err := s.ArchiveCondition.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archiveCondition\"")
 			}
 		case "sampleId":
 			if err := func() error {
@@ -5041,8 +5253,12 @@ func (s *TemplateTestResponse) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
-		e.FieldStart("conditionResult")
-		e.Bool(s.ConditionResult)
+		e.FieldStart("wouldCreate")
+		e.Bool(s.WouldCreate)
+	}
+	{
+		e.FieldStart("wouldArchive")
+		e.Bool(s.WouldArchive)
 	}
 	{
 		if s.Error.Set {
@@ -5052,10 +5268,11 @@ func (s *TemplateTestResponse) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTemplateTestResponse = [3]string{
+var jsonFieldsNameOfTemplateTestResponse = [4]string{
 	0: "name",
-	1: "conditionResult",
-	2: "error",
+	1: "wouldCreate",
+	2: "wouldArchive",
+	3: "error",
 }
 
 // Decode decodes TemplateTestResponse from json.
@@ -5079,17 +5296,29 @@ func (s *TemplateTestResponse) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
 			}
-		case "conditionResult":
+		case "wouldCreate":
 			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
 				v, err := d.Bool()
-				s.ConditionResult = bool(v)
+				s.WouldCreate = bool(v)
 				if err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"conditionResult\"")
+				return errors.Wrap(err, "decode field \"wouldCreate\"")
+			}
+		case "wouldArchive":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Bool()
+				s.WouldArchive = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"wouldArchive\"")
 			}
 		case "error":
 			if err := func() error {
@@ -5111,7 +5340,7 @@ func (s *TemplateTestResponse) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000011,
+		0b00000111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

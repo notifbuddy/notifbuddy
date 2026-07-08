@@ -811,6 +811,14 @@ type LinearSettings struct {
 	NameTemplate OptString `json:"nameTemplate"`
 	// GitHub-Actions-expression that must be true for creation.
 	ConditionExpr OptString `json:"conditionExpr"`
+	// 'status' auto-archives the issue's channel when the issue reaches archiveStatus; 'condition'
+	// auto-archives when archiveConditionExpr evaluates true; 'manual' only archives via @notifbuddy.
+	// Defaults to 'manual' when omitted.
+	ArchiveMode OptLinearSettingsArchiveMode `json:"archiveMode"`
+	// Linear workflow state name that triggers archiving (status mode).
+	ArchiveStatus OptString `json:"archiveStatus"`
+	// GitHub-Actions-expression that must be true for archiving.
+	ArchiveConditionExpr OptString `json:"archiveConditionExpr"`
 	// Slack member ids (U…) — bots and people — to auto-add on channel creation.
 	AutoAddMembers []string `json:"autoAddMembers"`
 	// The Linear team this config applies to.
@@ -840,6 +848,21 @@ func (s *LinearSettings) GetNameTemplate() OptString {
 // GetConditionExpr returns the value of ConditionExpr.
 func (s *LinearSettings) GetConditionExpr() OptString {
 	return s.ConditionExpr
+}
+
+// GetArchiveMode returns the value of ArchiveMode.
+func (s *LinearSettings) GetArchiveMode() OptLinearSettingsArchiveMode {
+	return s.ArchiveMode
+}
+
+// GetArchiveStatus returns the value of ArchiveStatus.
+func (s *LinearSettings) GetArchiveStatus() OptString {
+	return s.ArchiveStatus
+}
+
+// GetArchiveConditionExpr returns the value of ArchiveConditionExpr.
+func (s *LinearSettings) GetArchiveConditionExpr() OptString {
+	return s.ArchiveConditionExpr
 }
 
 // GetAutoAddMembers returns the value of AutoAddMembers.
@@ -877,6 +900,21 @@ func (s *LinearSettings) SetConditionExpr(val OptString) {
 	s.ConditionExpr = val
 }
 
+// SetArchiveMode sets the value of ArchiveMode.
+func (s *LinearSettings) SetArchiveMode(val OptLinearSettingsArchiveMode) {
+	s.ArchiveMode = val
+}
+
+// SetArchiveStatus sets the value of ArchiveStatus.
+func (s *LinearSettings) SetArchiveStatus(val OptString) {
+	s.ArchiveStatus = val
+}
+
+// SetArchiveConditionExpr sets the value of ArchiveConditionExpr.
+func (s *LinearSettings) SetArchiveConditionExpr(val OptString) {
+	s.ArchiveConditionExpr = val
+}
+
 // SetAutoAddMembers sets the value of AutoAddMembers.
 func (s *LinearSettings) SetAutoAddMembers(val []string) {
 	s.AutoAddMembers = val
@@ -885,6 +923,57 @@ func (s *LinearSettings) SetAutoAddMembers(val []string) {
 // SetTeamId sets the value of TeamId.
 func (s *LinearSettings) SetTeamId(val string) {
 	s.TeamId = val
+}
+
+// 'status' auto-archives the issue's channel when the issue reaches archiveStatus; 'condition'
+// auto-archives when archiveConditionExpr evaluates true; 'manual' only archives via @notifbuddy.
+// Defaults to 'manual' when omitted.
+type LinearSettingsArchiveMode string
+
+const (
+	LinearSettingsArchiveModeStatus    LinearSettingsArchiveMode = "status"
+	LinearSettingsArchiveModeManual    LinearSettingsArchiveMode = "manual"
+	LinearSettingsArchiveModeCondition LinearSettingsArchiveMode = "condition"
+)
+
+// AllValues returns all LinearSettingsArchiveMode values.
+func (LinearSettingsArchiveMode) AllValues() []LinearSettingsArchiveMode {
+	return []LinearSettingsArchiveMode{
+		LinearSettingsArchiveModeStatus,
+		LinearSettingsArchiveModeManual,
+		LinearSettingsArchiveModeCondition,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LinearSettingsArchiveMode) MarshalText() ([]byte, error) {
+	switch s {
+	case LinearSettingsArchiveModeStatus:
+		return []byte(s), nil
+	case LinearSettingsArchiveModeManual:
+		return []byte(s), nil
+	case LinearSettingsArchiveModeCondition:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LinearSettingsArchiveMode) UnmarshalText(data []byte) error {
+	switch LinearSettingsArchiveMode(data) {
+	case LinearSettingsArchiveModeStatus:
+		*s = LinearSettingsArchiveModeStatus
+		return nil
+	case LinearSettingsArchiveModeManual:
+		*s = LinearSettingsArchiveModeManual
+		return nil
+	case LinearSettingsArchiveModeCondition:
+		*s = LinearSettingsArchiveModeCondition
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // 'status' auto-creates a channel when an issue reaches triggerStatus; 'condition' auto-creates when
@@ -1401,6 +1490,52 @@ func (o OptInt) Or(d int) int {
 	return d
 }
 
+// NewOptLinearSettingsArchiveMode returns new OptLinearSettingsArchiveMode with value set to v.
+func NewOptLinearSettingsArchiveMode(v LinearSettingsArchiveMode) OptLinearSettingsArchiveMode {
+	return OptLinearSettingsArchiveMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptLinearSettingsArchiveMode is optional LinearSettingsArchiveMode.
+type OptLinearSettingsArchiveMode struct {
+	Value LinearSettingsArchiveMode
+	Set   bool
+}
+
+// IsSet returns true if OptLinearSettingsArchiveMode was set.
+func (o OptLinearSettingsArchiveMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptLinearSettingsArchiveMode) Reset() {
+	var v LinearSettingsArchiveMode
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptLinearSettingsArchiveMode) SetTo(v LinearSettingsArchiveMode) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptLinearSettingsArchiveMode) Get() (v LinearSettingsArchiveMode, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptLinearSettingsArchiveMode) Or(d LinearSettingsArchiveMode) LinearSettingsArchiveMode {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptRoleSlug returns new OptRoleSlug with value set to v.
 func NewOptRoleSlug(v RoleSlug) OptRoleSlug {
 	return OptRoleSlug{
@@ -1865,12 +2000,24 @@ type SyncSettingsUnauthorized Error
 
 func (*SyncSettingsUnauthorized) syncSettingsRes() {}
 
-// A template-test request. Provide exactly one event source: sampleId (a built-in sample event) or
-// event (a raw envelope JSON string).
+// A config-test request: the draft's trigger fields plus one event source — sampleId (a built-in
+// sample event) or event (a raw envelope JSON string). The triggers are evaluated with the sync
+// engine's exact rules (mode-aware), so the result answers "what would this event do?".
 // Ref: #/components/schemas/TemplateTestRequest
 type TemplateTestRequest struct {
 	NameTemplate OptString `json:"nameTemplate"`
-	Condition    OptString `json:"condition"`
+	// The creation trigger mode (status | manual | condition).
+	CreationMode OptString `json:"creationMode"`
+	// Workflow state name for creation status mode.
+	TriggerStatus OptString `json:"triggerStatus"`
+	// The channel-creation condition expression.
+	Condition OptString `json:"condition"`
+	// The archive trigger mode (status | manual | condition).
+	ArchiveMode OptString `json:"archiveMode"`
+	// Workflow state name for archive status mode.
+	ArchiveStatus OptString `json:"archiveStatus"`
+	// The channel-archive condition expression.
+	ArchiveCondition OptString `json:"archiveCondition"`
 	// Id of a built-in sample event.
 	SampleId OptString `json:"sampleId"`
 	// A raw event envelope JSON string (alternative to sampleId).
@@ -1882,9 +2029,34 @@ func (s *TemplateTestRequest) GetNameTemplate() OptString {
 	return s.NameTemplate
 }
 
+// GetCreationMode returns the value of CreationMode.
+func (s *TemplateTestRequest) GetCreationMode() OptString {
+	return s.CreationMode
+}
+
+// GetTriggerStatus returns the value of TriggerStatus.
+func (s *TemplateTestRequest) GetTriggerStatus() OptString {
+	return s.TriggerStatus
+}
+
 // GetCondition returns the value of Condition.
 func (s *TemplateTestRequest) GetCondition() OptString {
 	return s.Condition
+}
+
+// GetArchiveMode returns the value of ArchiveMode.
+func (s *TemplateTestRequest) GetArchiveMode() OptString {
+	return s.ArchiveMode
+}
+
+// GetArchiveStatus returns the value of ArchiveStatus.
+func (s *TemplateTestRequest) GetArchiveStatus() OptString {
+	return s.ArchiveStatus
+}
+
+// GetArchiveCondition returns the value of ArchiveCondition.
+func (s *TemplateTestRequest) GetArchiveCondition() OptString {
+	return s.ArchiveCondition
 }
 
 // GetSampleId returns the value of SampleId.
@@ -1902,9 +2074,34 @@ func (s *TemplateTestRequest) SetNameTemplate(val OptString) {
 	s.NameTemplate = val
 }
 
+// SetCreationMode sets the value of CreationMode.
+func (s *TemplateTestRequest) SetCreationMode(val OptString) {
+	s.CreationMode = val
+}
+
+// SetTriggerStatus sets the value of TriggerStatus.
+func (s *TemplateTestRequest) SetTriggerStatus(val OptString) {
+	s.TriggerStatus = val
+}
+
 // SetCondition sets the value of Condition.
 func (s *TemplateTestRequest) SetCondition(val OptString) {
 	s.Condition = val
+}
+
+// SetArchiveMode sets the value of ArchiveMode.
+func (s *TemplateTestRequest) SetArchiveMode(val OptString) {
+	s.ArchiveMode = val
+}
+
+// SetArchiveStatus sets the value of ArchiveStatus.
+func (s *TemplateTestRequest) SetArchiveStatus(val OptString) {
+	s.ArchiveStatus = val
+}
+
+// SetArchiveCondition sets the value of ArchiveCondition.
+func (s *TemplateTestRequest) SetArchiveCondition(val OptString) {
+	s.ArchiveCondition = val
 }
 
 // SetSampleId sets the value of SampleId.
@@ -1917,13 +2114,17 @@ func (s *TemplateTestRequest) SetEvent(val OptString) {
 	s.Event = val
 }
 
-// Result of rendering a template + evaluating a condition.
+// What this config would do for the event: the rendered channel name and whether the create/archive
+// triggers fire.
 // Ref: #/components/schemas/TemplateTestResponse
 type TemplateTestResponse struct {
 	// The rendered channel name (empty if no template / on error).
 	Name string `json:"name"`
-	// Whether the condition evaluated true.
-	ConditionResult bool `json:"conditionResult"`
+	// Whether the creation trigger fires for this event — status mode compares the event's workflow
+	// state, condition mode evaluates the expression, manual never auto-fires.
+	WouldCreate bool `json:"wouldCreate"`
+	// Whether the archive trigger fires for this event (same rules).
+	WouldArchive bool `json:"wouldArchive"`
 	// A template/condition error, if any (shown inline by the UI).
 	Error OptString `json:"error"`
 }
@@ -1933,9 +2134,14 @@ func (s *TemplateTestResponse) GetName() string {
 	return s.Name
 }
 
-// GetConditionResult returns the value of ConditionResult.
-func (s *TemplateTestResponse) GetConditionResult() bool {
-	return s.ConditionResult
+// GetWouldCreate returns the value of WouldCreate.
+func (s *TemplateTestResponse) GetWouldCreate() bool {
+	return s.WouldCreate
+}
+
+// GetWouldArchive returns the value of WouldArchive.
+func (s *TemplateTestResponse) GetWouldArchive() bool {
+	return s.WouldArchive
 }
 
 // GetError returns the value of Error.
@@ -1948,9 +2154,14 @@ func (s *TemplateTestResponse) SetName(val string) {
 	s.Name = val
 }
 
-// SetConditionResult sets the value of ConditionResult.
-func (s *TemplateTestResponse) SetConditionResult(val bool) {
-	s.ConditionResult = val
+// SetWouldCreate sets the value of WouldCreate.
+func (s *TemplateTestResponse) SetWouldCreate(val bool) {
+	s.WouldCreate = val
+}
+
+// SetWouldArchive sets the value of WouldArchive.
+func (s *TemplateTestResponse) SetWouldArchive(val bool) {
+	s.WouldArchive = val
 }
 
 // SetError sets the value of Error.

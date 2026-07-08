@@ -19,13 +19,16 @@ var sampleEventsFS embed.FS
 // LinearSettings is the service-level view of one Linear channel-rule config,
 // scoped to a single Linear team (TeamID). The team is the config's identity.
 type LinearSettings struct {
-	SettingID      string   `json:"settingId,omitempty"`
-	TeamID         string   `json:"teamId"`
-	CreationMode   string   `json:"creationMode"`  // "status" | "manual" | "condition"
-	TriggerStatus  string   `json:"triggerStatus"` // workflow state name (status mode)
-	NameTemplate   string   `json:"nameTemplate"`
-	ConditionExpr  string   `json:"conditionExpr"`
-	AutoAddMembers []string `json:"autoAddMembers"` // Slack member ids (bots + people)
+	SettingID            string   `json:"settingId,omitempty"`
+	TeamID               string   `json:"teamId"`
+	CreationMode         string   `json:"creationMode"`  // "status" | "manual" | "condition"
+	TriggerStatus        string   `json:"triggerStatus"` // workflow state name (status mode)
+	NameTemplate         string   `json:"nameTemplate"`
+	ConditionExpr        string   `json:"conditionExpr"`
+	ArchiveMode          string   `json:"archiveMode"`   // "status" | "manual" | "condition"
+	ArchiveStatus        string   `json:"archiveStatus"` // workflow state name (status mode)
+	ArchiveConditionExpr string   `json:"archiveConditionExpr"`
+	AutoAddMembers       []string `json:"autoAddMembers"` // Slack member ids (bots + people)
 }
 
 // LinearSyncReady reports whether the org can actually run the Linear → Slack
@@ -91,14 +94,17 @@ func (s *Service) SaveLinearSetting(ctx context.Context, orgID string, in Linear
 		return LinearSettings{}, err
 	}
 	settingID, err := s.store.SaveLinearSetting(ctx, store.LinearSettings{
-		SettingID:      in.SettingID,
-		OrgID:          orgID,
-		TeamID:         in.TeamID,
-		CreationMode:   in.CreationMode,
-		TriggerStatus:  in.TriggerStatus,
-		NameTemplate:   in.NameTemplate,
-		ConditionExpr:  in.ConditionExpr,
-		AutoAddMembers: orEmptySlice(in.AutoAddMembers),
+		SettingID:            in.SettingID,
+		OrgID:                orgID,
+		TeamID:               in.TeamID,
+		CreationMode:         in.CreationMode,
+		TriggerStatus:        in.TriggerStatus,
+		NameTemplate:         in.NameTemplate,
+		ConditionExpr:        in.ConditionExpr,
+		ArchiveMode:          orDefault(in.ArchiveMode, "manual"),
+		ArchiveStatus:        in.ArchiveStatus,
+		ArchiveConditionExpr: in.ArchiveConditionExpr,
+		AutoAddMembers:       orEmptySlice(in.AutoAddMembers),
 	})
 	if err != nil {
 		var mapped store.ErrTeamAlreadyMapped
@@ -137,6 +143,17 @@ func (s *Service) validateLinearSettings(in LinearSettings) error {
 	if in.CreationMode == "condition" && strings.TrimSpace(in.ConditionExpr) == "" {
 		return fmt.Errorf("a condition is required when creation mode is 'on condition'")
 	}
+	// Archive mirrors creation; an empty mode means "manual" (no auto-archive).
+	archiveMode := orDefault(in.ArchiveMode, "manual")
+	if archiveMode != "status" && archiveMode != "manual" && archiveMode != "condition" {
+		return fmt.Errorf("invalid archive mode %q", in.ArchiveMode)
+	}
+	if archiveMode == "status" && strings.TrimSpace(in.ArchiveStatus) == "" {
+		return fmt.Errorf("archive status is required when archive mode is 'status'")
+	}
+	if archiveMode == "condition" && strings.TrimSpace(in.ArchiveConditionExpr) == "" {
+		return fmt.Errorf("a condition is required when archive mode is 'on condition'")
+	}
 	// Validate templates by rendering/evaluating against an empty event: a parse
 	// error surfaces here; a missing-field (null) does not.
 	empty := template.Event{EventType: "linear", Linear: map[string]any{}}
@@ -150,19 +167,27 @@ func (s *Service) validateLinearSettings(in LinearSettings) error {
 			return fmt.Errorf("condition: %w", err)
 		}
 	}
+	if in.ArchiveConditionExpr != "" {
+		if _, err := s.tmpl.Evaluate(in.ArchiveConditionExpr, empty); err != nil {
+			return fmt.Errorf("archive condition: %w", err)
+		}
+	}
 	return nil
 }
 
 // fromStoreLinearSettings maps a store row to the service DTO.
 func fromStoreLinearSettings(r store.LinearSettings) LinearSettings {
 	return LinearSettings{
-		SettingID:      r.SettingID,
-		TeamID:         r.TeamID,
-		CreationMode:   orDefault(r.CreationMode, "manual"),
-		TriggerStatus:  r.TriggerStatus,
-		NameTemplate:   r.NameTemplate,
-		ConditionExpr:  r.ConditionExpr,
-		AutoAddMembers: orEmptySlice(r.AutoAddMembers),
+		SettingID:            r.SettingID,
+		TeamID:               r.TeamID,
+		CreationMode:         orDefault(r.CreationMode, "manual"),
+		TriggerStatus:        r.TriggerStatus,
+		NameTemplate:         r.NameTemplate,
+		ConditionExpr:        r.ConditionExpr,
+		ArchiveMode:          orDefault(r.ArchiveMode, "manual"),
+		ArchiveStatus:        r.ArchiveStatus,
+		ArchiveConditionExpr: r.ArchiveConditionExpr,
+		AutoAddMembers:       orEmptySlice(r.AutoAddMembers),
 	}
 }
 
@@ -235,36 +260,92 @@ func (s *Service) GetLinearTeamStates(ctx context.Context, orgID string) ([]Line
 	return out, nil
 }
 
-// TemplateTestResult is the outcome of testing a name template + condition
-// against an event. Err carries the first failure (parse/eval) for display.
-type TemplateTestResult struct {
-	Name            string `json:"name"`
-	ConditionResult bool   `json:"conditionResult"`
-	Err             string `json:"error,omitempty"`
+// CreateTriggered reports whether an issue event fires this config's creation
+// trigger. This is the single source of truth shared by the sync engine and
+// the settings test panel: status mode compares the event's workflow state to
+// TriggerStatus; condition mode evaluates ConditionExpr; manual never
+// auto-fires. A non-empty ConditionExpr also gates status mode, matching the
+// engine's condition gate in ensureChannel.
+func CreateTriggered(tmpl template.Engine, s LinearSettings, stateName string, evt template.Event) (bool, error) {
+	switch s.CreationMode {
+	case "status":
+		if s.TriggerStatus == "" || !strings.EqualFold(stateName, s.TriggerStatus) {
+			return false, nil
+		}
+	case "condition":
+		if s.ConditionExpr == "" {
+			return false, nil // condition mode without an expression never fires
+		}
+	default:
+		return false, nil // manual: channels only open via @notifbuddy
+	}
+	if s.ConditionExpr != "" {
+		return tmpl.Evaluate(s.ConditionExpr, evt)
+	}
+	return true, nil
 }
 
-// TestLinearTemplate renders nameTemplate and evaluates conditionExpr against the
-// given event. It is pure (no persistence). Either field may be empty.
-func (s *Service) TestLinearTemplate(evt template.Event, nameTemplate, conditionExpr string) TemplateTestResult {
+// ArchiveTriggered reports whether an issue event fires this config's archive
+// trigger — the mirror of CreateTriggered.
+func ArchiveTriggered(tmpl template.Engine, s LinearSettings, stateName string, evt template.Event) (bool, error) {
+	switch s.ArchiveMode {
+	case "status":
+		return s.ArchiveStatus != "" && strings.EqualFold(stateName, s.ArchiveStatus), nil
+	case "condition":
+		if s.ArchiveConditionExpr == "" {
+			return false, nil
+		}
+		return tmpl.Evaluate(s.ArchiveConditionExpr, evt)
+	default:
+		return false, nil // manual: channels only close via @notifbuddy
+	}
+}
+
+// EventStateName extracts linear.data.state.name from an event envelope, for
+// evaluating status-mode triggers outside the engine's typed payload.
+func EventStateName(evt template.Event) string {
+	data, _ := evt.Linear["data"].(map[string]any)
+	state, _ := data["state"].(map[string]any)
+	name, _ := state["name"].(string)
+	return name
+}
+
+// TemplateTestResult is the outcome of previewing a config against an event.
+// Err carries the first failure (parse/eval) for display.
+type TemplateTestResult struct {
+	Name         string `json:"name"`
+	WouldCreate  bool   `json:"wouldCreate"`
+	WouldArchive bool   `json:"wouldArchive"`
+	Err          string `json:"error,omitempty"`
+}
+
+// TestLinearTemplate previews what a config would do for an event: the
+// rendered channel name plus whether the create and archive triggers fire,
+// using the exact trigger rules the sync engine applies. It is pure (no
+// persistence); the config needn't be saved.
+func (s *Service) TestLinearTemplate(evt template.Event, in LinearSettings) TemplateTestResult {
 	var res TemplateTestResult
-	if nameTemplate != "" {
-		name, err := s.tmpl.Render(nameTemplate, evt)
+	if in.NameTemplate != "" {
+		name, err := s.tmpl.Render(in.NameTemplate, evt)
 		if err != nil {
 			res.Err = "name template: " + err.Error()
 			return res
 		}
 		res.Name = name
 	}
-	if conditionExpr != "" {
-		ok, err := s.tmpl.Evaluate(conditionExpr, evt)
-		if err != nil {
-			res.Err = "condition: " + err.Error()
-			return res
-		}
-		res.ConditionResult = ok
-	} else {
-		res.ConditionResult = true // no condition = always passes
+	stateName := EventStateName(evt)
+	wouldCreate, err := CreateTriggered(s.tmpl, in, stateName, evt)
+	if err != nil {
+		res.Err = "condition: " + err.Error()
+		return res
 	}
+	res.WouldCreate = wouldCreate
+	wouldArchive, err := ArchiveTriggered(s.tmpl, in, stateName, evt)
+	if err != nil {
+		res.Err = "archive condition: " + err.Error()
+		return res
+	}
+	res.WouldArchive = wouldArchive
 	return res
 }
 

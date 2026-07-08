@@ -25,18 +25,22 @@ func (e ErrTeamAlreadyMapped) Error() string {
 // single Linear team (TeamID). A team belongs to at most one config; the team
 // is the config's identity (there is no separate name).
 type LinearSettings struct {
-	SettingID      string
-	OrgID          string
-	TeamID         string   // the single Linear team this config applies to
-	CreationMode   string   // "status" | "manual" | "condition"
-	TriggerStatus  string   // workflow state name that triggers creation (status mode)
-	NameTemplate   string   // GHA-expression channel-name template
-	ConditionExpr  string   // GHA-expression that must be true to create
-	AutoAddMembers []string // Slack member ids (bots + people) to add on creation
+	SettingID            string
+	OrgID                string
+	TeamID               string   // the single Linear team this config applies to
+	CreationMode         string   // "status" | "manual" | "condition"
+	TriggerStatus        string   // workflow state name that triggers creation (status mode)
+	NameTemplate         string   // GHA-expression channel-name template
+	ConditionExpr        string   // GHA-expression that must be true to create
+	ArchiveMode          string   // "status" | "manual" | "condition" — auto-archive trigger
+	ArchiveStatus        string   // workflow state name that triggers archiving (status mode)
+	ArchiveConditionExpr string   // GHA-expression that must be true to archive
+	AutoAddMembers       []string // Slack member ids (bots + people) to add on creation
 }
 
 const linearSettingsCols = `setting_id, org_id, team_id, creation_mode,
-	trigger_status, name_template, condition_expr, auto_add_members`
+	trigger_status, name_template, condition_expr,
+	archive_mode, archive_status, archive_condition_expr, auto_add_members`
 
 // ListLinearSettings returns all of an org's configs, ordered by name. Returns
 // an empty slice (not ErrNotFound) when the org has none.
@@ -111,7 +115,8 @@ func scanLinearSettings(sc interface {
 	var out LinearSettings
 	var membersJSON []byte
 	if err := sc.Scan(&out.SettingID, &out.OrgID, &out.TeamID, &out.CreationMode,
-		&out.TriggerStatus, &out.NameTemplate, &out.ConditionExpr, &membersJSON); err != nil {
+		&out.TriggerStatus, &out.NameTemplate, &out.ConditionExpr,
+		&out.ArchiveMode, &out.ArchiveStatus, &out.ArchiveConditionExpr, &membersJSON); err != nil {
 		return LinearSettings{}, err
 	}
 	var err error
@@ -159,11 +164,13 @@ func (s *Store) SaveLinearSetting(ctx context.Context, in LinearSettings) (setti
 	if settingID == "" {
 		err = s.pool.QueryRow(ctx, `
 			INSERT INTO linear_settings
-				(org_id, team_id, creation_mode, trigger_status, name_template, condition_expr, auto_add_members)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+				(org_id, team_id, creation_mode, trigger_status, name_template, condition_expr,
+				 archive_mode, archive_status, archive_condition_expr, auto_add_members)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING setting_id
 		`, in.OrgID, in.TeamID, in.CreationMode, in.TriggerStatus,
-			in.NameTemplate, in.ConditionExpr, membersJSON).Scan(&settingID)
+			in.NameTemplate, in.ConditionExpr,
+			in.ArchiveMode, in.ArchiveStatus, in.ArchiveConditionExpr, membersJSON).Scan(&settingID)
 		if err != nil {
 			return "", wrapTeamConflict(err, in.TeamID, "insert linear setting")
 		}
@@ -172,16 +179,20 @@ func (s *Store) SaveLinearSetting(ctx context.Context, in LinearSettings) (setti
 
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE linear_settings SET
-			team_id          = $3,
-			creation_mode    = $4,
-			trigger_status   = $5,
-			name_template    = $6,
-			condition_expr   = $7,
-			auto_add_members = $8,
-			updated_at       = now()
+			team_id                = $3,
+			creation_mode          = $4,
+			trigger_status         = $5,
+			name_template          = $6,
+			condition_expr         = $7,
+			archive_mode           = $8,
+			archive_status         = $9,
+			archive_condition_expr = $10,
+			auto_add_members       = $11,
+			updated_at             = now()
 		WHERE setting_id = $1 AND org_id = $2
 	`, settingID, in.OrgID, in.TeamID, in.CreationMode, in.TriggerStatus,
-		in.NameTemplate, in.ConditionExpr, membersJSON)
+		in.NameTemplate, in.ConditionExpr,
+		in.ArchiveMode, in.ArchiveStatus, in.ArchiveConditionExpr, membersJSON)
 	if err != nil {
 		return "", wrapTeamConflict(err, in.TeamID, "update linear setting")
 	}
