@@ -34,10 +34,19 @@
 		avatarUrl,
 		type Organization
 	} from '$lib/user.svelte';
+	import { orgProfileStore } from '$lib/org-profile.svelte';
+	import MarbleAvatar from './marble-avatar.svelte';
 
 	const user = $derived(userStore.user);
 	const activeOrg = $derived(userStore.activeOrg);
 	const orgs = $derived<Organization[]>(user ? (user.organizations ?? []) : []);
+
+	// The active org's avatar (uploaded image or generated marble) for the
+	// switcher; falls back to the building icon until the profile loads.
+	const orgProfile = $derived(orgProfileStore.profile);
+	$effect(() => {
+		if (activeOrg?.id) orgProfileStore.load(activeOrg.id);
+	});
 
 	const path = $derived(page.url.pathname);
 	const isActive = (url: string) => path === url || path.startsWith(url + '/');
@@ -70,11 +79,17 @@
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
 					<Button {...props} variant="ghost" class="gap-2 px-2">
-						<div
-							class="bg-muted text-muted-foreground border-border flex size-6 items-center justify-center rounded-md border"
-						>
-							<BuildingIcon class="size-3.5" />
-						</div>
+						{#if orgProfile?.avatarUrl}
+							<img src={orgProfile.avatarUrl} alt="" class="size-5 shrink-0 rounded-full object-cover" />
+						{:else if orgProfile?.avatarSeed}
+							<MarbleAvatar seed={orgProfile.avatarSeed} class="size-5 shrink-0" />
+						{:else}
+							<div
+								class="bg-muted text-muted-foreground border-border flex size-5 items-center justify-center rounded-full border"
+							>
+								<BuildingIcon class="size-3" />
+							</div>
+						{/if}
 						<span class="max-w-40 truncate font-medium">
 							{activeOrg?.name ?? 'No organization'}
 						</span>
@@ -86,9 +101,15 @@
 				<DropdownMenu.Label class="text-muted-foreground text-xs">Organizations</DropdownMenu.Label>
 				{#each orgs as org (org.id)}
 					<DropdownMenu.Item onSelect={() => selectOrg(org)} class="gap-2 p-2">
-						<div class="flex size-6 items-center justify-center rounded-md border">
-							<BuildingIcon class="size-3.5 shrink-0" />
-						</div>
+						{#if org.id === activeOrg?.id && orgProfile?.avatarUrl}
+							<img src={orgProfile.avatarUrl} alt="" class="size-6 shrink-0 rounded-full object-cover" />
+						{:else if org.id === activeOrg?.id && orgProfile?.avatarSeed}
+							<MarbleAvatar seed={orgProfile.avatarSeed} class="size-6 shrink-0" />
+						{:else}
+							<div class="flex size-6 items-center justify-center rounded-full border">
+								<BuildingIcon class="size-3.5 shrink-0" />
+							</div>
+						{/if}
 						<span class="flex-1 truncate">{org.name}</span>
 						{#if org.id === activeOrg?.id}
 							<CheckIcon class="size-4 shrink-0" />

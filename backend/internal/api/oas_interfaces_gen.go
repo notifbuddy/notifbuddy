@@ -21,6 +21,10 @@ type DeleteLinearSettingsRes interface {
 	deleteLinearSettingsRes()
 }
 
+type DeleteOrganizationAvatarRes interface {
+	deleteOrganizationAvatarRes()
+}
+
 type DisconnectIntegrationRes interface {
 	disconnectIntegrationRes()
 }
@@ -39,6 +43,10 @@ type GetLinearSettingsRes interface {
 
 type GetMeRes interface {
 	getMeRes()
+}
+
+type GetOrganizationProfileRes interface {
+	getOrganizationProfileRes()
 }
 
 type GetPendingOrgsRes interface {
@@ -63,6 +71,10 @@ type ListMembersRes interface {
 
 type PingRes interface {
 	pingRes()
+}
+
+type RegenerateOrganizationAvatarRes interface {
+	regenerateOrganizationAvatarRes()
 }
 
 type RevokeInvitationRes interface {
@@ -91,6 +103,14 @@ type UpdateLinearSettingsRes interface {
 
 type UpdateMemberRoleRes interface {
 	updateMemberRoleRes()
+}
+
+type UpdateOrganizationProfileRes interface {
+	updateOrganizationProfileRes()
+}
+
+type UploadOrganizationAvatarRes interface {
+	uploadOrganizationAvatarRes()
 }
 
 type VerifyEmailRes interface {

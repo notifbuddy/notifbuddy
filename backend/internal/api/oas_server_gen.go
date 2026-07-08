@@ -46,6 +46,13 @@ type Handler interface {
 	//
 	// DELETE /integrations/linear/settings/{settingId}
 	DeleteLinearSettings(ctx context.Context, params DeleteLinearSettingsParams) (DeleteLinearSettingsRes, error)
+	// DeleteOrganizationAvatar implements deleteOrganizationAvatar operation.
+	//
+	// Deletes the uploaded avatar image so the organization falls back to its generated avatar.
+	// Admin-only.
+	//
+	// DELETE /organization/avatar
+	DeleteOrganizationAvatar(ctx context.Context) (DeleteOrganizationAvatarRes, error)
 	// DisconnectIntegration implements disconnectIntegration operation.
 	//
 	// Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -89,6 +96,14 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// GetOrganizationProfile implements getOrganizationProfile operation.
+	//
+	// Returns the active organization's name and avatar. When no image has been uploaded, avatarUrl is
+	// absent and the client renders a generated avatar from avatarSeed. The profile row (and its random
+	// seed) is created lazily on first read.
+	//
+	// GET /organization/profile
+	GetOrganizationProfile(ctx context.Context) (GetOrganizationProfileRes, error)
 	// GetPendingOrgs implements getPendingOrgs operation.
 	//
 	// During the org-selection step the SPA calls this to read the organizations the user may choose
@@ -134,6 +149,13 @@ type Handler interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// RegenerateOrganizationAvatar implements regenerateOrganizationAvatar operation.
+	//
+	// Replaces the organization's avatar seed with a fresh random one, so the generated avatar changes.
+	// Also clears any uploaded image. Admin-only.
+	//
+	// POST /organization/avatar/regenerate
+	RegenerateOrganizationAvatar(ctx context.Context) (RegenerateOrganizationAvatarRes, error)
 	// RevokeInvitation implements revokeInvitation operation.
 	//
 	// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
@@ -190,6 +212,19 @@ type Handler interface {
 	//
 	// PUT /members/{membershipId}/role
 	UpdateMemberRole(ctx context.Context, req *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error)
+	// UpdateOrganizationProfile implements updateOrganizationProfile operation.
+	//
+	// Updates the organization's name in WorkOS. Admin-only.
+	//
+	// PUT /organization/profile
+	UpdateOrganizationProfile(ctx context.Context, req *UpdateOrgProfileRequest) (UpdateOrganizationProfileRes, error)
+	// UploadOrganizationAvatar implements uploadOrganizationAvatar operation.
+	//
+	// Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or WebP; at most 512 KiB decoded —
+	// clients should downscale before uploading). Admin-only.
+	//
+	// PUT /organization/avatar
+	UploadOrganizationAvatar(ctx context.Context, req *UploadOrgAvatarRequest) (UploadOrganizationAvatarRes, error)
 	// VerifyEmail implements verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires

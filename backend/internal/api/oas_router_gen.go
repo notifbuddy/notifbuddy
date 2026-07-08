@@ -11,19 +11,19 @@ import (
 )
 
 var (
-	rn25AllowedHeaders = map[string]string{
+	rn29AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn33AllowedHeaders = map[string]string{
+	rn37AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn26AllowedHeaders = map[string]string{
+	rn30AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
 	rn7AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn29AllowedHeaders = map[string]string{
+	rn33AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
 	rn9AllowedHeaders = map[string]string{
@@ -32,7 +32,13 @@ var (
 	rn5AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn32AllowedHeaders = map[string]string{
+	rn36AllowedHeaders = map[string]string{
+		"PUT": "Content-Type",
+	}
+	rn10AllowedHeaders = map[string]string{
+		"PUT": "Content-Type",
+	}
+	rn18AllowedHeaders = map[string]string{
 		"PUT": "Content-Type",
 	}
 )
@@ -141,7 +147,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn25AllowedHeaders,
+								allowedHeaders: rn29AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -166,7 +172,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn33AllowedHeaders,
+								allowedHeaders: rn37AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -254,7 +260,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn26AllowedHeaders,
+									allowedHeaders: rn30AllowedHeaders,
 									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
@@ -408,7 +414,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "POST",
-												allowedHeaders: rn29AllowedHeaders,
+												allowedHeaders: rn33AllowedHeaders,
 												acceptPost:     "application/json",
 												acceptPatch:    "",
 											})
@@ -742,7 +748,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "PUT",
-										allowedHeaders: rn32AllowedHeaders,
+										allowedHeaders: rn36AllowedHeaders,
 										acceptPost:     "",
 										acceptPatch:    "",
 									})
@@ -753,6 +759,100 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 						}
 
+					}
+
+				}
+
+			case 'o': // Prefix: "organization/"
+
+				if l := len("organization/"); len(elem) >= l && elem[0:l] == "organization/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'a': // Prefix: "avatar"
+
+					if l := len("avatar"); len(elem) >= l && elem[0:l] == "avatar" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						switch r.Method {
+						case "DELETE":
+							s.handleDeleteOrganizationAvatarRequest([0]string{}, elemIsEscaped, w, r)
+						case "PUT":
+							s.handleUploadOrganizationAvatarRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "DELETE,PUT",
+								allowedHeaders: rn10AllowedHeaders,
+								acceptPost:     "",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/regenerate"
+
+						if l := len("/regenerate"); len(elem) >= l && elem[0:l] == "/regenerate" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "POST":
+								s.handleRegenerateOrganizationAvatarRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: nil,
+									acceptPost:     "",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					}
+
+				case 'p': // Prefix: "profile"
+
+					if l := len("profile"); len(elem) >= l && elem[0:l] == "profile" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "GET":
+							s.handleGetOrganizationProfileRequest([0]string{}, elemIsEscaped, w, r)
+						case "PUT":
+							s.handleUpdateOrganizationProfileRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "GET,PUT",
+								allowedHeaders: rn18AllowedHeaders,
+								acceptPost:     "",
+								acceptPatch:    "",
+							})
+						}
+
+						return
 					}
 
 				}
@@ -1558,6 +1658,114 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 
 						}
 
+					}
+
+				}
+
+			case 'o': // Prefix: "organization/"
+
+				if l := len("organization/"); len(elem) >= l && elem[0:l] == "organization/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'a': // Prefix: "avatar"
+
+					if l := len("avatar"); len(elem) >= l && elem[0:l] == "avatar" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						switch method {
+						case "DELETE":
+							r.name = DeleteOrganizationAvatarOperation
+							r.summary = "Remove the uploaded avatar"
+							r.operationID = "deleteOrganizationAvatar"
+							r.operationGroup = ""
+							r.pathPattern = "/organization/avatar"
+							r.args = args
+							r.count = 0
+							return r, true
+						case "PUT":
+							r.name = UploadOrganizationAvatarOperation
+							r.summary = "Upload the organization's avatar image"
+							r.operationID = "uploadOrganizationAvatar"
+							r.operationGroup = ""
+							r.pathPattern = "/organization/avatar"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/regenerate"
+
+						if l := len("/regenerate"); len(elem) >= l && elem[0:l] == "/regenerate" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "POST":
+								r.name = RegenerateOrganizationAvatarOperation
+								r.summary = "Re-roll the generated avatar"
+								r.operationID = "regenerateOrganizationAvatar"
+								r.operationGroup = ""
+								r.pathPattern = "/organization/avatar/regenerate"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+					}
+
+				case 'p': // Prefix: "profile"
+
+					if l := len("profile"); len(elem) >= l && elem[0:l] == "profile" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "GET":
+							r.name = GetOrganizationProfileOperation
+							r.summary = "The active organization's profile"
+							r.operationID = "getOrganizationProfile"
+							r.operationGroup = ""
+							r.pathPattern = "/organization/profile"
+							r.args = args
+							r.count = 0
+							return r, true
+						case "PUT":
+							r.name = UpdateOrganizationProfileOperation
+							r.summary = "Rename the active organization"
+							r.operationID = "updateOrganizationProfile"
+							r.operationGroup = ""
+							r.pathPattern = "/organization/profile"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
 					}
 
 				}

@@ -424,6 +424,18 @@ type DeleteLinearSettingsUnauthorized Error
 
 func (*DeleteLinearSettingsUnauthorized) deleteLinearSettingsRes() {}
 
+type DeleteOrganizationAvatarBadRequest Error
+
+func (*DeleteOrganizationAvatarBadRequest) deleteOrganizationAvatarRes() {}
+
+type DeleteOrganizationAvatarForbidden Error
+
+func (*DeleteOrganizationAvatarForbidden) deleteOrganizationAvatarRes() {}
+
+type DeleteOrganizationAvatarUnauthorized Error
+
+func (*DeleteOrganizationAvatarUnauthorized) deleteOrganizationAvatarRes() {}
+
 type DisconnectIntegrationLevel string
 
 const (
@@ -550,6 +562,14 @@ func (*GetBillingBadRequest) getBillingRes() {}
 type GetBillingUnauthorized Error
 
 func (*GetBillingUnauthorized) getBillingRes() {}
+
+type GetOrganizationProfileBadRequest Error
+
+func (*GetOrganizationProfileBadRequest) getOrganizationProfileRes() {}
+
+type GetOrganizationProfileUnauthorized Error
+
+func (*GetOrganizationProfileUnauthorized) getOrganizationProfileRes() {}
 
 // The connection state of a single integration provider at one level.
 // Ref: #/components/schemas/IntegrationStatus
@@ -1473,6 +1493,66 @@ func (o OptString) Or(d string) string {
 	return d
 }
 
+// The active organization's editable profile.
+// Ref: #/components/schemas/OrgProfileResponse
+type OrgProfileResponse struct {
+	// The WorkOS organization ID.
+	ID string `json:"id"`
+	// The organization's display name.
+	Name string `json:"name"`
+	// Seed for the client-rendered generated avatar.
+	AvatarSeed string `json:"avatarSeed"`
+	// Data URL of the uploaded avatar image. Absent when no image has been uploaded; render the generated
+	// avatar from avatarSeed instead.
+	AvatarUrl OptString `json:"avatarUrl"`
+}
+
+// GetID returns the value of ID.
+func (s *OrgProfileResponse) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *OrgProfileResponse) GetName() string {
+	return s.Name
+}
+
+// GetAvatarSeed returns the value of AvatarSeed.
+func (s *OrgProfileResponse) GetAvatarSeed() string {
+	return s.AvatarSeed
+}
+
+// GetAvatarUrl returns the value of AvatarUrl.
+func (s *OrgProfileResponse) GetAvatarUrl() OptString {
+	return s.AvatarUrl
+}
+
+// SetID sets the value of ID.
+func (s *OrgProfileResponse) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *OrgProfileResponse) SetName(val string) {
+	s.Name = val
+}
+
+// SetAvatarSeed sets the value of AvatarSeed.
+func (s *OrgProfileResponse) SetAvatarSeed(val string) {
+	s.AvatarSeed = val
+}
+
+// SetAvatarUrl sets the value of AvatarUrl.
+func (s *OrgProfileResponse) SetAvatarUrl(val OptString) {
+	s.AvatarUrl = val
+}
+
+func (*OrgProfileResponse) deleteOrganizationAvatarRes()     {}
+func (*OrgProfileResponse) getOrganizationProfileRes()       {}
+func (*OrgProfileResponse) regenerateOrganizationAvatarRes() {}
+func (*OrgProfileResponse) updateOrganizationProfileRes()    {}
+func (*OrgProfileResponse) uploadOrganizationAvatarRes()     {}
+
 // A WorkOS organization the user belongs to.
 // Ref: #/components/schemas/Organization
 type Organization struct {
@@ -1579,6 +1659,18 @@ func (s *PongResponse) SetMessage(val string) {
 }
 
 func (*PongResponse) pingRes() {}
+
+type RegenerateOrganizationAvatarBadRequest Error
+
+func (*RegenerateOrganizationAvatarBadRequest) regenerateOrganizationAvatarRes() {}
+
+type RegenerateOrganizationAvatarForbidden Error
+
+func (*RegenerateOrganizationAvatarForbidden) regenerateOrganizationAvatarRes() {}
+
+type RegenerateOrganizationAvatarUnauthorized Error
+
+func (*RegenerateOrganizationAvatarUnauthorized) regenerateOrganizationAvatarRes() {}
 
 type RevokeInvitationBadRequest Error
 
@@ -1928,6 +2020,64 @@ func (s *UpdateMemberRoleRequest) SetRole(val RoleSlug) {
 type UpdateMemberRoleUnauthorized Error
 
 func (*UpdateMemberRoleUnauthorized) updateMemberRoleRes() {}
+
+// Rename the active organization.
+// Ref: #/components/schemas/UpdateOrgProfileRequest
+type UpdateOrgProfileRequest struct {
+	// The new organization name.
+	Name string `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *UpdateOrgProfileRequest) GetName() string {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *UpdateOrgProfileRequest) SetName(val string) {
+	s.Name = val
+}
+
+type UpdateOrganizationProfileBadRequest Error
+
+func (*UpdateOrganizationProfileBadRequest) updateOrganizationProfileRes() {}
+
+type UpdateOrganizationProfileForbidden Error
+
+func (*UpdateOrganizationProfileForbidden) updateOrganizationProfileRes() {}
+
+type UpdateOrganizationProfileUnauthorized Error
+
+func (*UpdateOrganizationProfileUnauthorized) updateOrganizationProfileRes() {}
+
+// An uploaded avatar image, as a data URL.
+// Ref: #/components/schemas/UploadOrgAvatarRequest
+type UploadOrgAvatarRequest struct {
+	// Data:image/png;base64,... (PNG, JPEG, or WebP; at most 512 KiB decoded).
+	ImageDataUrl string `json:"imageDataUrl"`
+}
+
+// GetImageDataUrl returns the value of ImageDataUrl.
+func (s *UploadOrgAvatarRequest) GetImageDataUrl() string {
+	return s.ImageDataUrl
+}
+
+// SetImageDataUrl sets the value of ImageDataUrl.
+func (s *UploadOrgAvatarRequest) SetImageDataUrl(val string) {
+	s.ImageDataUrl = val
+}
+
+type UploadOrganizationAvatarBadRequest Error
+
+func (*UploadOrganizationAvatarBadRequest) uploadOrganizationAvatarRes() {}
+
+type UploadOrganizationAvatarForbidden Error
+
+func (*UploadOrganizationAvatarForbidden) uploadOrganizationAvatarRes() {}
+
+type UploadOrganizationAvatarUnauthorized Error
+
+func (*UploadOrganizationAvatarUnauthorized) uploadOrganizationAvatarRes() {}
 
 // The authenticated WorkOS user and their active organization context.
 // Ref: #/components/schemas/UserResponse

@@ -66,6 +66,13 @@ type Invoker interface {
 	//
 	// DELETE /integrations/linear/settings/{settingId}
 	DeleteLinearSettings(ctx context.Context, params DeleteLinearSettingsParams) (DeleteLinearSettingsRes, error)
+	// DeleteOrganizationAvatar invokes deleteOrganizationAvatar operation.
+	//
+	// Deletes the uploaded avatar image so the organization falls back to its generated avatar.
+	// Admin-only.
+	//
+	// DELETE /organization/avatar
+	DeleteOrganizationAvatar(ctx context.Context) (DeleteOrganizationAvatarRes, error)
 	// DisconnectIntegration invokes disconnectIntegration operation.
 	//
 	// Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -109,6 +116,14 @@ type Invoker interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// GetOrganizationProfile invokes getOrganizationProfile operation.
+	//
+	// Returns the active organization's name and avatar. When no image has been uploaded, avatarUrl is
+	// absent and the client renders a generated avatar from avatarSeed. The profile row (and its random
+	// seed) is created lazily on first read.
+	//
+	// GET /organization/profile
+	GetOrganizationProfile(ctx context.Context) (GetOrganizationProfileRes, error)
 	// GetPendingOrgs invokes getPendingOrgs operation.
 	//
 	// During the org-selection step the SPA calls this to read the organizations the user may choose
@@ -154,6 +169,13 @@ type Invoker interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// RegenerateOrganizationAvatar invokes regenerateOrganizationAvatar operation.
+	//
+	// Replaces the organization's avatar seed with a fresh random one, so the generated avatar changes.
+	// Also clears any uploaded image. Admin-only.
+	//
+	// POST /organization/avatar/regenerate
+	RegenerateOrganizationAvatar(ctx context.Context) (RegenerateOrganizationAvatarRes, error)
 	// RevokeInvitation invokes revokeInvitation operation.
 	//
 	// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
@@ -210,6 +232,19 @@ type Invoker interface {
 	//
 	// PUT /members/{membershipId}/role
 	UpdateMemberRole(ctx context.Context, request *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error)
+	// UpdateOrganizationProfile invokes updateOrganizationProfile operation.
+	//
+	// Updates the organization's name in WorkOS. Admin-only.
+	//
+	// PUT /organization/profile
+	UpdateOrganizationProfile(ctx context.Context, request *UpdateOrgProfileRequest) (UpdateOrganizationProfileRes, error)
+	// UploadOrganizationAvatar invokes uploadOrganizationAvatar operation.
+	//
+	// Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or WebP; at most 512 KiB decoded —
+	// clients should downscale before uploading). Admin-only.
+	//
+	// PUT /organization/avatar
+	UploadOrganizationAvatar(ctx context.Context, request *UploadOrgAvatarRequest) (UploadOrganizationAvatarRes, error)
 	// VerifyEmail invokes verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
@@ -693,6 +728,87 @@ func (c *Client) sendDeleteLinearSettings(ctx context.Context, params DeleteLine
 	return result, nil
 }
 
+// DeleteOrganizationAvatar invokes deleteOrganizationAvatar operation.
+//
+// Deletes the uploaded avatar image so the organization falls back to its generated avatar.
+// Admin-only.
+//
+// DELETE /organization/avatar
+func (c *Client) DeleteOrganizationAvatar(ctx context.Context) (DeleteOrganizationAvatarRes, error) {
+	res, err := c.sendDeleteOrganizationAvatar(ctx)
+	return res, err
+}
+
+func (c *Client) sendDeleteOrganizationAvatar(ctx context.Context) (res DeleteOrganizationAvatarRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("deleteOrganizationAvatar"),
+		semconv.HTTPRequestMethodKey.String("DELETE"),
+		semconv.URLTemplateKey.String("/organization/avatar"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, DeleteOrganizationAvatarOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/organization/avatar"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "DELETE", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeDeleteOrganizationAvatarResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // DisconnectIntegration invokes disconnectIntegration operation.
 //
 // Removes the stored installation/token for the given provider at the given level. level=workspace
@@ -1139,6 +1255,88 @@ func (c *Client) sendGetMe(ctx context.Context) (res GetMeRes, err error) {
 
 	stage = "DecodeResponse"
 	result, err := decodeGetMeResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetOrganizationProfile invokes getOrganizationProfile operation.
+//
+// Returns the active organization's name and avatar. When no image has been uploaded, avatarUrl is
+// absent and the client renders a generated avatar from avatarSeed. The profile row (and its random
+// seed) is created lazily on first read.
+//
+// GET /organization/profile
+func (c *Client) GetOrganizationProfile(ctx context.Context) (GetOrganizationProfileRes, error) {
+	res, err := c.sendGetOrganizationProfile(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetOrganizationProfile(ctx context.Context) (res GetOrganizationProfileRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getOrganizationProfile"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/organization/profile"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetOrganizationProfileOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/organization/profile"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetOrganizationProfileResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -1628,6 +1826,87 @@ func (c *Client) sendPing(ctx context.Context) (res PingRes, err error) {
 
 	stage = "DecodeResponse"
 	result, err := decodePingResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// RegenerateOrganizationAvatar invokes regenerateOrganizationAvatar operation.
+//
+// Replaces the organization's avatar seed with a fresh random one, so the generated avatar changes.
+// Also clears any uploaded image. Admin-only.
+//
+// POST /organization/avatar/regenerate
+func (c *Client) RegenerateOrganizationAvatar(ctx context.Context) (RegenerateOrganizationAvatarRes, error) {
+	res, err := c.sendRegenerateOrganizationAvatar(ctx)
+	return res, err
+}
+
+func (c *Client) sendRegenerateOrganizationAvatar(ctx context.Context) (res RegenerateOrganizationAvatarRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("regenerateOrganizationAvatar"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/organization/avatar/regenerate"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, RegenerateOrganizationAvatarOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/organization/avatar/regenerate"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeRegenerateOrganizationAvatarResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -2272,6 +2551,173 @@ func (c *Client) sendUpdateMemberRole(ctx context.Context, request *UpdateMember
 
 	stage = "DecodeResponse"
 	result, err := decodeUpdateMemberRoleResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// UpdateOrganizationProfile invokes updateOrganizationProfile operation.
+//
+// Updates the organization's name in WorkOS. Admin-only.
+//
+// PUT /organization/profile
+func (c *Client) UpdateOrganizationProfile(ctx context.Context, request *UpdateOrgProfileRequest) (UpdateOrganizationProfileRes, error) {
+	res, err := c.sendUpdateOrganizationProfile(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendUpdateOrganizationProfile(ctx context.Context, request *UpdateOrgProfileRequest) (res UpdateOrganizationProfileRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("updateOrganizationProfile"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
+		semconv.URLTemplateKey.String("/organization/profile"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UpdateOrganizationProfileOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/organization/profile"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PUT", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeUpdateOrganizationProfileRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeUpdateOrganizationProfileResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// UploadOrganizationAvatar invokes uploadOrganizationAvatar operation.
+//
+// Stores an uploaded avatar image (sent as a data URL; PNG, JPEG, or WebP; at most 512 KiB decoded —
+// clients should downscale before uploading). Admin-only.
+//
+// PUT /organization/avatar
+func (c *Client) UploadOrganizationAvatar(ctx context.Context, request *UploadOrgAvatarRequest) (UploadOrganizationAvatarRes, error) {
+	res, err := c.sendUploadOrganizationAvatar(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendUploadOrganizationAvatar(ctx context.Context, request *UploadOrgAvatarRequest) (res UploadOrganizationAvatarRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("uploadOrganizationAvatar"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
+		semconv.URLTemplateKey.String("/organization/avatar"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UploadOrganizationAvatarOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/organization/avatar"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PUT", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeUploadOrganizationAvatarRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeUploadOrganizationAvatarResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
