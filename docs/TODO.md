@@ -27,14 +27,19 @@ usecase for this though.~~
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
 - ~~Update the login page, it just says Sign in with WorkOS~~
-- can we sync the icons for the linear statues as well?
-- can we add pics for members and bots as well
+- ~can we sync the icons for the linear statues as well?~
+- ~can we add pics for members and bots as well~
 - Add settings icon to take to linear, github, etc.'s settings page.
 - Invitation needs rework.
 - Explore linear's multi team flows, understand how mutiple teams work are common workspace things, team
   specific things. How do we configure our system to allow multiple teams to integrate.
-- Add stripe account and create billing integration.
+- ~Add stripe account and create billing integration.~
+- `mux.HandleFunc("GET /integrations/github/connect", gateBilling(intgSvc.HandleGitHubConnect))` -> remove gateBilling, connection should happen always but request processing needs to be handled seperately.
+- validate that work os webhook for membership addition and removal works.
+- validate that invoice is raised correctly on end
+- validate that webhook for linear and check that channel creation works.
 - Open discord/slack community for support.
+- plug stipe and work os webhook and keys: https://github.com/PrashantRaj18198/notifbuddy/pull/4
 - fix onboarding
 - change description for github integration to something else
 - sync user profile image when login through github happens
