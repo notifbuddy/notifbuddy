@@ -29,6 +29,10 @@
 	} from '$lib/billing';
 
 	const org = $derived(userStore.activeOrg);
+	const isAdmin = $derived(userStore.user?.role === 'admin');
+
+	// Tooltip body for actions non-admins can see but not use.
+	const adminOnlyMsg = 'Only admins can manage billing';
 
 	let billing = $state<BillingStatus | null | undefined>(undefined);
 	let members = $state<Member[] | null | undefined>(undefined);
@@ -194,15 +198,28 @@
 						{/if}
 					</p>
 					<div>
-						<Button variant="outline" onclick={openPortal} disabled={redirecting}>
-							{#if redirecting}
-								<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								Opening…
-							{:else}
-								<ExternalLinkIcon data-icon="inline-start" />
-								Manage billing
-							{/if}
-						</Button>
+						<Tooltip.Provider delayDuration={200}>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<span {...props} class="inline-block">
+											<Button variant="outline" onclick={openPortal} disabled={redirecting || !isAdmin}>
+												{#if redirecting}
+													<LoaderIcon data-icon="inline-start" class="animate-spin" />
+													Opening…
+												{:else}
+													<ExternalLinkIcon data-icon="inline-start" />
+													Manage billing
+												{/if}
+											</Button>
+										</span>
+									{/snippet}
+								</Tooltip.Trigger>
+								{#if !isAdmin}
+									<Tooltip.Content>{adminOnlyMsg}</Tooltip.Content>
+								{/if}
+							</Tooltip.Root>
+						</Tooltip.Provider>
 					</div>
 					<p class="text-muted-foreground text-xs">
 						Card, invoices, and cancellation are handled in the Stripe portal. Seats adjust
@@ -226,15 +243,28 @@
 						{/if}
 					</p>
 					<div>
-						<Button onclick={subscribe} disabled={redirecting}>
-							{#if redirecting}
-								<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								Redirecting…
-							{:else}
-								<CreditCardIcon data-icon="inline-start" />
-								Subscribe to Pro
-							{/if}
-						</Button>
+						<Tooltip.Provider delayDuration={200}>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<span {...props} class="inline-block">
+											<Button onclick={subscribe} disabled={redirecting || !isAdmin}>
+												{#if redirecting}
+													<LoaderIcon data-icon="inline-start" class="animate-spin" />
+													Redirecting…
+												{:else}
+													<CreditCardIcon data-icon="inline-start" />
+													Subscribe to Pro
+												{/if}
+											</Button>
+										</span>
+									{/snippet}
+								</Tooltip.Trigger>
+								{#if !isAdmin}
+									<Tooltip.Content>{adminOnlyMsg}</Tooltip.Content>
+								{/if}
+							</Tooltip.Root>
+						</Tooltip.Provider>
 					</div>
 				{/if}
 				{#if actionError}<p class="text-destructive text-sm">{actionError}</p>{/if}
@@ -326,15 +356,32 @@
 							</Field.Field>
 						</Field.FieldGroup>
 						<div>
-							<Button type="submit" variant="outline" disabled={applying || sponsorUrl.trim() === ''}>
-								{#if applying}
-									<LoaderIcon data-icon="inline-start" class="animate-spin" />
-									Submitting…
-								{:else}
-									<HeartIcon data-icon="inline-start" />
-									Apply
-								{/if}
-							</Button>
+							<Tooltip.Provider delayDuration={200}>
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											<span {...props} class="inline-block">
+												<Button
+													type="submit"
+													variant="outline"
+													disabled={applying || sponsorUrl.trim() === '' || !isAdmin}
+												>
+													{#if applying}
+														<LoaderIcon data-icon="inline-start" class="animate-spin" />
+														Submitting…
+													{:else}
+														<HeartIcon data-icon="inline-start" />
+														Apply
+													{/if}
+												</Button>
+											</span>
+										{/snippet}
+									</Tooltip.Trigger>
+									{#if !isAdmin}
+										<Tooltip.Content>{adminOnlyMsg}</Tooltip.Content>
+									{/if}
+								</Tooltip.Root>
+							</Tooltip.Provider>
 						</div>
 					</form>
 				{/if}

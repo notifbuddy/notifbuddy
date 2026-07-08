@@ -134,6 +134,14 @@ type Handler interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// RevokeInvitation implements revokeInvitation operation.
+	//
+	// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
+	// signed-in member of the organization may revoke (demo-simple authorization, matching invite
+	// creation).
+	//
+	// DELETE /invitations/{invitationId}
+	RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (RevokeInvitationRes, error)
 	// SelectOrg implements selectOrg operation.
 	//
 	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -145,8 +153,8 @@ type Handler interface {
 	//
 	// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
 	// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
-	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
-	// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is reported by
+	// GET /billing. 409 when the org is already approved or has a live subscription.
 	//
 	// POST /billing/oss-application
 	SubmitOssApplication(ctx context.Context, req *OssApplicationRequest) (SubmitOssApplicationRes, error)
@@ -174,6 +182,14 @@ type Handler interface {
 	//
 	// PUT /integrations/linear/settings/{settingId}
 	UpdateLinearSettings(ctx context.Context, req *LinearSettings, params UpdateLinearSettingsParams) (UpdateLinearSettingsRes, error)
+	// UpdateMemberRole implements updateMemberRole operation.
+	//
+	// Sets the role of the organization membership identified by membershipId. Only admins may change
+	// roles, and an admin cannot change their own role. The target user's session picks the new role up on
+	// its next token refresh.
+	//
+	// PUT /members/{membershipId}/role
+	UpdateMemberRole(ctx context.Context, req *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error)
 	// VerifyEmail implements verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires

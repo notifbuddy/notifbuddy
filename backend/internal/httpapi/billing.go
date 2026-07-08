@@ -11,6 +11,9 @@ import (
 	"xolo/backend/internal/billing"
 )
 
+// billingAdminOnlyMsg is the 403 body for billing actions gated to admins.
+const billingAdminOnlyMsg = "only admins can manage billing"
+
 // GetBilling implements `getBilling`: GET /billing.
 // Returns the active organization's billing status, lazily starting its
 // 21-day trial on first touch, and trues the Stripe seat quantity up while a
@@ -42,6 +45,9 @@ func (h Handler) CreateBillingCheckout(ctx context.Context) (api.CreateBillingCh
 	if user.OrgID == "" {
 		return &api.CreateBillingCheckoutBadRequest{Message: "no active organization"}, nil
 	}
+	if user.Role != auth.RoleAdmin {
+		return &api.CreateBillingCheckoutForbidden{Message: billingAdminOnlyMsg}, nil
+	}
 	url, err := h.billing.CreateCheckout(ctx, user.OrgID, user.Email)
 	switch {
 	case errors.Is(err, billing.ErrAlreadySubscribed):
@@ -65,6 +71,9 @@ func (h Handler) CreateBillingPortal(ctx context.Context) (api.CreateBillingPort
 	if user.OrgID == "" {
 		return &api.CreateBillingPortalBadRequest{Message: "no active organization"}, nil
 	}
+	if user.Role != auth.RoleAdmin {
+		return &api.CreateBillingPortalForbidden{Message: billingAdminOnlyMsg}, nil
+	}
 	url, err := h.billing.CreatePortal(ctx, user.OrgID)
 	switch {
 	case errors.Is(err, billing.ErrNoCustomer):
@@ -87,6 +96,9 @@ func (h Handler) SubmitOssApplication(ctx context.Context, req *api.OssApplicati
 	}
 	if user.OrgID == "" {
 		return &api.SubmitOssApplicationBadRequest{Message: "no active organization"}, nil
+	}
+	if user.Role != auth.RoleAdmin {
+		return &api.SubmitOssApplicationForbidden{Message: billingAdminOnlyMsg}, nil
 	}
 	sponsorURL := strings.TrimSpace(req.SponsorUrl)
 	if !strings.HasPrefix(sponsorURL, "https://") && !strings.HasPrefix(sponsorURL, "http://") {

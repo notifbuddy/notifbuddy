@@ -343,6 +343,10 @@ type CreateBillingCheckoutConflict Error
 
 func (*CreateBillingCheckoutConflict) createBillingCheckoutRes() {}
 
+type CreateBillingCheckoutForbidden Error
+
+func (*CreateBillingCheckoutForbidden) createBillingCheckoutRes() {}
+
 type CreateBillingCheckoutUnauthorized Error
 
 func (*CreateBillingCheckoutUnauthorized) createBillingCheckoutRes() {}
@@ -350,6 +354,10 @@ func (*CreateBillingCheckoutUnauthorized) createBillingCheckoutRes() {}
 type CreateBillingPortalBadRequest Error
 
 func (*CreateBillingPortalBadRequest) createBillingPortalRes() {}
+
+type CreateBillingPortalForbidden Error
+
+func (*CreateBillingPortalForbidden) createBillingPortalRes() {}
 
 type CreateBillingPortalUnauthorized Error
 
@@ -369,7 +377,7 @@ type CreateInvitationRequest struct {
 	// The email address to invite.
 	Email string `json:"email"`
 	// Optional role slug to grant the invitee on acceptance.
-	Role OptString `json:"role"`
+	Role OptRoleSlug `json:"role"`
 }
 
 // GetEmail returns the value of Email.
@@ -378,7 +386,7 @@ func (s *CreateInvitationRequest) GetEmail() string {
 }
 
 // GetRole returns the value of Role.
-func (s *CreateInvitationRequest) GetRole() OptString {
+func (s *CreateInvitationRequest) GetRole() OptRoleSlug {
 	return s.Role
 }
 
@@ -388,7 +396,7 @@ func (s *CreateInvitationRequest) SetEmail(val string) {
 }
 
 // SetRole sets the value of Role.
-func (s *CreateInvitationRequest) SetRole(val OptString) {
+func (s *CreateInvitationRequest) SetRole(val OptRoleSlug) {
 	s.Role = val
 }
 
@@ -710,6 +718,8 @@ type InvitationResponse struct {
 	State string `json:"state"`
 	// ISO 8601 expiry timestamp.
 	ExpiresAt OptString `json:"expiresAt"`
+	// The role slug the invitee will be granted on acceptance, if any.
+	Role OptString `json:"role"`
 }
 
 // GetID returns the value of ID.
@@ -732,6 +742,11 @@ func (s *InvitationResponse) GetExpiresAt() OptString {
 	return s.ExpiresAt
 }
 
+// GetRole returns the value of Role.
+func (s *InvitationResponse) GetRole() OptString {
+	return s.Role
+}
+
 // SetID sets the value of ID.
 func (s *InvitationResponse) SetID(val string) {
 	s.ID = val
@@ -752,7 +767,13 @@ func (s *InvitationResponse) SetExpiresAt(val OptString) {
 	s.ExpiresAt = val
 }
 
+// SetRole sets the value of Role.
+func (s *InvitationResponse) SetRole(val OptString) {
+	s.Role = val
+}
+
 func (*InvitationResponse) createInvitationRes() {}
+func (*InvitationResponse) revokeInvitationRes() {}
 
 // A Linear → Slack channel-creation config scoped to a single Linear team (teamId). The team is the
 // config's identity; a team has at most one config.
@@ -1099,6 +1120,9 @@ type MemberResponse struct {
 	LastName OptString `json:"lastName"`
 	// The member's role slug within the organization, if any.
 	Role OptString `json:"role"`
+	// URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar,
+	// captured by WorkOS at sign-in.
+	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 }
 
 // GetID returns the value of ID.
@@ -1131,6 +1155,11 @@ func (s *MemberResponse) GetRole() OptString {
 	return s.Role
 }
 
+// GetProfilePictureUrl returns the value of ProfilePictureUrl.
+func (s *MemberResponse) GetProfilePictureUrl() OptString {
+	return s.ProfilePictureUrl
+}
+
 // SetID sets the value of ID.
 func (s *MemberResponse) SetID(val string) {
 	s.ID = val
@@ -1160,6 +1189,13 @@ func (s *MemberResponse) SetLastName(val OptString) {
 func (s *MemberResponse) SetRole(val OptString) {
 	s.Role = val
 }
+
+// SetProfilePictureUrl sets the value of ProfilePictureUrl.
+func (s *MemberResponse) SetProfilePictureUrl(val OptString) {
+	s.ProfilePictureUrl = val
+}
+
+func (*MemberResponse) updateMemberRoleRes() {}
 
 // NewOptBillingStatusResponseOssApplicationStatus returns new OptBillingStatusResponseOssApplicationStatus with value set to v.
 func NewOptBillingStatusResponseOssApplicationStatus(v BillingStatusResponseOssApplicationStatus) OptBillingStatusResponseOssApplicationStatus {
@@ -1345,6 +1381,52 @@ func (o OptInt) Or(d int) int {
 	return d
 }
 
+// NewOptRoleSlug returns new OptRoleSlug with value set to v.
+func NewOptRoleSlug(v RoleSlug) OptRoleSlug {
+	return OptRoleSlug{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptRoleSlug is optional RoleSlug.
+type OptRoleSlug struct {
+	Value RoleSlug
+	Set   bool
+}
+
+// IsSet returns true if OptRoleSlug was set.
+func (o OptRoleSlug) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptRoleSlug) Reset() {
+	var v RoleSlug
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptRoleSlug) SetTo(v RoleSlug) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptRoleSlug) Get() (v RoleSlug, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptRoleSlug) Or(d RoleSlug) RoleSlug {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -1498,6 +1580,68 @@ func (s *PongResponse) SetMessage(val string) {
 
 func (*PongResponse) pingRes() {}
 
+type RevokeInvitationBadRequest Error
+
+func (*RevokeInvitationBadRequest) revokeInvitationRes() {}
+
+type RevokeInvitationNotFound Error
+
+func (*RevokeInvitationNotFound) revokeInvitationRes() {}
+
+type RevokeInvitationUnauthorized Error
+
+func (*RevokeInvitationUnauthorized) revokeInvitationRes() {}
+
+// An organization role slug.
+// Ref: #/components/schemas/RoleSlug
+type RoleSlug string
+
+const (
+	RoleSlugAdmin  RoleSlug = "admin"
+	RoleSlugMember RoleSlug = "member"
+	RoleSlugViewer RoleSlug = "viewer"
+)
+
+// AllValues returns all RoleSlug values.
+func (RoleSlug) AllValues() []RoleSlug {
+	return []RoleSlug{
+		RoleSlugAdmin,
+		RoleSlugMember,
+		RoleSlugViewer,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RoleSlug) MarshalText() ([]byte, error) {
+	switch s {
+	case RoleSlugAdmin:
+		return []byte(s), nil
+	case RoleSlugMember:
+		return []byte(s), nil
+	case RoleSlugViewer:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RoleSlug) UnmarshalText(data []byte) error {
+	switch RoleSlug(data) {
+	case RoleSlugAdmin:
+		*s = RoleSlugAdmin
+		return nil
+	case RoleSlugMember:
+		*s = RoleSlugMember
+		return nil
+	case RoleSlugViewer:
+		*s = RoleSlugViewer
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // A built-in example event for the settings test panel.
 // Ref: #/components/schemas/SampleEvent
 type SampleEvent struct {
@@ -1612,6 +1756,10 @@ func (*SubmitOssApplicationBadRequest) submitOssApplicationRes() {}
 type SubmitOssApplicationConflict Error
 
 func (*SubmitOssApplicationConflict) submitOssApplicationRes() {}
+
+type SubmitOssApplicationForbidden Error
+
+func (*SubmitOssApplicationForbidden) submitOssApplicationRes() {}
 
 type SubmitOssApplicationUnauthorized Error
 
@@ -1747,6 +1895,39 @@ func (*UpdateLinearSettingsPaymentRequired) updateLinearSettingsRes() {}
 type UpdateLinearSettingsUnauthorized Error
 
 func (*UpdateLinearSettingsUnauthorized) updateLinearSettingsRes() {}
+
+type UpdateMemberRoleBadRequest Error
+
+func (*UpdateMemberRoleBadRequest) updateMemberRoleRes() {}
+
+type UpdateMemberRoleForbidden Error
+
+func (*UpdateMemberRoleForbidden) updateMemberRoleRes() {}
+
+type UpdateMemberRoleNotFound Error
+
+func (*UpdateMemberRoleNotFound) updateMemberRoleRes() {}
+
+// Change an organization member's role.
+// Ref: #/components/schemas/UpdateMemberRoleRequest
+type UpdateMemberRoleRequest struct {
+	// The role slug to assign to the member.
+	Role RoleSlug `json:"role"`
+}
+
+// GetRole returns the value of Role.
+func (s *UpdateMemberRoleRequest) GetRole() RoleSlug {
+	return s.Role
+}
+
+// SetRole sets the value of Role.
+func (s *UpdateMemberRoleRequest) SetRole(val RoleSlug) {
+	s.Role = val
+}
+
+type UpdateMemberRoleUnauthorized Error
+
+func (*UpdateMemberRoleUnauthorized) updateMemberRoleRes() {}
 
 // The authenticated WorkOS user and their active organization context.
 // Ref: #/components/schemas/UserResponse

@@ -4,1755 +4,1953 @@
  */
 
 export interface paths {
-  "/ping": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ping the server
+         * @description Returns a pong message. Requires an authenticated session — the request
+         *     must carry a valid `wos_session` cookie. Used to verify the end-to-end
+         *     authenticated transport.
+         */
+        get: operations["ping"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Ping the server
-     * @description Returns a pong message. Requires an authenticated session — the request
-     *     must carry a valid `wos_session` cookie. Used to verify the end-to-end
-     *     authenticated transport.
-     */
-    get: operations["ping"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/auth/verify-email": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete email-verification during login
+         * @description Some providers (notably GitHub OAuth) return an unverified email on first
+         *     login, so WorkOS requires email verification before issuing a session. The
+         *     `/auth/callback` handler detects this, stores the WorkOS
+         *     `pending_authentication_token` in a short-lived sealed cookie, and sends
+         *     the browser to the SPA's verification step. The SPA collects the code
+         *     WorkOS emailed and POSTs it here to finish authentication and establish
+         *     the session.
+         */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Complete email-verification during login
-     * @description Some providers (notably GitHub OAuth) return an unverified email on first
-     *     login, so WorkOS requires email verification before issuing a session. The
-     *     `/auth/callback` handler detects this, stores the WorkOS
-     *     `pending_authentication_token` in a short-lived sealed cookie, and sends
-     *     the browser to the SPA's verification step. The SPA collects the code
-     *     WorkOS emailed and POSTs it here to finish authentication and establish
-     *     the session.
-     */
-    post: operations["verifyEmail"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/me": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the current user
+         * @description Returns the WorkOS user backing the current session. Requires a valid
+         *     `wos_session` cookie; returns 401 when unauthenticated. The SPA calls this
+         *     on load to decide whether to show the signed-in or signed-out UI.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get the current user
-     * @description Returns the WorkOS user backing the current session. Requires a valid
-     *     `wos_session` cookie; returns 401 when unauthenticated. The SPA calls this
-     *     on load to decide whether to show the signed-in or signed-out UI.
-     */
-    get: operations["getMe"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/auth/pending-orgs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/auth/pending-orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List organizations awaiting selection
+         * @description During the org-selection step the SPA calls this to read the organizations
+         *     the user may choose between. The choices were stashed by `/auth/callback`
+         *     in a short-lived sealed cookie. Returns 401 if there is no pending
+         *     selection.
+         */
+        get: operations["getPendingOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List organizations awaiting selection
-     * @description During the org-selection step the SPA calls this to read the organizations
-     *     the user may choose between. The choices were stashed by `/auth/callback`
-     *     in a short-lived sealed cookie. Returns 401 if there is no pending
-     *     selection.
-     */
-    get: operations["getPendingOrgs"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/auth/select-org": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/auth/select-org": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete login by choosing an organization
+         * @description Finishes a login that WorkOS gated on organization selection. Exchanges
+         *     the chosen organization plus the stashed pending token for a session,
+         *     sets the session cookie, and returns the user.
+         */
+        post: operations["selectOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Complete login by choosing an organization
-     * @description Finishes a login that WorkOS gated on organization selection. Exchanges
-     *     the chosen organization plus the stashed pending token for a session,
-     *     sets the session cookie, and returns the user.
-     */
-    post: operations["selectOrg"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/invitations": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the active organization's invitations
+         * @description Returns the invitations for the caller's active organization. Requires a
+         *     session scoped to an organization.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Invite an email to the active organization
+         * @description Sends a WorkOS invitation for the given email to the caller's active
+         *     organization (optionally with a role). WorkOS emails the invitee a link;
+         *     accepting it (by logging in with the invitation token) creates their
+         *     membership.
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List the active organization's invitations
-     * @description Returns the invitations for the caller's active organization. Requires a
-     *     session scoped to an organization.
-     */
-    get: operations["listInvitations"];
-    put?: never;
-    /**
-     * Invite an email to the active organization
-     * @description Sends a WorkOS invitation for the given email to the caller's active
-     *     organization (optionally with a role). WorkOS emails the invitee a link;
-     *     accepting it (by logging in with the invitation token) creates their
-     *     membership.
-     */
-    post: operations["createInvitation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/members": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a pending invitation
+         * @description Revokes the invitation identified by invitationId so its link can no
+         *     longer be accepted. Any signed-in member of the organization may revoke
+         *     (demo-simple authorization, matching invite creation).
+         */
+        delete: operations["revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List the active organization's members
-     * @description Returns the active members of the caller's active organization, resolved
-     *     from WorkOS organization memberships. Requires a session scoped to an
-     *     organization.
-     */
-    get: operations["listMembers"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/status": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the active organization's members
+         * @description Returns the active members of the caller's active organization, resolved
+         *     from WorkOS organization memberships. Requires a session scoped to an
+         *     organization.
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Integration connection status for the active organization
-     * @description Returns the connection state of each supported integration (GitHub,
-     *     Slack, Linear) for the caller's active organization. Drives the
-     *     integrations settings view. The actual connect/callback flows are
-     *     browser redirects (GET /integrations/{provider}/connect) and are not
-     *     part of this JSON spec.
-     */
-    get: operations["getIntegrationStatus"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/{provider}/disconnect": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/members/{membershipId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a member's role in the active organization
+         * @description Sets the role of the organization membership identified by
+         *     membershipId. Only admins may change roles, and an admin cannot change
+         *     their own role. The target user's session picks the new role up on its
+         *     next token refresh.
+         */
+        put: operations["updateMemberRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Disconnect an integration from the active organization
-     * @description Removes the stored installation/token for the given provider at the given
-     *     level. level=workspace (default) removes the org-wide connection;
-     *     level=user removes only the caller's own per-user connection.
-     */
-    post: operations["disconnectIntegration"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/github/webhooks": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Integration connection status for the active organization
+         * @description Returns the connection state of each supported integration (GitHub,
+         *     Slack, Linear) for the caller's active organization. Drives the
+         *     integrations settings view. The actual connect/callback flows are
+         *     browser redirects (GET /integrations/{provider}/connect) and are not
+         *     part of this JSON spec.
+         */
+        get: operations["getIntegrationStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Recent GitHub webhook deliveries for the active organization
-     * @description Returns the GitHub webhook events we have received and stored for the
-     *     caller's active organization, newest first. Events are stored when GitHub
-     *     delivers them to POST /integrations/github/webhook (a browser-external
-     *     redirect-style route, not part of this JSON spec).
-     */
-    get: operations["listGithubWebhooks"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/linear/webhooks": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/{provider}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disconnect an integration from the active organization
+         * @description Removes the stored installation/token for the given provider at the given
+         *     level. level=workspace (default) removes the org-wide connection;
+         *     level=user removes only the caller's own per-user connection.
+         */
+        post: operations["disconnectIntegration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Recent Linear webhook deliveries for the active organization
-     * @description Returns the Linear webhook events we have received and stored for the
-     *     caller's active organization, newest first. Events are stored when Linear
-     *     delivers them to POST /integrations/linear/webhook (a browser-external
-     *     redirect-style route, not part of this JSON spec).
-     */
-    get: operations["listLinearWebhooks"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/linear/settings": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/github/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent GitHub webhook deliveries for the active organization
+         * @description Returns the GitHub webhook events we have received and stored for the
+         *     caller's active organization, newest first. Events are stored when GitHub
+         *     delivers them to POST /integrations/github/webhook (a browser-external
+         *     redirect-style route, not part of this JSON spec).
+         */
+        get: operations["listGithubWebhooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Linear channel-creation configs for the active organization
-     * @description Returns all of the org's Linear → Slack channel-creation configs, whether
-     *     Linear is connected at the workspace level, the org's synced Linear teams
-     *     and their workflow states (for the team picker + status dropdown), and the
-     *     built-in sample events for the test panel.
-     */
-    get: operations["getLinearSettings"];
-    put?: never;
-    /**
-     * Create a Linear channel-creation config
-     * @description Creates a new config. The name template and condition are validated
-     *     (parsed) before saving; a malformed template — or a team already used by
-     *     another config — returns 400. Returns the refreshed configs + context.
-     */
-    post: operations["createLinearSettings"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/linear/settings/{settingId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/linear/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent Linear webhook deliveries for the active organization
+         * @description Returns the Linear webhook events we have received and stored for the
+         *     caller's active organization, newest first. Events are stored when Linear
+         *     delivers them to POST /integrations/linear/webhook (a browser-external
+         *     redirect-style route, not part of this JSON spec).
+         */
+        get: operations["listLinearWebhooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /**
-     * Update a Linear channel-creation config
-     * @description Updates the config identified by settingId. Same validation as create; a
-     *     team already used by another config returns 400. Returns the refreshed
-     *     configs + context.
-     */
-    put: operations["updateLinearSettings"];
-    post?: never;
-    /**
-     * Delete a Linear channel-creation config
-     * @description Removes the config (and its team mappings). Returns the refreshed configs + context.
-     */
-    delete: operations["deleteLinearSettings"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/settings/sync": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/linear/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Linear channel-creation configs for the active organization
+         * @description Returns all of the org's Linear → Slack channel-creation configs, whether
+         *     Linear is connected at the workspace level, the org's synced Linear teams
+         *     and their workflow states (for the team picker + status dropdown), and the
+         *     built-in sample events for the test panel.
+         */
+        get: operations["getLinearSettings"];
+        put?: never;
+        /**
+         * Create a Linear channel-creation config
+         * @description Creates a new config. The name template and condition are validated
+         *     (parsed) before saving; a malformed template — or a team already used by
+         *     another config — returns 400. Returns the refreshed configs + context.
+         */
+        post: operations["createLinearSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Re-sync Linear teams/statuses and Slack members
-     * @description Fetches Linear team workflow states AND Slack workspace members (bots +
-     *     humans) in parallel and replaces the stored snapshots. Returns the
-     *     refreshed configs + context (updated teams and members). Backs the "Sync"
-     *     button in the settings UI, for when new statuses/members aren't showing yet.
-     */
-    post: operations["syncSettings"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/integrations/linear/settings/test": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/linear/settings/{settingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update a Linear channel-creation config
+         * @description Updates the config identified by settingId. Same validation as create; a
+         *     team already used by another config returns 400. Returns the refreshed
+         *     configs + context.
+         */
+        put: operations["updateLinearSettings"];
+        post?: never;
+        /**
+         * Delete a Linear channel-creation config
+         * @description Removes the config (and its team mappings). Returns the refreshed configs + context.
+         */
+        delete: operations["deleteLinearSettings"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Test a name template + condition against a sample or pasted event
-     * @description Renders nameTemplate and evaluates condition against the supplied event.
-     *     Provide either a sampleId (one of the built-in sample events) or a raw
-     *     event JSON string. Returns the rendered name, the condition result, and
-     *     any template error (template errors are returned in-body, not as 4xx, so
-     *     the UI can show them inline).
-     */
-    post: operations["testLinearTemplate"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/billing": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/settings/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-sync Linear teams/statuses and Slack members
+         * @description Fetches Linear team workflow states AND Slack workspace members (bots +
+         *     humans) in parallel and replaces the stored snapshots. Returns the
+         *     refreshed configs + context (updated teams and members). Backs the "Sync"
+         *     button in the settings UI, for when new statuses/members aren't showing yet.
+         */
+        post: operations["syncSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Billing status for the active organization
-     * @description Returns the active organization's billing state: plan, whether features
-     *     are locked, the trial deadline, and Stripe subscription facts. Lazily
-     *     starts the 21-day trial on the org's first touch. When the org has an
-     *     active subscription this also reconciles the Stripe seat quantity with
-     *     the current member count. The Stripe webhook
-     *     (POST /billing/stripe/webhook) and the WorkOS membership webhook
-     *     (POST /auth/workos/webhook) are signature-verified raw routes and not
-     *     part of this JSON spec.
-     */
-    get: operations["getBilling"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/billing/checkout": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/integrations/linear/settings/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a name template + condition against a sample or pasted event
+         * @description Renders nameTemplate and evaluates condition against the supplied event.
+         *     Provide either a sampleId (one of the built-in sample events) or a raw
+         *     event JSON string. Returns the rendered name, the condition result, and
+         *     any template error (template errors are returned in-body, not as 4xx, so
+         *     the UI can show them inline).
+         */
+        post: operations["testLinearTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Start a Stripe Checkout session for the Pro plan
-     * @description Creates a Stripe Checkout session (subscription mode) for the Pro plan
-     *     at the current member count and returns its URL for the browser to
-     *     redirect to. 409 when the organization already has a live subscription.
-     */
-    post: operations["createBillingCheckout"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/billing/portal": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Billing status for the active organization
+         * @description Returns the active organization's billing state: plan, whether features
+         *     are locked, the trial deadline, and Stripe subscription facts. Lazily
+         *     starts the 21-day trial on the org's first touch. When the org has an
+         *     active subscription this also reconciles the Stripe seat quantity with
+         *     the current member count. The Stripe webhook
+         *     (POST /billing/stripe/webhook) and the WorkOS membership webhook
+         *     (POST /auth/workos/webhook) are signature-verified raw routes and not
+         *     part of this JSON spec.
+         */
+        get: operations["getBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Open the Stripe Customer Portal
-     * @description Creates a Stripe Billing Portal session for the organization's customer
-     *     (card updates, cancellation, invoices) and returns its URL. 400 when the
-     *     organization has never checked out (no Stripe customer yet).
-     */
-    post: operations["createBillingPortal"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/billing/oss-application": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a Stripe Checkout session for the Pro plan
+         * @description Creates a Stripe Checkout session (subscription mode) for the Pro plan
+         *     at the current member count and returns its URL for the browser to
+         *     redirect to. 409 when the organization already has a live subscription.
+         */
+        post: operations["createBillingCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Apply for the free open-source tier
-     * @description Records an application for the free-forever open-source tier: a sponsor
-     *     URL (the open-source repo or sponsorship page) plus an optional note.
-     *     Free usage requires the project to display a "Sponsored by NotifBuddy"
-     *     tag on its README; reviewers check for it by hand. The
-     *     application status is reported by GET /billing. 409 when the org is
-     *     already approved or has a live subscription.
-     */
-    post: operations["submitOssApplication"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
+    "/billing/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open the Stripe Customer Portal
+         * @description Creates a Stripe Billing Portal session for the organization's customer
+         *     (card updates, cancellation, invoices) and returns its URL. 400 when the
+         *     organization has never checked out (no Stripe customer yet).
+         */
+        post: operations["createBillingPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/oss-application": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply for the free open-source tier
+         * @description Records an application for the free-forever open-source tier: a sponsor
+         *     URL (the open-source repo or sponsorship page) plus an optional note.
+         *     Free usage requires the project to display a "Sponsored by NotifBuddy"
+         *     tag on its README; reviewers check for it by hand. The
+         *     application status is reported by GET /billing. 409 when the org is
+         *     already approved or has a live subscription.
+         */
+        post: operations["submitOssApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /** @description The response returned by the ping endpoint. */
-    PongResponse: {
-      /**
-       * @description Always the literal string "pong".
-       * @example pong
-       */
-      message: string;
+    schemas: {
+        /** @description The response returned by the ping endpoint. */
+        PongResponse: {
+            /**
+             * @description Always the literal string "pong".
+             * @example pong
+             */
+            message: string;
+        };
+        /** @description The authenticated WorkOS user and their active organization context. */
+        UserResponse: {
+            /**
+             * @description The WorkOS user ID.
+             * @example user_01H...
+             */
+            id: string;
+            /**
+             * @description The user's email address.
+             * @example jane@example.com
+             */
+            email: string;
+            /**
+             * @description The user's first name, if set.
+             * @example Jane
+             */
+            firstName?: string;
+            /**
+             * @description The user's last name, if set.
+             * @example Doe
+             */
+            lastName?: string;
+            /**
+             * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in.
+             * @example https://avatars.githubusercontent.com/u/12345?v=4
+             */
+            profilePictureUrl?: string;
+            /**
+             * @description The ID of the organization the current session is scoped to, if any.
+             * @example org_01H...
+             */
+            organizationId?: string;
+            /**
+             * @description The user's role within the active organization, if any.
+             * @example admin
+             */
+            role?: string;
+            /** @description All organizations the user is a member of. */
+            organizations?: components["schemas"]["Organization"][];
+            billing?: components["schemas"]["BillingSummary"];
+        };
+        /**
+         * @description The active organization's billing state, embedded in /me so the SPA can
+         *     show the trial banner / lock screen without an extra request.
+         */
+        BillingSummary: {
+            /**
+             * @description The organization's plan.
+             * @example trial
+             * @enum {string}
+             */
+            plan: "trial" | "pro" | "oss_free" | "enterprise";
+            /** @description Whether features are locked (trial expired, no subscription). */
+            locked: boolean;
+            /**
+             * Format: date-time
+             * @description When the 21-day trial ends/ended.
+             * @example 2026-07-28T00:00:00Z
+             */
+            trialEndsAt: string;
+        };
+        /** @description The active organization's full billing status. */
+        BillingStatusResponse: {
+            /**
+             * @description The organization's plan.
+             * @example trial
+             * @enum {string}
+             */
+            plan: "trial" | "pro" | "oss_free" | "enterprise";
+            /** @description Whether features are locked (trial expired, no subscription). */
+            locked: boolean;
+            /**
+             * Format: date-time
+             * @description When the 21-day trial ends/ended.
+             * @example 2026-07-28T00:00:00Z
+             */
+            trialEndsAt: string;
+            /** @description Whether a live (non-canceled) Stripe subscription exists. */
+            subscribed: boolean;
+            /**
+             * @description The raw Stripe subscription status, once subscribed.
+             * @example active
+             */
+            stripeStatus?: string;
+            /**
+             * @description The seat quantity on the Stripe subscription, once subscribed.
+             * @example 5
+             */
+            seats?: number;
+            /**
+             * @description The Pro price in cents per member per month.
+             * @example 999
+             */
+            priceCentsPerSeat: number;
+            /**
+             * @description The open-source application state, if one was submitted.
+             * @example pending
+             * @enum {string}
+             */
+            ossApplicationStatus?: "pending" | "approved" | "rejected";
+        };
+        /** @description A Stripe-hosted page (Checkout or Billing Portal) to redirect to. */
+        BillingRedirectResponse: {
+            /**
+             * @description The URL the browser should navigate to.
+             * @example https://checkout.stripe.com/c/pay/cs_test_...
+             */
+            url: string;
+        };
+        /** @description An application for the free open-source tier. */
+        OssApplicationRequest: {
+            /**
+             * @description Link to the open-source repo or sponsorship page.
+             * @example https://github.com/acme/widget
+             */
+            sponsorUrl: string;
+            /**
+             * @description Optional context for the reviewer.
+             * @example Maintainers of the widget project, ~40 contributors.
+             */
+            note?: string;
+        };
+        /** @description A WorkOS organization the user belongs to. */
+        Organization: {
+            /**
+             * @description The WorkOS organization ID.
+             * @example org_01H...
+             */
+            id: string;
+            /**
+             * @description The organization's display name.
+             * @example Acme Inc
+             */
+            name: string;
+            /**
+             * @description The user's role in this organization, if known.
+             * @example member
+             */
+            role?: string;
+        };
+        /** @description The verification code the user received by email. */
+        VerifyEmailRequest: {
+            /**
+             * @description The one-time verification code WorkOS emailed to the user.
+             * @example 123456
+             */
+            code: string;
+        };
+        /** @description The organization the user chose during the org-selection step. */
+        SelectOrgRequest: {
+            /**
+             * @description The ID of the organization to authenticate into.
+             * @example org_01H...
+             */
+            organizationId: string;
+        };
+        /** @description The organizations a user may choose between during org selection. */
+        PendingOrganizations: {
+            organizations: components["schemas"]["Organization"][];
+        };
+        /** @description Invite an email address to the caller's active organization. */
+        CreateInvitationRequest: {
+            /**
+             * @description The email address to invite.
+             * @example newteammate@example.com
+             */
+            email: string;
+            /** @description Optional role slug to grant the invitee on acceptance. */
+            role?: components["schemas"]["RoleSlug"];
+        };
+        /**
+         * @description An organization role slug.
+         * @example member
+         * @enum {string}
+         */
+        RoleSlug: "admin" | "member" | "viewer";
+        /** @description Change an organization member's role. */
+        UpdateMemberRoleRequest: {
+            /** @description The role slug to assign to the member. */
+            role: components["schemas"]["RoleSlug"];
+        };
+        /** @description A WorkOS organization invitation. */
+        InvitationResponse: {
+            /** @example invitation_01H... */
+            id: string;
+            /** @example newteammate@example.com */
+            email: string;
+            /**
+             * @description The invitation state (pending, accepted, expired, revoked).
+             * @example pending
+             */
+            state: string;
+            /**
+             * @description ISO 8601 expiry timestamp.
+             * @example 2026-07-03T00:00:00Z
+             */
+            expiresAt?: string;
+            /**
+             * @description The role slug the invitee will be granted on acceptance, if any.
+             * @example member
+             */
+            role?: string;
+        };
+        /** @description A list of invitations for the active organization. */
+        InvitationListResponse: {
+            invitations: components["schemas"]["InvitationResponse"][];
+        };
+        /** @description A member of the active organization (a WorkOS organization membership). */
+        MemberResponse: {
+            /**
+             * @description The WorkOS organization membership ID.
+             * @example om_01H...
+             */
+            id: string;
+            /**
+             * @description The WorkOS user ID of the member.
+             * @example user_01H...
+             */
+            userId: string;
+            /**
+             * @description The member's email address.
+             * @example jane@example.com
+             */
+            email: string;
+            /**
+             * @description The member's first name, if set.
+             * @example Jane
+             */
+            firstName?: string;
+            /**
+             * @description The member's last name, if set.
+             * @example Doe
+             */
+            lastName?: string;
+            /**
+             * @description The member's role slug within the organization, if any.
+             * @example admin
+             */
+            role?: string;
+            /** @description URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in. */
+            profilePictureUrl?: string;
+        };
+        /** @description A list of members for the active organization. */
+        MemberListResponse: {
+            members: components["schemas"]["MemberResponse"][];
+        };
+        /** @description The connection state of a single integration provider at one level. */
+        IntegrationStatus: {
+            /**
+             * @description The provider key.
+             * @example github
+             */
+            provider: string;
+            /**
+             * @description Whether this entry is the organization's workspace-wide connection or
+             *     the caller's own per-user connection.
+             * @example workspace
+             * @enum {string}
+             */
+            level: "workspace" | "user";
+            /** @description Whether this provider is connected at this level. */
+            connected: boolean;
+            /**
+             * @description The connected account/workspace label (GitHub login, Slack team).
+             * @example acme
+             */
+            account?: string;
+            /**
+             * @description The WorkOS user id who connected it, if known.
+             * @example user_01H...
+             */
+            connectedBy?: string;
+        };
+        /** @description Connection status for every supported integration. */
+        IntegrationStatusResponse: {
+            integrations: components["schemas"]["IntegrationStatus"][];
+            /** @description Whether the integration service is configured (database available) on the server. */
+            configured: boolean;
+        };
+        /** @description A stored GitHub webhook delivery. */
+        WebhookEvent: {
+            /**
+             * @description The X-GitHub-Delivery id (unique per delivery).
+             * @example 12345678-1234-1234-1234-123456789012
+             */
+            deliveryId: string;
+            /**
+             * @description The X-GitHub-Event type.
+             * @example push
+             */
+            eventType: string;
+            /**
+             * @description The payload action, when present.
+             * @example opened
+             */
+            action?: string;
+            /**
+             * @description ISO 8601 timestamp when we received it.
+             * @example 2026-06-26T12:00:00Z
+             */
+            receivedAt: string;
+            /** @description The raw webhook JSON payload (as a string). */
+            payload?: string;
+        };
+        /** @description Recent webhook events for the active organization. */
+        WebhookListResponse: {
+            events: components["schemas"]["WebhookEvent"][];
+        };
+        /** @description A generic error response. */
+        Error: {
+            /**
+             * @description A human-readable description of the error.
+             * @example unauthorized
+             */
+            message: string;
+        };
+        /**
+         * @description A Linear → Slack channel-creation config scoped to a single Linear team
+         *     (teamId). The team is the config's identity; a team has at most one config.
+         */
+        LinearSettings: {
+            /**
+             * @description Stable id of this config. Omitted/empty when creating; returned on read
+             *     and required in the URL for update/delete.
+             * @example 4b2f6c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b
+             */
+            settingId?: string;
+            /**
+             * @description 'status' auto-creates a channel when an issue reaches triggerStatus;
+             *     'condition' auto-creates when conditionExpr evaluates true;
+             *     'manual' only creates via @notifbuddy.
+             * @example manual
+             * @enum {string}
+             */
+            creationMode: "status" | "manual" | "condition";
+            /**
+             * @description Linear workflow state name that triggers creation (status mode).
+             * @example In Progress
+             */
+            triggerStatus?: string;
+            /**
+             * @description GitHub-Actions-expression template for the channel name.
+             * @example tkt-${{ linear.data.identifier }}
+             */
+            nameTemplate?: string;
+            /**
+             * @description GitHub-Actions-expression that must be true for creation.
+             * @example linear.action == 'update'
+             */
+            conditionExpr?: string;
+            /**
+             * @description Slack member ids (U…) — bots and people — to auto-add on channel creation.
+             * @example [
+             *       "U0123BOT",
+             *       "U0456HUMAN"
+             *     ]
+             */
+            autoAddMembers: string[];
+            /**
+             * @description The Linear team this config applies to.
+             * @example ac4c7f2d-98ae-438f-b85a-33374856fd1b
+             */
+            teamId: string;
+        };
+        /** @description A built-in example event for the settings test panel. */
+        SampleEvent: {
+            /** @example issue.status_changed */
+            id: string;
+            /** @example issue: status changed */
+            label: string;
+            /** @description The event envelope JSON (as a string). */
+            raw: string;
+        };
+        /** @description One workflow state (issue status) of a Linear team. */
+        LinearWorkflowState: {
+            /** @example 065a2424-81d9-479d-84b8-ea8b1f20cf67 */
+            id: string;
+            /** @example In Progress */
+            name: string;
+            /**
+             * @description Linear's state category (e.g. backlog, unstarted, started, completed, canceled).
+             * @example started
+             */
+            type: string;
+            /** @example #5e6ad2 */
+            color?: string;
+        };
+        /** @description A Linear team plus its synced workflow states. */
+        LinearTeamState: {
+            /** @example ac4c7f2d-98ae-438f-b85a-33374856fd1b */
+            teamId: string;
+            /** @example SKO */
+            teamKey?: string;
+            /** @example SkogAI */
+            teamName: string;
+            states: components["schemas"]["LinearWorkflowState"][];
+        };
+        /** @description A synced Slack workspace member (bot/app or human). */
+        SlackMember: {
+            /**
+             * @description Slack member id (U…); what conversations.invite needs.
+             * @example U0123BOT
+             */
+            memberId: string;
+            /**
+             * @description Display/real name, falling back to the handle.
+             * @example Claude
+             */
+            name: string;
+            /** @example https://example.com/avatar.png */
+            iconUrl?: string;
+            isBot: boolean;
+        };
+        /** @description All of an org's Linear configs plus context for the settings UI. */
+        LinearSettingsResponse: {
+            /** @description Whether Linear is connected at the workspace level. */
+            connected: boolean;
+            /** @description The org's named channel-creation configs. */
+            configs: components["schemas"]["LinearSettings"][];
+            /**
+             * @description Synced Linear teams and their workflow states, for the "applies to"
+             *     team picker and the trigger-status dropdown.
+             */
+            teams: components["schemas"]["LinearTeamState"][];
+            /**
+             * @description Synced Slack workspace members (bots + humans), for the auto-add
+             *     bot/member pickers.
+             */
+            slackMembers: components["schemas"]["SlackMember"][];
+            sampleEvents: components["schemas"]["SampleEvent"][];
+        };
+        /**
+         * @description A template-test request. Provide exactly one event source: sampleId
+         *     (a built-in sample event) or event (a raw envelope JSON string).
+         */
+        TemplateTestRequest: {
+            /** @example tkt-${{ linear.data.identifier }} */
+            nameTemplate?: string;
+            /** @example linear.data.state.name == 'Done' */
+            condition?: string;
+            /**
+             * @description Id of a built-in sample event.
+             * @example issue.status_changed
+             */
+            sampleId?: string;
+            /** @description A raw event envelope JSON string (alternative to sampleId). */
+            event?: string;
+        };
+        /** @description Result of rendering a template + evaluating a condition. */
+        TemplateTestResponse: {
+            /** @description The rendered channel name (empty if no template / on error). */
+            name: string;
+            /** @description Whether the condition evaluated true. */
+            conditionResult: boolean;
+            /** @description A template/condition error, if any (shown inline by the UI). */
+            error?: string;
+        };
     };
-    /** @description The authenticated WorkOS user and their active organization context. */
-    UserResponse: {
-      /**
-       * @description The WorkOS user ID.
-       * @example user_01H...
-       */
-      id: string;
-      /**
-       * @description The user's email address.
-       * @example jane@example.com
-       */
-      email: string;
-      /**
-       * @description The user's first name, if set.
-       * @example Jane
-       */
-      firstName?: string;
-      /**
-       * @description The user's last name, if set.
-       * @example Doe
-       */
-      lastName?: string;
-      /**
-       * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in.
-       * @example https://avatars.githubusercontent.com/u/12345?v=4
-       */
-      profilePictureUrl?: string;
-      /**
-       * @description The ID of the organization the current session is scoped to, if any.
-       * @example org_01H...
-       */
-      organizationId?: string;
-      /**
-       * @description The user's role within the active organization, if any.
-       * @example admin
-       */
-      role?: string;
-      /** @description All organizations the user is a member of. */
-      organizations?: components["schemas"]["Organization"][];
-      billing?: components["schemas"]["BillingSummary"];
-    };
-    /**
-     * @description The active organization's billing state, embedded in /me so the SPA can
-     *     show the trial banner / lock screen without an extra request.
-     */
-    BillingSummary: {
-      /**
-       * @description The organization's plan.
-       * @example trial
-       * @enum {string}
-       */
-      plan: "trial" | "pro" | "oss_free" | "enterprise";
-      /** @description Whether features are locked (trial expired, no subscription). */
-      locked: boolean;
-      /**
-       * Format: date-time
-       * @description When the 21-day trial ends/ended.
-       * @example 2026-07-28T00:00:00Z
-       */
-      trialEndsAt: string;
-    };
-    /** @description The active organization's full billing status. */
-    BillingStatusResponse: {
-      /**
-       * @description The organization's plan.
-       * @example trial
-       * @enum {string}
-       */
-      plan: "trial" | "pro" | "oss_free" | "enterprise";
-      /** @description Whether features are locked (trial expired, no subscription). */
-      locked: boolean;
-      /**
-       * Format: date-time
-       * @description When the 21-day trial ends/ended.
-       * @example 2026-07-28T00:00:00Z
-       */
-      trialEndsAt: string;
-      /** @description Whether a live (non-canceled) Stripe subscription exists. */
-      subscribed: boolean;
-      /**
-       * @description The raw Stripe subscription status, once subscribed.
-       * @example active
-       */
-      stripeStatus?: string;
-      /**
-       * @description The seat quantity on the Stripe subscription, once subscribed.
-       * @example 5
-       */
-      seats?: number;
-      /**
-       * @description The Pro price in cents per member per month.
-       * @example 999
-       */
-      priceCentsPerSeat: number;
-      /**
-       * @description The open-source application state, if one was submitted.
-       * @example pending
-       * @enum {string}
-       */
-      ossApplicationStatus?: "pending" | "approved" | "rejected";
-    };
-    /** @description A Stripe-hosted page (Checkout or Billing Portal) to redirect to. */
-    BillingRedirectResponse: {
-      /**
-       * @description The URL the browser should navigate to.
-       * @example https://checkout.stripe.com/c/pay/cs_test_...
-       */
-      url: string;
-    };
-    /** @description An application for the free open-source tier. */
-    OssApplicationRequest: {
-      /**
-       * @description Link to the open-source repo or sponsorship page.
-       * @example https://github.com/acme/widget
-       */
-      sponsorUrl: string;
-      /**
-       * @description Optional context for the reviewer.
-       * @example Maintainers of the widget project, ~40 contributors.
-       */
-      note?: string;
-    };
-    /** @description A WorkOS organization the user belongs to. */
-    Organization: {
-      /**
-       * @description The WorkOS organization ID.
-       * @example org_01H...
-       */
-      id: string;
-      /**
-       * @description The organization's display name.
-       * @example Acme Inc
-       */
-      name: string;
-      /**
-       * @description The user's role in this organization, if known.
-       * @example member
-       */
-      role?: string;
-    };
-    /** @description The verification code the user received by email. */
-    VerifyEmailRequest: {
-      /**
-       * @description The one-time verification code WorkOS emailed to the user.
-       * @example 123456
-       */
-      code: string;
-    };
-    /** @description The organization the user chose during the org-selection step. */
-    SelectOrgRequest: {
-      /**
-       * @description The ID of the organization to authenticate into.
-       * @example org_01H...
-       */
-      organizationId: string;
-    };
-    /** @description The organizations a user may choose between during org selection. */
-    PendingOrganizations: {
-      organizations: components["schemas"]["Organization"][];
-    };
-    /** @description Invite an email address to the caller's active organization. */
-    CreateInvitationRequest: {
-      /**
-       * @description The email address to invite.
-       * @example newteammate@example.com
-       */
-      email: string;
-      /**
-       * @description Optional role slug to grant the invitee on acceptance.
-       * @example member
-       */
-      role?: string;
-    };
-    /** @description A WorkOS organization invitation. */
-    InvitationResponse: {
-      /** @example invitation_01H... */
-      id: string;
-      /** @example newteammate@example.com */
-      email: string;
-      /**
-       * @description The invitation state (pending, accepted, expired, revoked).
-       * @example pending
-       */
-      state: string;
-      /**
-       * @description ISO 8601 expiry timestamp.
-       * @example 2026-07-03T00:00:00Z
-       */
-      expiresAt?: string;
-    };
-    /** @description A list of invitations for the active organization. */
-    InvitationListResponse: {
-      invitations: components["schemas"]["InvitationResponse"][];
-    };
-    /** @description A member of the active organization (a WorkOS organization membership). */
-    MemberResponse: {
-      /**
-       * @description The WorkOS organization membership ID.
-       * @example om_01H...
-       */
-      id: string;
-      /**
-       * @description The WorkOS user ID of the member.
-       * @example user_01H...
-       */
-      userId: string;
-      /**
-       * @description The member's email address.
-       * @example jane@example.com
-       */
-      email: string;
-      /**
-       * @description The member's first name, if set.
-       * @example Jane
-       */
-      firstName?: string;
-      /**
-       * @description The member's last name, if set.
-       * @example Doe
-       */
-      lastName?: string;
-      /**
-       * @description The member's role slug within the organization, if any.
-       * @example admin
-       */
-      role?: string;
-    };
-    /** @description A list of members for the active organization. */
-    MemberListResponse: {
-      members: components["schemas"]["MemberResponse"][];
-    };
-    /** @description The connection state of a single integration provider at one level. */
-    IntegrationStatus: {
-      /**
-       * @description The provider key.
-       * @example github
-       */
-      provider: string;
-      /**
-       * @description Whether this entry is the organization's workspace-wide connection or
-       *     the caller's own per-user connection.
-       * @example workspace
-       * @enum {string}
-       */
-      level: "workspace" | "user";
-      /** @description Whether this provider is connected at this level. */
-      connected: boolean;
-      /**
-       * @description The connected account/workspace label (GitHub login, Slack team).
-       * @example acme
-       */
-      account?: string;
-      /**
-       * @description The WorkOS user id who connected it, if known.
-       * @example user_01H...
-       */
-      connectedBy?: string;
-    };
-    /** @description Connection status for every supported integration. */
-    IntegrationStatusResponse: {
-      integrations: components["schemas"]["IntegrationStatus"][];
-      /** @description Whether the integration service is configured (database available) on the server. */
-      configured: boolean;
-    };
-    /** @description A stored GitHub webhook delivery. */
-    WebhookEvent: {
-      /**
-       * @description The X-GitHub-Delivery id (unique per delivery).
-       * @example 12345678-1234-1234-1234-123456789012
-       */
-      deliveryId: string;
-      /**
-       * @description The X-GitHub-Event type.
-       * @example push
-       */
-      eventType: string;
-      /**
-       * @description The payload action, when present.
-       * @example opened
-       */
-      action?: string;
-      /**
-       * @description ISO 8601 timestamp when we received it.
-       * @example 2026-06-26T12:00:00Z
-       */
-      receivedAt: string;
-      /** @description The raw webhook JSON payload (as a string). */
-      payload?: string;
-    };
-    /** @description Recent webhook events for the active organization. */
-    WebhookListResponse: {
-      events: components["schemas"]["WebhookEvent"][];
-    };
-    /** @description A generic error response. */
-    Error: {
-      /**
-       * @description A human-readable description of the error.
-       * @example unauthorized
-       */
-      message: string;
-    };
-    /**
-     * @description A Linear → Slack channel-creation config scoped to a single Linear team
-     *     (teamId). The team is the config's identity; a team has at most one config.
-     */
-    LinearSettings: {
-      /**
-       * @description Stable id of this config. Omitted/empty when creating; returned on read
-       *     and required in the URL for update/delete.
-       * @example 4b2f6c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b
-       */
-      settingId?: string;
-      /**
-       * @description 'status' auto-creates a channel when an issue reaches triggerStatus;
-       *     'condition' auto-creates when conditionExpr evaluates true;
-       *     'manual' only creates via @notifbuddy.
-       * @example manual
-       * @enum {string}
-       */
-      creationMode: "status" | "manual" | "condition";
-      /**
-       * @description Linear workflow state name that triggers creation (status mode).
-       * @example In Progress
-       */
-      triggerStatus?: string;
-      /**
-       * @description GitHub-Actions-expression template for the channel name.
-       * @example tkt-${{ linear.data.identifier }}
-       */
-      nameTemplate?: string;
-      /**
-       * @description GitHub-Actions-expression that must be true for creation.
-       * @example linear.action == 'update'
-       */
-      conditionExpr?: string;
-      /**
-       * @description Slack member ids (U…) — bots and people — to auto-add on channel creation.
-       * @example [
-       *       "U0123BOT",
-       *       "U0456HUMAN"
-       *     ]
-       */
-      autoAddMembers: string[];
-      /**
-       * @description The Linear team this config applies to.
-       * @example ac4c7f2d-98ae-438f-b85a-33374856fd1b
-       */
-      teamId: string;
-    };
-    /** @description A built-in example event for the settings test panel. */
-    SampleEvent: {
-      /** @example issue.status_changed */
-      id: string;
-      /** @example issue: status changed */
-      label: string;
-      /** @description The event envelope JSON (as a string). */
-      raw: string;
-    };
-    /** @description One workflow state (issue status) of a Linear team. */
-    LinearWorkflowState: {
-      /** @example 065a2424-81d9-479d-84b8-ea8b1f20cf67 */
-      id: string;
-      /** @example In Progress */
-      name: string;
-      /**
-       * @description Linear's state category (e.g. backlog, unstarted, started, completed, canceled).
-       * @example started
-       */
-      type: string;
-      /** @example #5e6ad2 */
-      color?: string;
-    };
-    /** @description A Linear team plus its synced workflow states. */
-    LinearTeamState: {
-      /** @example ac4c7f2d-98ae-438f-b85a-33374856fd1b */
-      teamId: string;
-      /** @example SKO */
-      teamKey?: string;
-      /** @example SkogAI */
-      teamName: string;
-      states: components["schemas"]["LinearWorkflowState"][];
-    };
-    /** @description A synced Slack workspace member (bot/app or human). */
-    SlackMember: {
-      /**
-       * @description Slack member id (U…); what conversations.invite needs.
-       * @example U0123BOT
-       */
-      memberId: string;
-      /**
-       * @description Display/real name, falling back to the handle.
-       * @example Claude
-       */
-      name: string;
-      /** @example https://example.com/avatar.png */
-      iconUrl?: string;
-      isBot: boolean;
-    };
-    /** @description All of an org's Linear configs plus context for the settings UI. */
-    LinearSettingsResponse: {
-      /** @description Whether Linear is connected at the workspace level. */
-      connected: boolean;
-      /** @description The org's named channel-creation configs. */
-      configs: components["schemas"]["LinearSettings"][];
-      /**
-       * @description Synced Linear teams and their workflow states, for the "applies to"
-       *     team picker and the trigger-status dropdown.
-       */
-      teams: components["schemas"]["LinearTeamState"][];
-      /**
-       * @description Synced Slack workspace members (bots + humans), for the auto-add
-       *     bot/member pickers.
-       */
-      slackMembers: components["schemas"]["SlackMember"][];
-      sampleEvents: components["schemas"]["SampleEvent"][];
-    };
-    /**
-     * @description A template-test request. Provide exactly one event source: sampleId
-     *     (a built-in sample event) or event (a raw envelope JSON string).
-     */
-    TemplateTestRequest: {
-      /** @example tkt-${{ linear.data.identifier }} */
-      nameTemplate?: string;
-      /** @example linear.data.state.name == 'Done' */
-      condition?: string;
-      /**
-       * @description Id of a built-in sample event.
-       * @example issue.status_changed
-       */
-      sampleId?: string;
-      /** @description A raw event envelope JSON string (alternative to sampleId). */
-      event?: string;
-    };
-    /** @description Result of rendering a template + evaluating a condition. */
-    TemplateTestResponse: {
-      /** @description The rendered channel name (empty if no template / on error). */
-      name: string;
-      /** @description Whether the condition evaluated true. */
-      conditionResult: boolean;
-      /** @description A template/condition error, if any (shown inline by the UI). */
-      error?: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  ping: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    ping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pong response. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PongResponse"];
+                };
+            };
+            /** @description No valid session — the caller is not authenticated. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description A pong response. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["PongResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailRequest"];
+            };
         };
-      };
-      /** @description No valid session — the caller is not authenticated. */
-      401: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description Verification succeeded; the session cookie is now set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /**
+             * @description No pending verification, an expired/invalid pending token, or a wrong
+             *     verification code.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  verifyEmail: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description No valid session — the caller is not authenticated. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["VerifyEmailRequest"];
-      };
+    getPendingOrgs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organizations to choose from. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingOrganizations"];
+                };
+            };
+            /** @description No pending organization selection. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Verification succeeded; the session cookie is now set. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    selectOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["UserResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectOrgRequest"];
+            };
         };
-      };
-      /**
-       * @description No pending verification, an expired/invalid pending token, or a wrong
-       *     verification code.
-       */
-      401: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description Selection succeeded; the session cookie is now set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description No pending selection, or an invalid/expired pending token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  getMe: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    listInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's invitations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description The authenticated user. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["UserResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitationRequest"];
+            };
         };
-      };
-      /** @description No valid session — the caller is not authenticated. */
-      401: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description The created invitation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description The request was invalid (e.g. no active organization). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  getPendingOrgs: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation, now revoked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description The request was invalid (e.g. no active organization, or the invitation is not pending). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such invitation in the active organization. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description The organizations to choose from. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["PendingOrganizations"];
+        requestBody?: never;
+        responses: {
+            /** @description The organization's members. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No pending organization selection. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  selectOrg: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    updateMemberRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated member. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description The request was invalid (e.g. changing your own role). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such membership in the active organization. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SelectOrgRequest"];
-      };
+    getIntegrationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-provider connection status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationStatusResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Selection succeeded; the session cookie is now set. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    disconnectIntegration: {
+        parameters: {
+            query?: {
+                level?: "workspace" | "user";
+            };
+            header?: never;
+            path: {
+                provider: "github" | "slack" | "linear";
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["UserResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected (or was already not connected). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationStatusResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No pending selection, or an invalid/expired pending token. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  listInvitations: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    listGithubWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent webhook events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description The organization's invitations. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    listLinearWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["InvitationListResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Recent webhook events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  createInvitation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    getLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateInvitationRequest"];
-      };
+    createLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearSettings"];
+            };
+        };
+        responses: {
+            /** @description Created; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description Invalid config (bad template/condition, or a team conflict). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    responses: {
-      /** @description The created invitation. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    updateLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                settingId: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["InvitationResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearSettings"];
+            };
         };
-      };
-      /** @description The request was invalid (e.g. no active organization). */
-      400: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description Updated; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description Invalid config (bad template/condition, or a team conflict). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such config for this org. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  listMembers: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    deleteLinearSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                settingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description The organization's members. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    syncSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["MemberListResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Synced; returns the refreshed configs + context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearSettingsResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  getIntegrationStatus: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    testLinearTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Test result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateTestResponse"];
+                };
+            };
+            /** @description Neither sampleId nor a valid event was provided. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Billing locked — the trial has expired and there is no subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Per-provider connection status. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    getBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["IntegrationStatusResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description The organization's billing status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingStatusResponse"];
+                };
+            };
+            /** @description The session has no active organization. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  disconnectIntegration: {
-    parameters: {
-      query?: {
-        level?: "workspace" | "user";
-      };
-      header?: never;
-      path: {
-        provider: "github" | "slack" | "linear";
-      };
-      cookie?: never;
+    createBillingCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Checkout session to redirect to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRedirectResponse"];
+                };
+            };
+            /** @description No active organization, or billing is not configured. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The organization already has a live subscription. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Disconnected (or was already not connected). */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    createBillingPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["IntegrationStatusResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description The portal session to redirect to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRedirectResponse"];
+                };
+            };
+            /**
+             * @description No active organization, billing is not configured, or the
+             *     organization has no Stripe customer yet.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
     };
-  };
-  listGithubWebhooks: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    submitOssApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OssApplicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Application recorded; the refreshed billing status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingStatusResponse"];
+                };
+            };
+            /** @description No active organization, or a missing/invalid sponsor URL. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller is not an admin of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Already approved, or a live subscription exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Recent webhook events. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WebhookListResponse"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  listLinearWebhooks: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Recent webhook events. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WebhookListResponse"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  getLinearSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Current configs + context. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LinearSettingsResponse"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  createLinearSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LinearSettings"];
-      };
-    };
-    responses: {
-      /** @description Created; returns the refreshed configs + context. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LinearSettingsResponse"];
-        };
-      };
-      /** @description Invalid config (bad template/condition, or a team conflict). */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  updateLinearSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        settingId: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LinearSettings"];
-      };
-    };
-    responses: {
-      /** @description Updated; returns the refreshed configs + context. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LinearSettingsResponse"];
-        };
-      };
-      /** @description Invalid config (bad template/condition, or a team conflict). */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No such config for this org. */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  deleteLinearSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        settingId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Deleted; returns the refreshed configs + context. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LinearSettingsResponse"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  syncSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Synced; returns the refreshed configs + context. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LinearSettingsResponse"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  testLinearTemplate: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TemplateTestRequest"];
-      };
-    };
-    responses: {
-      /** @description Test result. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TemplateTestResponse"];
-        };
-      };
-      /** @description Neither sampleId nor a valid event was provided. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Billing locked — the trial has expired and there is no subscription. */
-      402: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  getBilling: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The organization's billing status. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BillingStatusResponse"];
-        };
-      };
-      /** @description The session has no active organization. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  createBillingCheckout: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The Checkout session to redirect to. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BillingRedirectResponse"];
-        };
-      };
-      /** @description No active organization, or billing is not configured. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description The organization already has a live subscription. */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  createBillingPortal: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The portal session to redirect to. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BillingRedirectResponse"];
-        };
-      };
-      /**
-       * @description No active organization, billing is not configured, or the
-       *     organization has no Stripe customer yet.
-       */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
-  submitOssApplication: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["OssApplicationRequest"];
-      };
-    };
-    responses: {
-      /** @description Application recorded; the refreshed billing status. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BillingStatusResponse"];
-        };
-      };
-      /** @description No active organization, or a missing/invalid sponsor URL. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description No valid session. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-      /** @description Already approved, or a live subscription exists. */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Error"];
-        };
-      };
-    };
-  };
 }

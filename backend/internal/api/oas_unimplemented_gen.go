@@ -187,6 +187,17 @@ func (UnimplementedHandler) Ping(ctx context.Context) (r PingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
+// RevokeInvitation implements revokeInvitation operation.
+//
+// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
+// signed-in member of the organization may revoke (demo-simple authorization, matching invite
+// creation).
+//
+// DELETE /invitations/{invitationId}
+func (UnimplementedHandler) RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (r RevokeInvitationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // SelectOrg implements selectOrg operation.
 //
 // Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -201,8 +212,8 @@ func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest
 //
 // Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
 // sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
-// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
-// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is reported by
+// GET /billing. 409 when the org is already approved or has a live subscription.
 //
 // POST /billing/oss-application
 func (UnimplementedHandler) SubmitOssApplication(ctx context.Context, req *OssApplicationRequest) (r SubmitOssApplicationRes, _ error) {
@@ -239,6 +250,17 @@ func (UnimplementedHandler) TestLinearTemplate(ctx context.Context, req *Templat
 //
 // PUT /integrations/linear/settings/{settingId}
 func (UnimplementedHandler) UpdateLinearSettings(ctx context.Context, req *LinearSettings, params UpdateLinearSettingsParams) (r UpdateLinearSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateMemberRole implements updateMemberRole operation.
+//
+// Sets the role of the organization membership identified by membershipId. Only admins may change
+// roles, and an admin cannot change their own role. The target user's session picks the new role up on
+// its next token refresh.
+//
+// PUT /members/{membershipId}/role
+func (UnimplementedHandler) UpdateMemberRole(ctx context.Context, req *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (r UpdateMemberRoleRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

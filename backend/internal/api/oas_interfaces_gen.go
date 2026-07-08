@@ -65,6 +65,10 @@ type PingRes interface {
 	pingRes()
 }
 
+type RevokeInvitationRes interface {
+	revokeInvitationRes()
+}
+
 type SelectOrgRes interface {
 	selectOrgRes()
 }
@@ -83,6 +87,10 @@ type TestLinearTemplateRes interface {
 
 type UpdateLinearSettingsRes interface {
 	updateLinearSettingsRes()
+}
+
+type UpdateMemberRoleRes interface {
+	updateMemberRoleRes()
 }
 
 type VerifyEmailRes interface {

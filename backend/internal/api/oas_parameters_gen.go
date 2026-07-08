@@ -224,6 +224,71 @@ func decodeDisconnectIntegrationParams(args [1]string, argsEscaped bool, r *http
 	return params, nil
 }
 
+// RevokeInvitationParams is parameters of revokeInvitation operation.
+type RevokeInvitationParams struct {
+	InvitationId string
+}
+
+func unpackRevokeInvitationParams(packed middleware.Parameters) (params RevokeInvitationParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "invitationId",
+			In:   "path",
+		}
+		params.InvitationId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeRevokeInvitationParams(args [1]string, argsEscaped bool, r *http.Request) (params RevokeInvitationParams, _ error) {
+	// Decode path: invitationId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "invitationId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.InvitationId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "invitationId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // UpdateLinearSettingsParams is parameters of updateLinearSettings operation.
 type UpdateLinearSettingsParams struct {
 	SettingId string
@@ -282,6 +347,71 @@ func decodeUpdateLinearSettingsParams(args [1]string, argsEscaped bool, r *http.
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "settingId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateMemberRoleParams is parameters of updateMemberRole operation.
+type UpdateMemberRoleParams struct {
+	MembershipId string
+}
+
+func unpackUpdateMemberRoleParams(packed middleware.Parameters) (params UpdateMemberRoleParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "membershipId",
+			In:   "path",
+		}
+		params.MembershipId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeUpdateMemberRoleParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateMemberRoleParams, _ error) {
+	// Decode path: membershipId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "membershipId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.MembershipId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "membershipId",
 			In:   "path",
 			Err:  err,
 		}

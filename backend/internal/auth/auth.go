@@ -442,16 +442,32 @@ func (a *Service) ListUserOrganizations(ctx context.Context, userID string, limi
 	return out
 }
 
+// Role slugs the product recognizes. Roles with these slugs must exist in the
+// WorkOS environment (configured in the dashboard).
+const (
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+	RoleViewer = "viewer"
+)
+
+// ErrMembershipNotFound reports that a membership id does not exist within the
+// given organization (including memberships that belong to another org).
+var ErrMembershipNotFound = errors.New("organization membership not found")
+
+// ErrOwnRole reports an attempt by a caller to change their own role.
+var ErrOwnRole = errors.New("cannot change your own role")
+
 // Member is the trimmed view of one organization member the handlers return.
 // It joins a WorkOS organization membership (id, role) with the underlying
 // user's identity (email, name).
 type Member struct {
-	ID        string
-	UserID    string
-	Email     string
-	FirstName string
-	LastName  string
-	Role      string
+	ID                string
+	UserID            string
+	Email             string
+	FirstName         string
+	LastName          string
+	Role              string
+	ProfilePictureURL string
 }
 
 // ListOrganizationMembers returns the active members of an organization (up to
@@ -467,19 +483,7 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 	})
 	var out []Member
 	for it.Next() && len(out) < limit {
-		m := it.Current()
-		member := Member{ID: m.ID, UserID: m.UserID}
-		if m.Role != nil {
-			member.Role = m.Role.Slug
-		}
-		if u, err := a.client.UserManagement().Get(ctx, m.UserID); err != nil {
-			log.Printf("auth: resolve member user %q failed: %v", m.UserID, err)
-		} else {
-			member.Email = u.Email
-			member.FirstName = deref(u.FirstName)
-			member.LastName = deref(u.LastName)
-		}
-		out = append(out, member)
+		out = append(out, a.memberFromMembership(ctx, *it.Current()))
 	}
 	if err := it.Err(); err != nil {
 		log.Printf("auth: list organization members failed: %v", err)
@@ -488,13 +492,63 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 	return out, nil
 }
 
+// memberFromMembership joins a WorkOS membership with the underlying user's
+// identity. Best-effort: a failed user lookup still yields a Member with the
+// IDs and role the membership already carries.
+func (a *Service) memberFromMembership(ctx context.Context, m workos.UserOrganizationMembership) Member {
+	member := Member{ID: m.ID, UserID: m.UserID}
+	if m.Role != nil {
+		member.Role = m.Role.Slug
+	}
+	if u, err := a.client.UserManagement().Get(ctx, m.UserID); err != nil {
+		log.Printf("auth: resolve member user %q failed: %v", m.UserID, err)
+	} else {
+		member.Email = u.Email
+		member.FirstName = deref(u.FirstName)
+		member.LastName = deref(u.LastName)
+		member.ProfilePictureURL = deref(u.ProfilePictureURL)
+	}
+	return member
+}
+
+// UpdateOrganizationMemberRole sets the role of one organization membership
+// and returns the refreshed member. The membership must belong to orgID (one
+// organization can never touch another's memberships) and must not be the
+// caller's own (so an org can't accidentally demote its last admin).
+func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, callerUserID, membershipID, roleSlug string) (Member, error) {
+	m, err := a.client.OrganizationMembership().Get(ctx, membershipID)
+	if err != nil {
+		log.Printf("auth: get membership %q failed: %v", membershipID, err)
+		return Member{}, ErrMembershipNotFound
+	}
+	if m.OrganizationID != orgID {
+		return Member{}, ErrMembershipNotFound
+	}
+	if m.UserID == callerUserID {
+		return Member{}, ErrOwnRole
+	}
+	updated, err := a.client.OrganizationMembership().Update(ctx, membershipID, &workos.OrganizationMembershipUpdateParams{
+		Role: workos.OrganizationMembershipRoleSingle{Slug: roleSlug},
+	})
+	if err != nil {
+		log.Printf("auth: update membership %q role failed: %v", membershipID, err)
+		return Member{}, err
+	}
+	return a.memberFromMembership(ctx, *updated), nil
+}
+
 // Invitation is the trimmed Invitation shape the handlers return.
 type Invitation struct {
 	ID        string
 	Email     string
 	State     string
 	ExpiresAt string
+	Role      string
 }
+
+// ErrInvitationNotFound reports that an invitation id does not exist within
+// the given organization (including invitations that belong to another org).
+var ErrInvitationNotFound = errors.New("invitation not found")
 
 // SendInvitation invites an email to the given organization, optionally with a
 // role, attributing the invite to the inviter. Returns the created Invitation.
@@ -520,7 +574,7 @@ func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, invite
 		}
 		return nil, err
 	}
-	return &Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt}, nil
+	return &Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt, Role: deref(inv.RoleSlug)}, nil
 }
 
 // ListInvitations returns up to `limit` invitations for an organization.
@@ -530,13 +584,33 @@ func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) 
 	var out []Invitation
 	for it.Next() && len(out) < limit {
 		inv := it.Current()
-		out = append(out, Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt})
+		out = append(out, Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt, Role: deref(inv.RoleSlug)})
 	}
 	if err := it.Err(); err != nil {
 		log.Printf("auth: list invitations failed: %v", err)
 		return nil, err
 	}
 	return out, nil
+}
+
+// RevokeInvitation revokes one of an organization's invitations so its link
+// can no longer be accepted. The invitation must belong to orgID (one
+// organization can never touch another's invitations).
+func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID string) (*Invitation, error) {
+	inv, err := a.client.UserManagement().GetInvitation(ctx, invitationID)
+	if err != nil {
+		log.Printf("auth: get invitation %q failed: %v", invitationID, err)
+		return nil, ErrInvitationNotFound
+	}
+	if deref(inv.OrganizationID) != orgID {
+		return nil, ErrInvitationNotFound
+	}
+	revoked, err := a.client.UserManagement().RevokeInvitation(ctx, invitationID)
+	if err != nil {
+		log.Printf("auth: revoke invitation %q failed: %v", invitationID, err)
+		return nil, err
+	}
+	return &Invitation{ID: revoked.ID, Email: revoked.Email, State: string(revoked.State), ExpiresAt: revoked.ExpiresAt, Role: deref(revoked.RoleSlug)}, nil
 }
 
 // HandleLogout clears the session cookie and redirects to the WorkOS logout

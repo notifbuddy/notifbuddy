@@ -154,6 +154,14 @@ type Invoker interface {
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
+	// RevokeInvitation invokes revokeInvitation operation.
+	//
+	// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
+	// signed-in member of the organization may revoke (demo-simple authorization, matching invite
+	// creation).
+	//
+	// DELETE /invitations/{invitationId}
+	RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (RevokeInvitationRes, error)
 	// SelectOrg invokes selectOrg operation.
 	//
 	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -165,8 +173,8 @@ type Invoker interface {
 	//
 	// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
 	// sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
-	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
-	// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+	// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is reported by
+	// GET /billing. 409 when the org is already approved or has a live subscription.
 	//
 	// POST /billing/oss-application
 	SubmitOssApplication(ctx context.Context, request *OssApplicationRequest) (SubmitOssApplicationRes, error)
@@ -194,6 +202,14 @@ type Invoker interface {
 	//
 	// PUT /integrations/linear/settings/{settingId}
 	UpdateLinearSettings(ctx context.Context, request *LinearSettings, params UpdateLinearSettingsParams) (UpdateLinearSettingsRes, error)
+	// UpdateMemberRole invokes updateMemberRole operation.
+	//
+	// Sets the role of the organization membership identified by membershipId. Only admins may change
+	// roles, and an admin cannot change their own role. The target user's session picks the new role up on
+	// its next token refresh.
+	//
+	// PUT /members/{membershipId}/role
+	UpdateMemberRole(ctx context.Context, request *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error)
 	// VerifyEmail invokes verifyEmail operation.
 	//
 	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
@@ -1619,6 +1635,106 @@ func (c *Client) sendPing(ctx context.Context) (res PingRes, err error) {
 	return result, nil
 }
 
+// RevokeInvitation invokes revokeInvitation operation.
+//
+// Revokes the invitation identified by invitationId so its link can no longer be accepted. Any
+// signed-in member of the organization may revoke (demo-simple authorization, matching invite
+// creation).
+//
+// DELETE /invitations/{invitationId}
+func (c *Client) RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (RevokeInvitationRes, error) {
+	res, err := c.sendRevokeInvitation(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendRevokeInvitation(ctx context.Context, params RevokeInvitationParams) (res RevokeInvitationRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("revokeInvitation"),
+		semconv.HTTPRequestMethodKey.String("DELETE"),
+		semconv.URLTemplateKey.String("/invitations/{invitationId}"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, RevokeInvitationOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [2]string
+	pathParts[0] = "/invitations/"
+	{
+		// Encode "invitationId" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "invitationId",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.StringToString(params.InvitationId))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "DELETE", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeRevokeInvitationResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // SelectOrg invokes selectOrg operation.
 //
 // Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
@@ -1707,8 +1823,8 @@ func (c *Client) sendSelectOrg(ctx context.Context, request *SelectOrgRequest) (
 //
 // Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
 // sponsorship page) plus an optional note. Free usage requires the project to display a "Sponsored by
-// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is
-// reported by GET /billing. 409 when the org is already approved or has a live subscription.
+// NotifBuddy" tag on its README; reviewers check for it by hand. The application status is reported by
+// GET /billing. 409 when the org is already approved or has a live subscription.
 //
 // POST /billing/oss-application
 func (c *Client) SubmitOssApplication(ctx context.Context, request *OssApplicationRequest) (SubmitOssApplicationRes, error) {
@@ -2052,6 +2168,110 @@ func (c *Client) sendUpdateLinearSettings(ctx context.Context, request *LinearSe
 
 	stage = "DecodeResponse"
 	result, err := decodeUpdateLinearSettingsResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// UpdateMemberRole invokes updateMemberRole operation.
+//
+// Sets the role of the organization membership identified by membershipId. Only admins may change
+// roles, and an admin cannot change their own role. The target user's session picks the new role up on
+// its next token refresh.
+//
+// PUT /members/{membershipId}/role
+func (c *Client) UpdateMemberRole(ctx context.Context, request *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error) {
+	res, err := c.sendUpdateMemberRole(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendUpdateMemberRole(ctx context.Context, request *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (res UpdateMemberRoleRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("updateMemberRole"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
+		semconv.URLTemplateKey.String("/members/{membershipId}/role"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UpdateMemberRoleOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/members/"
+	{
+		// Encode "membershipId" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "membershipId",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.StringToString(params.MembershipId))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/role"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PUT", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeUpdateMemberRoleRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeUpdateMemberRoleResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
