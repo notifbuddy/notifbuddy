@@ -1422,6 +1422,23 @@ components:
           type: string
           description: GitHub-Actions-expression that must be true for creation.
           example: linear.action == 'update'
+        archiveMode:
+          type: string
+          description: |
+            'status' auto-archives the issue's channel when the issue reaches
+            archiveStatus; 'condition' auto-archives when archiveConditionExpr
+            evaluates true; 'manual' only archives via @notifbuddy. Defaults to
+            'manual' when omitted.
+          enum: [status, manual, condition]
+          example: manual
+        archiveStatus:
+          type: string
+          description: Linear workflow state name that triggers archiving (status mode).
+          example: Done
+        archiveConditionExpr:
+          type: string
+          description: GitHub-Actions-expression that must be true for archiving.
+          example: linear.data.state.type == 'completed'
         autoAddMembers:
           type: array
           description: Slack member ids (U…) — bots and people — to auto-add on channel creation.
@@ -1555,15 +1572,38 @@ components:
     TemplateTestRequest:
       type: object
       description: |
-        A template-test request. Provide exactly one event source: sampleId
-        (a built-in sample event) or event (a raw envelope JSON string).
+        A config-test request: the draft's trigger fields plus one event
+        source — sampleId (a built-in sample event) or event (a raw envelope
+        JSON string). The triggers are evaluated with the sync engine's exact
+        rules (mode-aware), so the result answers "what would this event do?".
       properties:
         nameTemplate:
           type: string
           example: tkt-${{ linear.data.identifier }}
+        creationMode:
+          type: string
+          description: The creation trigger mode (status | manual | condition).
+          example: status
+        triggerStatus:
+          type: string
+          description: Workflow state name for creation status mode.
+          example: Todo
         condition:
           type: string
+          description: The channel-creation condition expression.
           example: linear.data.state.name == 'Done'
+        archiveMode:
+          type: string
+          description: The archive trigger mode (status | manual | condition).
+          example: status
+        archiveStatus:
+          type: string
+          description: Workflow state name for archive status mode.
+          example: Done
+        archiveCondition:
+          type: string
+          description: The channel-archive condition expression.
+          example: linear.data.state.type == 'completed'
         sampleId:
           type: string
           description: Id of a built-in sample event.
@@ -1573,17 +1613,26 @@ components:
           description: A raw event envelope JSON string (alternative to sampleId).
     TemplateTestResponse:
       type: object
-      description: Result of rendering a template + evaluating a condition.
+      description: |
+        What this config would do for the event: the rendered channel name and
+        whether the create/archive triggers fire.
       properties:
         name:
           type: string
           description: The rendered channel name (empty if no template / on error).
-        conditionResult:
+        wouldCreate:
           type: boolean
-          description: Whether the condition evaluated true.
+          description: |
+            Whether the creation trigger fires for this event — status mode
+            compares the event's workflow state, condition mode evaluates the
+            expression, manual never auto-fires.
+        wouldArchive:
+          type: boolean
+          description: Whether the archive trigger fires for this event (same rules).
         error:
           type: string
           description: A template/condition error, if any (shown inline by the UI).
       required:
         - name
-        - conditionResult
+        - wouldCreate
+        - wouldArchive

@@ -124,32 +124,45 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
 	}
 }
 
-// onLinearIssue handles the status-trigger channel-creation rule. It renders the
-// name template and evaluates the condition from the org's saved settings, both
-// against the forwarded event envelope, exactly as the settings test UI does.
+// onLinearIssue handles the channel-creation and channel-archive rules. One
+// issue event is checked in both directions: an issue that already has a
+// channel is only ever a candidate for archiving (never re-creation), and an
+// issue without one is only a candidate for creation. Templates and conditions
+// evaluate against the forwarded event envelope, exactly as the settings test
+// UI does.
 func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayload) {
 	settings, ok := e.settingForIssue(ctx, orgID, p)
 	if !ok {
 		return // no config applies to this issue's team
 	}
-	switch settings.CreationMode {
-	case "status":
-		// Create when the issue reaches the configured workflow state.
-		if !strings.EqualFold(p.Linear.Data.State.Name, settings.TriggerStatus) {
-			return // not the trigger status
-		}
-	case "condition":
-		// Create whenever the condition expression is true; the condition gate in
-		// ensureChannel does the actual evaluation, so nothing to check here.
-	default:
-		return // manual mode: channels are created via @notifbuddy only
-	}
 	issueID := p.Linear.Data.ID
-	// Idempotency: one channel per issue. If it already exists, do nothing.
+	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
+	stateName := p.Linear.Data.State.Name
+
+	// Idempotency: one channel per issue. An existing channel is never
+	// re-created; it can only be archived by the archive trigger. The trigger
+	// rules live in integrations.{Create,Archive}Triggered, shared with the
+	// settings test panel so "Run test" and the engine can never disagree.
 	if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err == nil {
+		archive, err := integrations.ArchiveTriggered(e.tmpl, settings, stateName, evt)
+		if err != nil {
+			log.Printf("sync: archive trigger eval: %v", err)
+			return
+		}
+		if archive {
+			e.closeChannel(ctx, orgID, issueID)
+		}
 		return
 	}
-	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
+
+	create, err := integrations.CreateTriggered(e.tmpl, settings, stateName, evt)
+	if err != nil {
+		log.Printf("sync: create trigger eval: %v", err)
+		return
+	}
+	if !create {
+		return
+	}
 	e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode)
 }
 

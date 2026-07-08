@@ -111,6 +111,9 @@
 			triggerStatus: s.triggerStatus ?? '',
 			nameTemplate: s.nameTemplate ?? '',
 			conditionExpr: s.conditionExpr ?? '',
+			archiveMode: s.archiveMode ?? 'manual',
+			archiveStatus: s.archiveStatus ?? '',
+			archiveConditionExpr: s.archiveConditionExpr ?? '',
 			autoAddMembers: [...(s.autoAddMembers ?? [])]
 		};
 	}
@@ -161,11 +164,6 @@
 		return [...team.states].sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	// The full state object for a config's currently-selected trigger status, so the
-	// combobox trigger can show its glyph alongside the name.
-	function selectedStatus(d: Draft): LinearWorkflowState | undefined {
-		return statusOptionsFor(d).find((s) => s.name === d.triggerStatus);
-	}
 
 	// Teams that already have a config (draft) — these are excluded from the
 	// "add team" picker so you can't create a second config for the same team.
@@ -186,6 +184,9 @@
 				triggerStatus: '',
 				nameTemplate: DEFAULT_NAME_TEMPLATE,
 				conditionExpr: '',
+				archiveMode: 'manual',
+				archiveStatus: '',
+				archiveConditionExpr: '',
 				autoAddMembers: []
 			}
 		];
@@ -224,6 +225,9 @@
 			triggerStatus: d.triggerStatus || undefined,
 			nameTemplate: d.nameTemplate || undefined,
 			conditionExpr: d.conditionExpr || undefined,
+			archiveMode: d.archiveMode ?? 'manual',
+			archiveStatus: d.archiveStatus || undefined,
+			archiveConditionExpr: d.archiveConditionExpr || undefined,
 			autoAddMembers: d.autoAddMembers
 		};
 		const res = d.settingId
@@ -260,9 +264,18 @@
 		testing = d.key;
 		// The textarea holds the event JSON (a sample's, possibly edited), so it's
 		// always the source of truth; fall back to sampleId if it's somehow empty.
-		const req = pastedEvent.trim()
-			? { nameTemplate: d.nameTemplate, condition: d.conditionExpr, event: pastedEvent }
-			: { nameTemplate: d.nameTemplate, condition: d.conditionExpr, sampleId };
+		// Send the draft's full trigger config so the backend can answer "what
+		// would this event do?" with the engine's exact rules.
+		const triggers = {
+			nameTemplate: d.nameTemplate,
+			creationMode: d.creationMode,
+			triggerStatus: d.triggerStatus,
+			condition: d.conditionExpr,
+			archiveMode: d.archiveMode,
+			archiveStatus: d.archiveStatus,
+			archiveCondition: d.archiveConditionExpr
+		};
+		const req = pastedEvent.trim() ? { ...triggers, event: pastedEvent } : { ...triggers, sampleId };
 		const res = await testLinearTemplate(req);
 		testing = null;
 		if (res) testResult[d.key] = res;
@@ -353,6 +366,69 @@
 		</Popover.Root>
 	</div>
 	</Field.Field>
+{/snippet}
+
+<!-- Single-select combobox over a team's synced statuses, writing into the
+     draft field named by `field` — shared by the creation and archive triggers.
+     Falls back to a plain text input when nothing has synced yet. -->
+{#snippet statusPicker(d: Draft, statusOptions: LinearWorkflowState[], field: 'triggerStatus' | 'archiveStatus')}
+	{@const pickKey = `${d.key}:${field}`}
+	{#if statusOptions.length > 0}
+		{@const sel = statusOptions.find((s) => s.name === d[field])}
+		<Popover.Root bind:open={() => statusOpen[pickKey] ?? false, (v) => (statusOpen[pickKey] = v)}>
+			<Popover.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="outline"
+						role="combobox"
+						aria-expanded={statusOpen[pickKey] ?? false}
+						class="w-full justify-between font-normal"
+					>
+						{#if sel}
+							<span class="flex min-w-0 items-center gap-2">
+								<LinearStatusIcon type={sel.type} color={sel.color ?? 'currentColor'} class="shrink-0" />
+								<span class="truncate">{sel.name}</span>
+							</span>
+						{:else}
+							Select a status
+						{/if}
+						<ChevronsUpDownIcon class="opacity-50" />
+					</Button>
+				{/snippet}
+			</Popover.Trigger>
+			<Popover.Content class="w-(--bits-popover-anchor-width) p-0" align="start">
+				<Command.Root>
+					<Command.Input placeholder="Search status…" />
+					<Command.List>
+						<Command.Empty>No status found.</Command.Empty>
+						<Command.Group>
+							{#each statusOptions as state (state.id)}
+								<Command.Item
+									value={state.name}
+									onSelect={() => {
+										d[field] = state.name;
+										statusOpen[pickKey] = false;
+										markEdited(d);
+									}}
+								>
+									<CheckIcon class={cn(d[field] !== state.name && 'text-transparent')} />
+									<LinearStatusIcon type={state.type} color={state.color ?? 'currentColor'} class="shrink-0" />
+									{state.name}
+								</Command.Item>
+							{/each}
+						</Command.Group>
+					</Command.List>
+				</Command.Root>
+			</Popover.Content>
+		</Popover.Root>
+	{:else}
+		<!-- Nothing synced yet: fall back to a plain text field. -->
+		<Input bind:value={d[field]} placeholder="In Progress" oninput={() => markEdited(d)} />
+		<Field.FieldDescription>
+			No synced statuses yet. Type the exact workflow state name, or Sync above.
+		</Field.FieldDescription>
+	{/if}
 {/snippet}
 
 {#if loading}
@@ -514,8 +590,8 @@
 								     "configure this mode", not a standalone option. -->
 								<Field.FieldDescription>
 									{#if d.creationMode === 'manual'}
-										Channels only open when someone asks <code class="text-xs">@notifbuddy</code> in
-										Slack.
+										Channels only open when someone asks <code class="text-xs">@notifbuddy</code> in a
+										Linear comment.
 									{:else if d.creationMode === 'status'}
 										A channel opens when an issue reaches the workflow state below.
 									{:else}
@@ -524,82 +600,7 @@
 								</Field.FieldDescription>
 
 								{#if d.creationMode === 'status'}
-									{@const statusKey = d.key}
-									{#if statusOptions.length > 0}
-										<!-- Single-select combobox over the team's synced statuses. -->
-										<Popover.Root
-											bind:open={
-												() => statusOpen[statusKey] ?? false, (v) => (statusOpen[statusKey] = v)
-											}
-										>
-											<Popover.Trigger>
-												{#snippet child({ props })}
-													{@const sel = selectedStatus(d)}
-													<Button
-														{...props}
-														variant="outline"
-														role="combobox"
-														aria-expanded={statusOpen[statusKey] ?? false}
-														class="w-full justify-between font-normal"
-													>
-														{#if sel}
-															<span class="flex min-w-0 items-center gap-2">
-																<LinearStatusIcon
-																	type={sel.type}
-																	color={sel.color ?? 'currentColor'}
-																	class="shrink-0"
-																/>
-																<span class="truncate">{sel.name}</span>
-															</span>
-														{:else}
-															Select a status
-														{/if}
-														<ChevronsUpDownIcon class="opacity-50" />
-													</Button>
-												{/snippet}
-											</Popover.Trigger>
-											<Popover.Content class="w-(--bits-popover-anchor-width) p-0" align="start">
-												<Command.Root>
-													<Command.Input placeholder="Search status…" />
-													<Command.List>
-														<Command.Empty>No status found.</Command.Empty>
-														<Command.Group>
-															{#each statusOptions as state (state.id)}
-																<Command.Item
-																	value={state.name}
-																	onSelect={() => {
-																		d.triggerStatus = state.name;
-																		statusOpen[statusKey] = false;
-																		markEdited(d);
-																	}}
-																>
-																	<CheckIcon
-																		class={cn(d.triggerStatus !== state.name && 'text-transparent')}
-																	/>
-																	<LinearStatusIcon
-																		type={state.type}
-																		color={state.color ?? 'currentColor'}
-																		class="shrink-0"
-																	/>
-																	{state.name}
-																</Command.Item>
-															{/each}
-														</Command.Group>
-													</Command.List>
-												</Command.Root>
-											</Popover.Content>
-										</Popover.Root>
-									{:else}
-										<!-- Nothing synced yet: fall back to a plain text field. -->
-										<Input
-											bind:value={d.triggerStatus}
-											placeholder="In Progress"
-											oninput={() => markEdited(d)}
-										/>
-										<Field.FieldDescription>
-											No synced statuses yet. Type the exact workflow state name, or Sync above.
-										</Field.FieldDescription>
-									{/if}
+									{@render statusPicker(d, statusOptions, 'triggerStatus')}
 								{:else if d.creationMode === 'condition'}
 									<Textarea
 										bind:value={d.conditionExpr}
@@ -610,6 +611,57 @@
 									<Field.FieldDescription>
 										A GitHub Actions expression evaluated against the event. The channel opens when it's
 										true.
+									</Field.FieldDescription>
+								{/if}
+							</Field.Field>
+
+							<Field.FieldSeparator />
+
+							<Field.Field>
+								<Field.FieldLabel>Channel archive</Field.FieldLabel>
+								<Field.FieldDescription>How an issue's channel closes when work wraps up.</Field.FieldDescription>
+								<Select.Root
+									type="single"
+									value={d.archiveMode ?? 'manual'}
+									onValueChange={(v) => {
+										if (v) {
+											d.archiveMode = v as 'manual' | 'status' | 'condition';
+											markEdited(d);
+										}
+									}}
+								>
+									<Select.Trigger class="w-full">{creationModeLabel(d.archiveMode ?? 'manual')}</Select.Trigger>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value="manual" label="Manual only">Manual only</Select.Item>
+											<Select.Item value="status" label="On issue status">On issue status</Select.Item>
+											<Select.Item value="condition" label="On condition">On condition</Select.Item>
+										</Select.Group>
+									</Select.Content>
+								</Select.Root>
+								<Field.FieldDescription>
+									{#if (d.archiveMode ?? 'manual') === 'manual'}
+										Channels only close when someone asks <code class="text-xs">@notifbuddy</code> in a
+										Linear comment.
+									{:else if d.archiveMode === 'status'}
+										The issue's channel is archived when it reaches the workflow state below.
+									{:else}
+										The issue's channel is archived whenever the condition below is true.
+									{/if}
+								</Field.FieldDescription>
+
+								{#if d.archiveMode === 'status'}
+									{@render statusPicker(d, statusOptions, 'archiveStatus')}
+								{:else if d.archiveMode === 'condition'}
+									<Textarea
+										bind:value={d.archiveConditionExpr}
+										class="min-h-20 font-mono text-xs"
+										placeholder={"linear.data.state.type == 'completed'"}
+										oninput={() => markEdited(d)}
+									/>
+									<Field.FieldDescription>
+										A GitHub Actions expression evaluated against the event. The channel is archived when
+										it's true.
 									</Field.FieldDescription>
 								{/if}
 							</Field.Field>
@@ -654,7 +706,8 @@
 							</Collapsible.Trigger>
 							<Collapsible.Content class="flex flex-col gap-3 pt-3">
 								<p class="text-muted-foreground text-xs">
-									Preview this config's channel name and condition against a sample or pasted event.
+									Preview what this config would do for a sample or pasted event: the channel name and
+									whether the create/archive triggers fire.
 								</p>
 								<Select.Root type="single" value={sampleId} onValueChange={selectSample}>
 								<Select.Trigger class="w-full">{sampleLabel}</Select.Trigger>
@@ -688,11 +741,19 @@
 											<code class="font-mono text-xs">{r.name || '(empty)'}</code>
 										</div>
 										<div class="flex items-center gap-2">
-											<span class="text-muted-foreground text-xs">Condition</span>
-											{#if r.conditionResult}
-												<Badge variant="secondary" class="gap-1"><CheckIcon class="size-3" /> true</Badge>
+											<span class="text-muted-foreground text-xs">Would create channel</span>
+											{#if r.wouldCreate}
+												<Badge variant="secondary" class="gap-1"><CheckIcon class="size-3" /> yes</Badge>
 											{:else}
-												<Badge variant="outline" class="gap-1"><XIcon class="size-3" /> false</Badge>
+												<Badge variant="outline" class="gap-1"><XIcon class="size-3" /> no</Badge>
+											{/if}
+										</div>
+										<div class="flex items-center gap-2">
+											<span class="text-muted-foreground text-xs">Would archive channel</span>
+											{#if r.wouldArchive}
+												<Badge variant="secondary" class="gap-1"><CheckIcon class="size-3" /> yes</Badge>
+											{:else}
+												<Badge variant="outline" class="gap-1"><XIcon class="size-3" /> no</Badge>
 											{/if}
 										</div>
 									{/if}

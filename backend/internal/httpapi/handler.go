@@ -464,8 +464,20 @@ func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRe
 	if err != nil {
 		return &api.TestLinearTemplateBadRequest{Message: "invalid event JSON"}, nil
 	}
-	res := h.integrations.TestLinearTemplate(evt, req.NameTemplate.Or(""), req.Condition.Or(""))
-	out := &api.TemplateTestResponse{Name: res.Name, ConditionResult: res.ConditionResult}
+	res := h.integrations.TestLinearTemplate(evt, integrations.LinearSettings{
+		NameTemplate:         req.NameTemplate.Or(""),
+		CreationMode:         req.CreationMode.Or("manual"),
+		TriggerStatus:        req.TriggerStatus.Or(""),
+		ConditionExpr:        req.Condition.Or(""),
+		ArchiveMode:          req.ArchiveMode.Or("manual"),
+		ArchiveStatus:        req.ArchiveStatus.Or(""),
+		ArchiveConditionExpr: req.ArchiveCondition.Or(""),
+	})
+	out := &api.TemplateTestResponse{
+		Name:         res.Name,
+		WouldCreate:  res.WouldCreate,
+		WouldArchive: res.WouldArchive,
+	}
 	if res.Err != "" {
 		out.Error = api.NewOptString(res.Err)
 	}
@@ -519,13 +531,16 @@ func (h Handler) linearSettingsResponse(ctx context.Context, orgID string) (*api
 // fromAPILinearSettings maps a request DTO to the service config.
 func fromAPILinearSettings(req *api.LinearSettings) integrations.LinearSettings {
 	return integrations.LinearSettings{
-		SettingID:      req.SettingId.Or(""),
-		TeamID:         req.TeamId,
-		CreationMode:   string(req.CreationMode),
-		TriggerStatus:  req.TriggerStatus.Or(""),
-		NameTemplate:   req.NameTemplate.Or(""),
-		ConditionExpr:  req.ConditionExpr.Or(""),
-		AutoAddMembers: orEmptyStrings(req.AutoAddMembers),
+		SettingID:            req.SettingId.Or(""),
+		TeamID:               req.TeamId,
+		CreationMode:         string(req.CreationMode),
+		TriggerStatus:        req.TriggerStatus.Or(""),
+		NameTemplate:         req.NameTemplate.Or(""),
+		ConditionExpr:        req.ConditionExpr.Or(""),
+		ArchiveMode:          string(req.ArchiveMode.Or("manual")),
+		ArchiveStatus:        req.ArchiveStatus.Or(""),
+		ArchiveConditionExpr: req.ArchiveConditionExpr.Or(""),
+		AutoAddMembers:       orEmptyStrings(req.AutoAddMembers),
 	}
 }
 
@@ -547,6 +562,15 @@ func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
 	}
 	if s.ConditionExpr != "" {
 		out.ConditionExpr = api.NewOptString(s.ConditionExpr)
+	}
+	if s.ArchiveMode != "" {
+		out.ArchiveMode = api.NewOptLinearSettingsArchiveMode(api.LinearSettingsArchiveMode(s.ArchiveMode))
+	}
+	if s.ArchiveStatus != "" {
+		out.ArchiveStatus = api.NewOptString(s.ArchiveStatus)
+	}
+	if s.ArchiveConditionExpr != "" {
+		out.ArchiveConditionExpr = api.NewOptString(s.ArchiveConditionExpr)
 	}
 	return out
 }

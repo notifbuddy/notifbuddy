@@ -108,14 +108,15 @@ func (f *fakeStore) PatchLinearTeamState(_ context.Context, _ string, teamID str
 
 // fakeSlack records calls and returns canned ids.
 type fakeSlack struct {
-	posted       []slackapi.PostOptions
-	createdName  string
-	invited      []string
-	nextTS       string
-	nextChannel  string
-	botUserID    string
-	usersByEmail map[string]slackapi.User
-	usersByID    map[string]slackapi.User
+	posted          []slackapi.PostOptions
+	createdName     string
+	archivedChannel string
+	invited         []string
+	nextTS          string
+	nextChannel     string
+	botUserID       string
+	usersByEmail    map[string]slackapi.User
+	usersByID       map[string]slackapi.User
 }
 
 func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, error) {
@@ -125,7 +126,10 @@ func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, er
 	}
 	return s.nextChannel, nil
 }
-func (s *fakeSlack) ArchiveChannel(_ context.Context, _, _ string) error { return nil }
+func (s *fakeSlack) ArchiveChannel(_ context.Context, _, channelID string) error {
+	s.archivedChannel = channelID
+	return nil
+}
 func (s *fakeSlack) DeleteChannel(_ context.Context, _, _ string) error  { return nil }
 func (s *fakeSlack) InviteUsers(_ context.Context, _, _ string, ids []string) error {
 	s.invited = append(s.invited, ids...)
@@ -454,6 +458,157 @@ func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 	e.OnLinearEvent(context.Background(), linearRef("dc2", "org1"))
 	if sl.createdName != "" {
 		t.Errorf("no channel should be created when the condition is false; created %q", sl.createdName)
+	}
+}
+
+// linearIssuePayload builds an Issue event envelope for the archive tests.
+func linearIssuePayload(issueID, identifier, teamID, stateName string) json.RawMessage {
+	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
+		"data": map[string]any{"id": issueID, "identifier": identifier, "teamId": teamID, "state": map[string]any{"name": stateName}},
+	}}
+	b, _ := json.Marshal(env)
+	return b
+}
+
+// Archive status-trigger: an issue with a channel reaching the archive status
+// archives the channel, removes the mapping, fires channel.closed — and never
+// re-creates.
+func TestOnLinearEvent_ArchiveStatusTriggerArchivesChannel(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["da1"] = linearIssuePayload("issue9", "SKO-9", "team1", "Done")
+	st.issueToChannel["org1|issue9"] = "C_LIVE"
+	st.channelToIssue["org1|C_LIVE"] = "issue9"
+
+	sl := &fakeSlack{}
+	pub := &spyPub{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:  "status",
+		TriggerStatus: "In Progress",
+		ArchiveMode:   "status",
+		ArchiveStatus: "Done",
+	}}
+	e := newEngine(st, sl, ig, pub)
+
+	e.OnLinearEvent(context.Background(), linearRef("da1", "org1"))
+
+	if sl.archivedChannel != "C_LIVE" {
+		t.Errorf("archived channel = %q, want C_LIVE", sl.archivedChannel)
+	}
+	if _, err := st.ChannelForIssue(context.Background(), "org1", "issue9"); err == nil {
+		t.Error("issue->channel mapping should be removed after archiving")
+	}
+	if !pub.has(TopicChannelClosed) {
+		t.Errorf("expected channel.closed topic, got %v", pub.topics)
+	}
+	if sl.createdName != "" {
+		t.Errorf("an existing channel must never be re-created; created %q", sl.createdName)
+	}
+}
+
+// A status other than the archive status must not archive.
+func TestOnLinearEvent_ArchiveStatusIgnoresOtherStatus(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["da2"] = linearIssuePayload("issue9", "SKO-9", "team1", "Backlog")
+	st.issueToChannel["org1|issue9"] = "C_LIVE"
+	st.channelToIssue["org1|C_LIVE"] = "issue9"
+
+	sl := &fakeSlack{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode: "manual", ArchiveMode: "status", ArchiveStatus: "Done",
+	}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("da2", "org1"))
+	if sl.archivedChannel != "" {
+		t.Errorf("non-archive status must not archive; archived %q", sl.archivedChannel)
+	}
+}
+
+// Archive condition-trigger: archives when the expression is true.
+func TestOnLinearEvent_ArchiveConditionTriggerArchivesChannel(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["da3"] = linearIssuePayload("issue9", "SKO-9", "team1", "Done")
+	st.issueToChannel["org1|issue9"] = "C_LIVE"
+	st.channelToIssue["org1|C_LIVE"] = "issue9"
+
+	sl := &fakeSlack{}
+	pub := &spyPub{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:         "manual",
+		ArchiveMode:          "condition",
+		ArchiveConditionExpr: "linear.data.state.name == 'Done'",
+	}}
+	e := newEngine(st, sl, ig, pub)
+
+	e.OnLinearEvent(context.Background(), linearRef("da3", "org1"))
+
+	if sl.archivedChannel != "C_LIVE" {
+		t.Errorf("archived channel = %q, want C_LIVE", sl.archivedChannel)
+	}
+	if !pub.has(TopicChannelClosed) {
+		t.Errorf("expected channel.closed topic, got %v", pub.topics)
+	}
+}
+
+// A false archive condition must not archive.
+func TestOnLinearEvent_ArchiveConditionFalseDoesNotArchive(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["da4"] = linearIssuePayload("issue9", "SKO-9", "team1", "Backlog")
+	st.issueToChannel["org1|issue9"] = "C_LIVE"
+	st.channelToIssue["org1|C_LIVE"] = "issue9"
+
+	sl := &fakeSlack{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:         "manual",
+		ArchiveMode:          "condition",
+		ArchiveConditionExpr: "linear.data.state.name == 'Done'",
+	}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("da4", "org1"))
+	if sl.archivedChannel != "" {
+		t.Errorf("false condition must not archive; archived %q", sl.archivedChannel)
+	}
+}
+
+// Manual archive mode (and the empty default) never auto-archives.
+func TestOnLinearEvent_ManualArchiveModeNeverAutoArchives(t *testing.T) {
+	for _, mode := range []string{"manual", ""} {
+		st := newFakeStore()
+		st.linearPayloads["da5"] = linearIssuePayload("issue9", "SKO-9", "team1", "Done")
+		st.issueToChannel["org1|issue9"] = "C_LIVE"
+		st.channelToIssue["org1|C_LIVE"] = "issue9"
+
+		sl := &fakeSlack{}
+		ig := &fakeIntg{settings: integrations.LinearSettings{
+			CreationMode: "manual", ArchiveMode: mode, ArchiveStatus: "Done",
+		}}
+		e := newEngine(st, sl, ig, &spyPub{})
+
+		e.OnLinearEvent(context.Background(), linearRef("da5", "org1"))
+		if sl.archivedChannel != "" {
+			t.Errorf("archiveMode %q must not auto-archive; archived %q", mode, sl.archivedChannel)
+		}
+	}
+}
+
+// An archive trigger for an issue with no channel does nothing (and must not
+// create one either when creation mode wouldn't).
+func TestOnLinearEvent_ArchiveTriggerWithoutChannelDoesNothing(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["da6"] = linearIssuePayload("issue9", "SKO-9", "team1", "Done")
+
+	sl := &fakeSlack{}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode: "manual", ArchiveMode: "status", ArchiveStatus: "Done",
+	}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("da6", "org1"))
+	if sl.archivedChannel != "" || sl.createdName != "" {
+		t.Errorf("no channel exists: nothing should be archived (%q) or created (%q)",
+			sl.archivedChannel, sl.createdName)
 	}
 }
 

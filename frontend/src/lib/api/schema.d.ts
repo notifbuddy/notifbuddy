@@ -982,6 +982,25 @@ export interface components {
              */
             conditionExpr?: string;
             /**
+             * @description 'status' auto-archives the issue's channel when the issue reaches
+             *     archiveStatus; 'condition' auto-archives when archiveConditionExpr
+             *     evaluates true; 'manual' only archives via @notifbuddy. Defaults to
+             *     'manual' when omitted.
+             * @example manual
+             * @enum {string}
+             */
+            archiveMode?: "status" | "manual" | "condition";
+            /**
+             * @description Linear workflow state name that triggers archiving (status mode).
+             * @example Done
+             */
+            archiveStatus?: string;
+            /**
+             * @description GitHub-Actions-expression that must be true for archiving.
+             * @example linear.data.state.type == 'completed'
+             */
+            archiveConditionExpr?: string;
+            /**
              * @description Slack member ids (U…) — bots and people — to auto-add on channel creation.
              * @example [
              *       "U0123BOT",
@@ -1063,14 +1082,44 @@ export interface components {
             sampleEvents: components["schemas"]["SampleEvent"][];
         };
         /**
-         * @description A template-test request. Provide exactly one event source: sampleId
-         *     (a built-in sample event) or event (a raw envelope JSON string).
+         * @description A config-test request: the draft's trigger fields plus one event
+         *     source — sampleId (a built-in sample event) or event (a raw envelope
+         *     JSON string). The triggers are evaluated with the sync engine's exact
+         *     rules (mode-aware), so the result answers "what would this event do?".
          */
         TemplateTestRequest: {
             /** @example tkt-${{ linear.data.identifier }} */
             nameTemplate?: string;
-            /** @example linear.data.state.name == 'Done' */
+            /**
+             * @description The creation trigger mode (status | manual | condition).
+             * @example status
+             */
+            creationMode?: string;
+            /**
+             * @description Workflow state name for creation status mode.
+             * @example Todo
+             */
+            triggerStatus?: string;
+            /**
+             * @description The channel-creation condition expression.
+             * @example linear.data.state.name == 'Done'
+             */
             condition?: string;
+            /**
+             * @description The archive trigger mode (status | manual | condition).
+             * @example status
+             */
+            archiveMode?: string;
+            /**
+             * @description Workflow state name for archive status mode.
+             * @example Done
+             */
+            archiveStatus?: string;
+            /**
+             * @description The channel-archive condition expression.
+             * @example linear.data.state.type == 'completed'
+             */
+            archiveCondition?: string;
             /**
              * @description Id of a built-in sample event.
              * @example issue.status_changed
@@ -1079,12 +1128,21 @@ export interface components {
             /** @description A raw event envelope JSON string (alternative to sampleId). */
             event?: string;
         };
-        /** @description Result of rendering a template + evaluating a condition. */
+        /**
+         * @description What this config would do for the event: the rendered channel name and
+         *     whether the create/archive triggers fire.
+         */
         TemplateTestResponse: {
             /** @description The rendered channel name (empty if no template / on error). */
             name: string;
-            /** @description Whether the condition evaluated true. */
-            conditionResult: boolean;
+            /**
+             * @description Whether the creation trigger fires for this event — status mode
+             *     compares the event's workflow state, condition mode evaluates the
+             *     expression, manual never auto-fires.
+             */
+            wouldCreate: boolean;
+            /** @description Whether the archive trigger fires for this event (same rules). */
+            wouldArchive: boolean;
             /** @description A template/condition error, if any (shown inline by the UI). */
             error?: string;
         };
