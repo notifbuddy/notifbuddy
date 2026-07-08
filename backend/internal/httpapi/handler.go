@@ -176,6 +176,34 @@ func (h Handler) ListMembers(ctx context.Context) (api.ListMembersRes, error) {
 	return resp, nil
 }
 
+// UpdateMemberRole implements `updateMemberRole`: PUT /members/{membershipId}/role.
+// Admin-only. Changes another member's role within the caller's active
+// organization; changing your own role is rejected so an org can't lock out
+// its last admin.
+func (h Handler) UpdateMemberRole(ctx context.Context, req *api.UpdateMemberRoleRequest, params api.UpdateMemberRoleParams) (api.UpdateMemberRoleRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.UpdateMemberRoleUnauthorized{Message: "unauthorized"}, nil
+	}
+	if user.OrgID == "" {
+		return &api.UpdateMemberRoleBadRequest{Message: "no active organization"}, nil
+	}
+	if user.Role != auth.RoleAdmin {
+		return &api.UpdateMemberRoleForbidden{Message: "only admins can change member roles"}, nil
+	}
+	member, err := h.auth.UpdateOrganizationMemberRole(ctx, user.OrgID, user.ID, params.MembershipId, string(req.Role))
+	switch {
+	case errors.Is(err, auth.ErrMembershipNotFound):
+		return &api.UpdateMemberRoleNotFound{Message: "membership not found"}, nil
+	case errors.Is(err, auth.ErrOwnRole):
+		return &api.UpdateMemberRoleBadRequest{Message: "you can't change your own role"}, nil
+	case err != nil:
+		return &api.UpdateMemberRoleBadRequest{Message: "failed to update the member's role"}, nil
+	}
+	resp := toMemberResponse(member)
+	return &resp, nil
+}
+
 // CreateInvitation implements `createInvitation`: POST /invitations.
 // Invites an email to the caller's active organization. Any signed-in member of
 // an organization may invite (demo-simple authorization).
@@ -192,11 +220,33 @@ func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitation
 	}
 	role := ""
 	if r, ok := req.Role.Get(); ok {
-		role = r
+		role = string(r)
 	}
 	inv, err := h.auth.SendInvitation(ctx, req.Email, user.OrgID, role, user.ID)
 	if err != nil {
 		return &api.CreateInvitationBadRequest{Message: "failed to send invitation"}, nil
+	}
+	r := toInvitationResponse(*inv)
+	return &r, nil
+}
+
+// RevokeInvitation implements `revokeInvitation`: DELETE /invitations/{invitationId}.
+// Revokes an invitation in the caller's active organization. Any signed-in
+// member may revoke, matching invite creation (demo-simple authorization).
+func (h Handler) RevokeInvitation(ctx context.Context, params api.RevokeInvitationParams) (api.RevokeInvitationRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.RevokeInvitationUnauthorized{Message: "unauthorized"}, nil
+	}
+	if user.OrgID == "" {
+		return &api.RevokeInvitationBadRequest{Message: "no active organization"}, nil
+	}
+	inv, err := h.auth.RevokeInvitation(ctx, user.OrgID, params.InvitationId)
+	switch {
+	case errors.Is(err, auth.ErrInvitationNotFound):
+		return &api.RevokeInvitationNotFound{Message: "invitation not found"}, nil
+	case err != nil:
+		return &api.RevokeInvitationBadRequest{Message: "failed to revoke the invitation"}, nil
 	}
 	r := toInvitationResponse(*inv)
 	return &r, nil
@@ -622,6 +672,9 @@ func toInvitationResponse(inv auth.Invitation) api.InvitationResponse {
 	if inv.ExpiresAt != "" {
 		r.ExpiresAt = api.NewOptString(inv.ExpiresAt)
 	}
+	if inv.Role != "" {
+		r.Role = api.NewOptString(inv.Role)
+	}
 	return r
 }
 
@@ -635,6 +688,9 @@ func toMemberResponse(m auth.Member) api.MemberResponse {
 	}
 	if m.Role != "" {
 		r.Role = api.NewOptString(m.Role)
+	}
+	if m.ProfilePictureURL != "" {
+		r.ProfilePictureUrl = api.NewOptString(m.ProfilePictureURL)
 	}
 	return r
 }

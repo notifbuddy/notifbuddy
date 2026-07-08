@@ -22,10 +22,12 @@ const (
 	ListLinearWebhooksOperation    OperationName = "ListLinearWebhooks"
 	ListMembersOperation           OperationName = "ListMembers"
 	PingOperation                  OperationName = "Ping"
+	RevokeInvitationOperation      OperationName = "RevokeInvitation"
 	SelectOrgOperation             OperationName = "SelectOrg"
 	SubmitOssApplicationOperation  OperationName = "SubmitOssApplication"
 	SyncSettingsOperation          OperationName = "SyncSettings"
 	TestLinearTemplateOperation    OperationName = "TestLinearTemplate"
 	UpdateLinearSettingsOperation  OperationName = "UpdateLinearSettings"
+	UpdateMemberRoleOperation      OperationName = "UpdateMemberRole"
 	VerifyEmailOperation           OperationName = "VerifyEmail"
 )

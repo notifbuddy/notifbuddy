@@ -3,6 +3,10 @@ import type { components } from '$lib/api/schema';
 
 export type Member = components['schemas']['MemberResponse'];
 export type Invitation = components['schemas']['InvitationResponse'];
+export type Role = components['schemas']['RoleSlug'];
+
+// The organization roles a member can hold, in rank order.
+export const ROLES: Role[] = ['admin', 'member', 'viewer'];
 
 // Fetch the active org's members. Returns null when unauthenticated.
 export async function fetchMembers(): Promise<Member[] | null> {
@@ -18,14 +22,35 @@ export async function fetchInvitations(): Promise<Invitation[] | null> {
 	return (data.invitations ?? []) as Invitation[];
 }
 
+// Change a member's role in the active org. Admin-only; returns the updated
+// member, or null on failure.
+export async function updateMemberRole(membershipId: string, role: Role): Promise<Member | null> {
+	const { data, error } = await api.PUT('/members/{membershipId}/role', {
+		params: { path: { membershipId } },
+		body: { role }
+	});
+	if (error || !data) return null;
+	return data as Member;
+}
+
 // Invite an email to the active org, optionally with a role. Returns the
 // created invitation, or null on failure.
 export async function sendInvitation(
 	email: string,
-	role?: string
+	role?: Role
 ): Promise<Invitation | null> {
 	const { data, error } = await api.POST('/invitations', {
 		body: { email, ...(role ? { role } : {}) }
+	});
+	if (error || !data) return null;
+	return data as Invitation;
+}
+
+// Revoke a pending invitation so its link can no longer be accepted. Returns
+// the invitation in its revoked state, or null on failure.
+export async function revokeInvitation(invitationId: string): Promise<Invitation | null> {
+	const { data, error } = await api.DELETE('/invitations/{invitationId}', {
+		params: { path: { invitationId } }
 	});
 	if (error || !data) return null;
 	return data as Invitation;

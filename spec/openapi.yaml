@@ -199,6 +199,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /invitations/{invitationId}:
+    delete:
+      operationId: revokeInvitation
+      summary: Revoke a pending invitation
+      description: |
+        Revokes the invitation identified by invitationId so its link can no
+        longer be accepted. Any signed-in member of the organization may revoke
+        (demo-simple authorization, matching invite creation).
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The invitation, now revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+        "400":
+          description: The request was invalid (e.g. no active organization, or the invitation is not pending).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such invitation in the active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /members:
     get:
       operationId: listMembers
@@ -216,6 +255,58 @@ paths:
                 $ref: "#/components/schemas/MemberListResponse"
         "401":
           description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /members/{membershipId}/role:
+    put:
+      operationId: updateMemberRole
+      summary: Change a member's role in the active organization
+      description: |
+        Sets the role of the organization membership identified by
+        membershipId. Only admins may change roles, and an admin cannot change
+        their own role. The target user's session picks the new role up on its
+        next token refresh.
+      parameters:
+        - name: membershipId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberRoleRequest"
+      responses:
+        "200":
+          description: The updated member.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+        "400":
+          description: The request was invalid (e.g. changing your own role).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such membership in the active organization.
           content:
             application/json:
               schema:
@@ -590,6 +681,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           description: The organization already has a live subscription.
           content:
@@ -621,6 +718,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "401":
           description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
           content:
             application/json:
               schema:
@@ -657,6 +760,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "401":
           description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller is not an admin of the organization.
           content:
             application/json:
               schema:
@@ -871,11 +980,27 @@ components:
           description: The email address to invite.
           example: newteammate@example.com
         role:
-          type: string
+          $ref: "#/components/schemas/RoleSlug"
           description: Optional role slug to grant the invitee on acceptance.
-          example: member
       required:
         - email
+    RoleSlug:
+      type: string
+      description: An organization role slug.
+      enum:
+        - admin
+        - member
+        - viewer
+      example: member
+    UpdateMemberRoleRequest:
+      type: object
+      description: Change an organization member's role.
+      properties:
+        role:
+          $ref: "#/components/schemas/RoleSlug"
+          description: The role slug to assign to the member.
+      required:
+        - role
     InvitationResponse:
       type: object
       description: A WorkOS organization invitation.
@@ -894,6 +1019,10 @@ components:
           type: string
           description: ISO 8601 expiry timestamp.
           example: "2026-07-03T00:00:00Z"
+        role:
+          type: string
+          description: The role slug the invitee will be granted on acceptance, if any.
+          example: member
       required:
         - id
         - email
@@ -936,6 +1065,11 @@ components:
           type: string
           description: The member's role slug within the organization, if any.
           example: admin
+        profilePictureUrl:
+          type: string
+          description: >-
+            URL of the member's profile picture, if any. For GitHub logins this
+            is the user's GitHub avatar, captured by WorkOS at sign-in.
       required:
         - id
         - userId
