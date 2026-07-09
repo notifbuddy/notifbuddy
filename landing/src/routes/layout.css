@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/outfit';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Theme tokens: the subset of the app's theme (QraftHive) that the marketing
+   page uses, so the landing site stays pixel-identical to the product without
+   pulling in the full shadcn stack. The site is always dark (html.dark is
+   static in app.html); the light block is kept so the values stay in sync if
+   that ever changes. */
+:root {
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.2101 0.0318 264.6645);
+	--card: oklch(1 0 0);
+	--primary: oklch(0.6716 0.1368 48.513);
+	--primary-foreground: oklch(1 0 0);
+	--muted-foreground: oklch(0.551 0.0234 264.3637);
+	--destructive: oklch(0.6368 0.2078 25.3313);
+	--border: oklch(0.9276 0.0058 264.5313);
+	--input: oklch(0.9276 0.0058 264.5313);
+	--ring: oklch(0.6716 0.1368 48.513);
+	--radius: 0.75rem;
+}
+
+.dark {
+	--background: oklch(0.1797 0.0043 308.1928);
+	--foreground: oklch(0.8109 0 0);
+	--card: oklch(0.1822 0 0);
+	--primary: oklch(0.7214 0.1337 49.9802);
+	--primary-foreground: oklch(0.1797 0.0043 308.1928);
+	--muted-foreground: oklch(0.6268 0 0);
+	--destructive: oklch(0.6368 0.2078 25.3313);
+	--border: oklch(0.252 0 0);
+	--input: oklch(0.252 0 0);
+	--ring: oklch(0.7214 0.1337 49.9802);
+}
+
+@theme inline {
+	--font-sans: 'Outfit Variable', ui-sans-serif, sans-serif, system-ui;
+	--font-mono: 'JetBrains Mono Variable', monospace;
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+	html {
+		@apply font-sans;
+		scrollbar-gutter: stable;
+	}
+	html.dark {
+		color-scheme: dark;
+	}
+}

@@ -2,11 +2,21 @@
 backend/bin/
 backend/.env
 
+# Waitlist service
+waitlist-backend/bin/
+waitlist-backend/.env
+
 # Frontend
 frontend/node_modules/
 frontend/build/
 frontend/.svelte-kit/
 frontend/.env.local
+
+# Landing (marketing/waitlist site)
+landing/node_modules/
+landing/build/
+landing/.svelte-kit/
+landing/.env
 
 # Docs site (Next.js / Fumadocs)
 userdocs/node_modules/

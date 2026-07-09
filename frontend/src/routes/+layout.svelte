@@ -18,7 +18,26 @@
 	const user = $derived(userStore.user);
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" href={favicon} />
+	<!-- App-wide SEO/social defaults; pages override the title. The og image is
+	     the shared brand card (assets/og-card.png), served from the marketing
+	     domain so links unfurl the same everywhere. -->
+	<meta
+		name="description"
+		content="notifbuddy moves notifications both ways between Linear, GitHub, Plain and Slack."
+	/>
+	<meta property="og:site_name" content="notifbuddy" />
+	<meta property="og:title" content="notifbuddy — all the noise, one signal" />
+	<meta
+		property="og:description"
+		content="Two-way notification sync between Linear, GitHub, Plain and Slack."
+	/>
+	<meta property="og:image" content="https://notifbuddy.com/og-card.png" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta name="twitter:card" content="summary_large_image" />
+</svelte:head>
 
 <!-- Manages the `dark` class on <html> + persists the choice. Defaults to dark
      (the app's original single mode) until the user toggles. -->
