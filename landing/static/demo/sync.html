@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>notifbuddy — two-way sync</title>
+<!--
+  HyperFrames composition (video-hyperframes skill). Three 1920×1080 frames,
+  autoplay with fade transitions, click / arrow-key control, corner progress.
+  Embedded on /landing inside a scaled iframe; the frame markers and the
+  HYPERFRAMES_META comment at the end keep it renderable to a real mp4 via
+  Remotion/Hyperframes later.
+
+  Palette is the notifbuddy "Quiet" brand kit: ink, paper, one clay accent.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+	:root {
+		--ink: #201f1c;
+		--ink-2: #26251f;
+		--paper: #f3f0e9;
+		--muted: #8a867c;
+		--hairline: #38362f;
+		--clay: #b18b76;
+		--clay: oklch(0.7 0.06 48);
+		--clay-deep: #9d7a68;
+		--clay-deep: oklch(0.64 0.058 45);
+	}
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	html, body { background: var(--ink); overflow: hidden; }
+	body {
+		font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+		color: var(--paper);
+		width: 1920px;
+		height: 1080px;
+	}
+	.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+	/* Frames stack in place; fade transition between them. */
+	.frame {
+		position: absolute;
+		inset: 0;
+		width: 1920px;
+		height: 1080px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		opacity: 0;
+		transition: opacity 0.6s ease;
+		pointer-events: none;
+	}
+	.frame.active { opacity: 1; pointer-events: auto; }
+
+	/* ---- Frame 1 · hook -------------------------------------------------- */
+	.hook-line {
+		font-size: 176px;
+		font-weight: 650;
+		letter-spacing: -0.03em;
+		line-height: 1;
+	}
+	.hook-line .dim { color: var(--muted); }
+	/* The noise: scattered dim pips, one lit clay — the brand's own scene. */
+	.pipfield { position: absolute; inset: 0; }
+	.pipfield span {
+		position: absolute;
+		border-radius: 999px;
+		background: var(--muted);
+		opacity: 0.18;
+	}
+	.pipfield span.lit {
+		background: var(--clay);
+		opacity: 0.95;
+		box-shadow: 0 0 24px var(--clay-deep), 0 0 64px color-mix(in oklab, var(--clay-deep) 45%, transparent);
+	}
+
+	/* ---- Frame 2 · the sync scene ---------------------------------------- */
+	/* Continuity with the hook: a handful of frame 1's pips carry over at the
+	   same screen positions and dissolve as the rails take charge — the noise
+	   literally clears out of the scene. The lit pip goes first and fastest:
+	   it's the one that "became" the traveling signal. Each activation of the
+	   frame (the composition loops) restarts the dissolve, because the
+	   animation only applies while the frame is .active. */
+	.fade-pips span { opacity: 0; }
+	.frame.active .fade-pips span {
+		animation: pip-dissolve 1.4s ease var(--fd, 0s) both;
+	}
+	.frame.active .fade-pips span.lit {
+		animation: pip-dissolve-lit 0.5s ease both;
+	}
+	@keyframes pip-dissolve {
+		from { opacity: 0.18; }
+		to { opacity: 0; }
+	}
+	@keyframes pip-dissolve-lit {
+		from { opacity: 0.95; }
+		to { opacity: 0; }
+	}
+
+	svg .rail { stroke: var(--hairline); stroke-width: 1.4; fill: none; }
+	svg .orbit { stroke: var(--hairline); stroke-dasharray: 3 5; fill: none; }
+	svg .node-ring { fill: var(--ink-2); stroke: var(--hairline); stroke-width: 1.4; }
+	svg .glyph { fill: var(--muted); }
+	svg .label {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 11px;
+		letter-spacing: 0.12em;
+		fill: var(--muted);
+		text-anchor: middle;
+	}
+	svg .pip-core { fill: var(--clay); }
+	svg .pip-halo { fill: var(--clay-deep); opacity: 0.3; }
+	svg .ripple { fill: none; stroke: var(--clay-deep); opacity: 0; }
+
+	/* ---- Frame 3 · CTA ---------------------------------------------------- */
+	.cta-line {
+		font-size: 176px;
+		font-weight: 650;
+		letter-spacing: -0.03em;
+		line-height: 1;
+	}
+	.cta-line .clay { color: var(--clay); }
+	.cta-sub {
+		margin-top: 56px;
+		font-size: 30px;
+		letter-spacing: 0.14em;
+		color: var(--muted);
+	}
+	.cta-pill {
+		margin-top: 64px;
+		padding: 26px 64px;
+		border-radius: 999px;
+		background: var(--paper);
+		color: var(--ink);
+		font-size: 38px;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+	}
+
+	/* ---- Progress (corner) ------------------------------------------------ */
+	.hud {
+		position: absolute;
+		left: 56px;
+		bottom: 48px;
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		font-size: 22px;
+		color: var(--muted);
+		z-index: 10;
+	}
+	.hud .bar {
+		width: 220px;
+		height: 4px;
+		border-radius: 999px;
+		background: var(--hairline);
+		overflow: hidden;
+	}
+	.hud .bar i {
+		display: block;
+		height: 100%;
+		width: 0%;
+		border-radius: 999px;
+		background: var(--clay);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.frame { transition: none; }
+	}
+</style>
+</head>
+<body>
+
+<!-- ======================= frame 1 · hook ======================= -->
+<section class="frame active" data-duration="2800">
+	<div class="pipfield" aria-hidden="true">
+		<span style="left:12%;top:22%;width:10px;height:10px"></span>
+		<span style="left:24%;top:66%;width:14px;height:14px"></span>
+		<span style="left:33%;top:34%;width:8px;height:8px"></span>
+		<span style="left:45%;top:80%;width:12px;height:12px"></span>
+		<span style="left:58%;top:18%;width:10px;height:10px"></span>
+		<span style="left:67%;top:72%;width:8px;height:8px"></span>
+		<span style="left:76%;top:38%;width:14px;height:14px"></span>
+		<span style="left:86%;top:64%;width:10px;height:10px"></span>
+		<span style="left:90%;top:26%;width:8px;height:8px"></span>
+		<span class="lit" style="left:70.5%;top:29%;width:16px;height:16px"></span>
+	</div>
+	<h1 class="hook-line"><span class="dim">All the noise.</span></h1>
+</section>
+<!-- frame:1 duration:2800 transition:fade -->
+
+<!-- ======================= frame 2 · the sync scene ======================= -->
+<section class="frame" data-duration="19000">
+	<!-- Leftovers from frame 1's noise field (same positions/sizes), dissolving
+	     over the first ~1.5s of the scene. -->
+	<div class="pipfield fade-pips" aria-hidden="true">
+		<span style="left:12%;top:22%;width:10px;height:10px;--fd:0s"></span>
+		<span style="left:24%;top:66%;width:14px;height:14px;--fd:0.12s"></span>
+		<span style="left:45%;top:80%;width:12px;height:12px;--fd:0.05s"></span>
+		<span style="left:58%;top:18%;width:10px;height:10px;--fd:0.18s"></span>
+		<span style="left:86%;top:64%;width:10px;height:10px;--fd:0.1s"></span>
+		<span style="left:90%;top:26%;width:8px;height:8px;--fd:0.24s"></span>
+		<span class="lit" style="left:70.5%;top:29%;width:16px;height:16px"></span>
+	</div>
+	<!-- The product list lives in the embed's chrome bar on /landing; when this
+	     file is rendered standalone as a video the node labels carry it. -->
+	<svg width="1400" height="900" viewBox="0 0 560 360" role="img"
+		aria-label="A notification travels from Linear, GitHub, or Plain through notifbuddy to Slack, and back the other way.">
+
+		<!-- Rails: the routes a notification can take. -->
+		<path class="rail" d="M110 86 C180 104 252 110 300 134" />
+		<path class="rail" d="M112 180 C170 172 240 150 300 134" />
+		<path class="rail" d="M112 284 C180 268 240 250 300 226" />
+		<path class="rail" d="M300 134 C356 148 428 162 466 172" />
+		<path class="rail" d="M300 226 C356 212 420 196 466 188" />
+		<circle class="orbit" cx="300" cy="180" r="46" />
+
+		<!-- Source nodes -->
+		<g>
+			<circle class="node-ring" cx="84" cy="76" r="25" />
+			<g class="glyph" transform="translate(73 65) scale(0.9167)">
+				<path d="M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z" />
+			</g>
+			<text class="label" x="84" y="118">linear</text>
+			<circle class="ripple" cx="84" cy="76" r="25" stroke-width="2">
+				<animate attributeName="r" values="25;40" dur="0.8s" begin="m2.end" />
+				<animate attributeName="opacity" values="0.6;0" dur="0.8s" begin="m2.end" />
+			</circle>
+		</g>
+		<g>
+			<circle class="node-ring" cx="84" cy="180" r="25" />
+			<g class="glyph" transform="translate(73 169) scale(0.9167)">
+				<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+			</g>
+			<text class="label" x="84" y="222">github</text>
+			<circle class="ripple" cx="84" cy="180" r="25" stroke-width="2">
+				<animate attributeName="r" values="25;40" dur="0.8s" begin="m4.end" />
+				<animate attributeName="opacity" values="0.6;0" dur="0.8s" begin="m4.end" />
+			</circle>
+		</g>
+		<g>
+			<circle class="node-ring" cx="84" cy="284" r="25" />
+			<g class="glyph" transform="translate(74 274) scale(0.8333)">
+				<path d="M10.7 3.2h2.7a5.35 5.35 0 1 1 0 10.7H5.2z" />
+				<path d="M16.3 15.1h-6.4l-4 5.7h7a4.5 4.5 0 0 0 3.4-5.7z" />
+			</g>
+			<text class="label" x="84" y="326">plain</text>
+			<circle class="ripple" cx="84" cy="284" r="25" stroke-width="2">
+				<animate attributeName="r" values="25;40" dur="0.8s" begin="m6.end" />
+				<animate attributeName="opacity" values="0.6;0" dur="0.8s" begin="m6.end" />
+			</circle>
+		</g>
+
+		<!-- notifbuddy: the brand mark with its orbit — every message does one
+		     lap through the buddy before it's delivered. -->
+		<g>
+			<circle cx="300" cy="180" r="26" fill="#f3f0e9" />
+			<circle cx="318" cy="162" r="9" class="pip-core" stroke="#201f1c" stroke-width="3.5" />
+			<text class="label" x="300" y="250">notifbuddy</text>
+		</g>
+
+		<!-- Slack -->
+		<g>
+			<circle class="node-ring" cx="496" cy="180" r="27" />
+			<g class="glyph" transform="translate(484 168)">
+				<path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
+			</g>
+			<text class="label" x="496" y="222">slack</text>
+			<circle class="ripple" cx="496" cy="180" r="27" stroke-width="2">
+				<animate attributeName="r" values="27;42" dur="0.8s" begin="m1.end;m3.end;m5.end" />
+				<animate attributeName="opacity" values="0.6;0" dur="0.8s" begin="m1.end;m3.end;m5.end" />
+			</circle>
+		</g>
+
+		<!-- The signal: one clay pip. Each leg runs source → a full lap around
+		     the notifbuddy mark → destination; odd legs deliver to Slack, even
+		     legs carry the reply back. Hidden between legs via <set>. -->
+		<g opacity="0">
+			<circle class="pip-halo" r="10" />
+			<circle class="pip-core" r="5.5" />
+
+			<animateMotion id="m1" dur="2.7s" begin="0.8s;m6.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M110 86 C180 104 252 110 300 134 A46 46 0 0 1 300 226 A46 46 0 0 1 300 134 C356 148 428 162 466 172" />
+			<animateMotion id="m2" dur="2.7s" begin="m1.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M466 172 C428 162 356 148 300 134 A46 46 0 0 0 300 226 A46 46 0 0 0 300 134 C252 110 180 104 110 86" />
+			<animateMotion id="m3" dur="2.7s" begin="m2.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M112 180 C170 172 240 150 300 134 A46 46 0 0 1 300 226 A46 46 0 0 1 300 134 C356 148 428 162 466 172" />
+			<animateMotion id="m4" dur="2.7s" begin="m3.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M466 172 C428 162 356 148 300 134 A46 46 0 0 0 300 226 A46 46 0 0 0 300 134 C240 150 170 172 112 180" />
+			<animateMotion id="m5" dur="2.7s" begin="m4.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M112 284 C180 268 240 250 300 226 A46 46 0 0 0 300 134 A46 46 0 0 0 300 226 C356 212 420 196 466 188" />
+			<animateMotion id="m6" dur="2.7s" begin="m5.end+0.45s" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.25 1"
+				path="M466 188 C420 196 356 212 300 226 A46 46 0 0 1 300 134 A46 46 0 0 1 300 226 C240 250 180 268 112 284" />
+
+			<set attributeName="opacity" to="1" begin="m1.begin" end="m1.end" />
+			<set attributeName="opacity" to="1" begin="m2.begin" end="m2.end" />
+			<set attributeName="opacity" to="1" begin="m3.begin" end="m3.end" />
+			<set attributeName="opacity" to="1" begin="m4.begin" end="m4.end" />
+			<set attributeName="opacity" to="1" begin="m5.begin" end="m5.end" />
+			<set attributeName="opacity" to="1" begin="m6.begin" end="m6.end" />
+		</g>
+	</svg>
+</section>
+<!-- frame:2 duration:19000 transition:fade -->
+
+<!-- ======================= frame 3 · CTA ======================= -->
+<section class="frame" data-duration="3200">
+	<h1 class="cta-line">One signal<span class="clay">.</span></h1>
+	<p class="cta-sub mono">notifbuddy — early access</p>
+	<div class="cta-pill">Join the waitlist</div>
+</section>
+<!-- frame:3 duration:3200 transition:fade -->
+
+<div class="hud mono" aria-hidden="true">
+	<div class="bar"><i id="progress"></i></div>
+	<span id="counter">01 / 03</span>
+</div>
+
+<script>
+	// Autoplay: hold each frame for its data-duration, fade to the next, loop.
+	// Click / → advance, ← rewind. Corner bar tracks the whole loop. Honors
+	// prefers-reduced-motion by parking on the diagram frame.
+	const frames = [...document.querySelectorAll('.frame')];
+	const durs = frames.map((f) => +f.dataset.duration);
+	const total = durs.reduce((a, b) => a + b, 0);
+	const bar = document.getElementById('progress');
+	const counter = document.getElementById('counter');
+	let i = 0;
+	let started = performance.now();
+
+	function show(n) {
+		frames[i].classList.remove('active');
+		i = (n + frames.length) % frames.length;
+		frames[i].classList.add('active');
+		counter.textContent = `0${i + 1} / 0${frames.length}`;
+		started = performance.now();
+	}
+
+	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	if (reduced) {
+		show(1); // hold the sync diagram
+	} else {
+		requestAnimationFrame(function tick(now) {
+			const elapsed = now - started;
+			if (elapsed >= durs[i]) show(i + 1);
+			const before = durs.slice(0, i).reduce((a, b) => a + b, 0);
+			bar.style.width = `${(100 * (before + Math.min(elapsed, durs[i]))) / total}%`;
+			requestAnimationFrame(tick);
+		});
+	}
+
+	addEventListener('click', () => show(i + 1));
+	addEventListener('keydown', (e) => {
+		if (e.key === 'ArrowRight') show(i + 1);
+		if (e.key === 'ArrowLeft') show(i - 1);
+	});
+</script>
+
+<!-- HYPERFRAMES_META: {"fps":30,"width":1920,"height":1080,"frames":[
+  {"frame":1,"duration":2800,"transition":"fade","sceneSummary":"Hook — 'All the noise.' over a field of dim notification pips, one lit clay."},
+  {"frame":2,"duration":19000,"transition":"fade","sceneSummary":"Sync scene — frame 1's leftover noise pips dissolve over the first 1.5s, then a clay pip travels Linear/GitHub/Plain → one lap around the notifbuddy mark → Slack, and carries the reply back the other way; ripple on delivery."},
+  {"frame":3,"duration":3200,"transition":"fade","sceneSummary":"CTA — 'One signal.' with 'Join the waitlist' pill."}
+]} -->
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Waitlist service configuration (production).
+
+server:
+  addr: ":8080" # Cloud Run / container platforms route to 8080
+
+cors:
+  allow_origin: "https://notifbuddy.com" # the deployed landing page origin
+
+database:
+  url: "${WAITLIST_DATABASE_URL}" # SECRET — the Neon `notifbuddy-waitlist` connection string

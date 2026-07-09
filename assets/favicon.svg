@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+	<title>notifbuddy</title>
+	<!-- The notifbuddy mark (brand kit "Quiet"): ink disc, clay signal dot notched
+	     top-right. The ring gap around the dot is a transparent cutout so it reads
+	     attached-but-separate on any tab-bar color; the disc flips ink/paper with
+	     the browser theme. -->
+	<style>
+		.disc { fill: #2a2925; }
+		.dot { fill: oklch(0.64 0.058 45); }
+		@media (prefers-color-scheme: dark) {
+			.disc { fill: #f3f0e9; }
+			.dot { fill: oklch(0.7 0.06 48); }
+		}
+	</style>
+	<mask id="gap">
+		<rect width="64" height="64" fill="white" />
+		<circle cx="52" cy="12" r="15.4" fill="black" />
+	</mask>
+	<circle class="disc" cx="32" cy="32" r="32" mask="url(#gap)" />
+	<circle class="dot" cx="52" cy="12" r="11" />
+</svg>

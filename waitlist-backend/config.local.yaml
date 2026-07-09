@@ -1,0 +1,16 @@
+# Waitlist service configuration (local development).
+#
+# Same convention as the main backend: non-sensitive values are literal,
+# SENSITIVE values reference an environment variable with `$VAR`/`${VAR}` —
+# set those in waitlist-backend/.env (auto-loaded) or the real environment.
+#
+# Override the config path with CONFIG_FILE=/path/to/config.yaml.
+
+server:
+  addr: ":8081" # main backend owns :8080 locally
+
+cors:
+  allow_origin: "http://localhost:5174" # the landing site dev origin (make dev-landing)
+
+database:
+  url: "${WAITLIST_DATABASE_URL}" # SECRET — the Neon `notifbuddy-waitlist` connection string

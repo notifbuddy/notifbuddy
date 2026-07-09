@@ -277,6 +277,12 @@
       "skillPath": "skills/golang-uber-fx/SKILL.md",
       "computedHash": "ce20545b444a3eef463cd2cd32a57479ab0b4a483eeb7b212b2ae180289d004c"
     },
+    "seo-audit": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/seo-audit/SKILL.md",
+      "computedHash": "f2dc52130189068981f21e1c0bdc4471ac7cd9b08d8a1320604411aa0f950385"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
@@ -294,6 +300,12 @@
       "sourceType": "github",
       "skillPath": "skills/stripe-best-practices/SKILL.md",
       "computedHash": "7ff3b3441a1b1396584f85c3c7304ca4c28f2af5622a1932a046c86739063fd3"
+    },
+    "video-hyperframes": {
+      "source": "nexu-io/open-design",
+      "sourceType": "github",
+      "skillPath": "skills/video-hyperframes/SKILL.md",
+      "computedHash": "d9c7ad59f8be126d10d06fefccff291af4f064d52d48025b742353c4652d00f9"
     }
   }
 }
