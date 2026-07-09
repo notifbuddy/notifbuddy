@@ -1,0 +1,21 @@
+{
+	// The landing site ships as a Cloudflare Worker with static assets —
+	// Cloudflare's recommended replacement for Pages. `wrangler deploy`
+	// (landing-deploy.yml) creates/updates the Worker and uploads build/ in one
+	// step; infra (infra) only attaches the custom domain and
+	// the www redirect.
+	"name": "notifbuddy-landing",
+	"account_id": "${CF_ACCOUNT_ID}",
+	"compatibility_date": "2026-07-01",
+	"main": "worker/index.js",
+	"assets": {
+		"directory": "./build",
+		"binding": "ASSETS"
+	},
+	"vars": {
+		// The Cloud Run waitlist service. Stable once created — matches
+		// `infra output -raw waitlist_url`. The worker proxies /waitlist
+		// here so the browser only ever talks to this domain (no CORS).
+		"WAITLIST_ORIGIN": "https://notifbuddy-waitlist-k75lx54hpa-uk.a.run.app"
+	}
+}

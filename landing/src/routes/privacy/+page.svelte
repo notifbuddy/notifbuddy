@@ -26,8 +26,13 @@
 			</p>
 			<p>
 				The address is stored in our own database. It is never sold, shared, or used for anything
-				beyond that launch email. This site sets no analytics or tracking cookies; the only
-				browser storage used is your theme preference, kept on your device.
+				beyond that launch email.
+			</p>
+			<p>
+				For traffic and performance measurement we use Cloudflare Web Analytics, which is
+				cookieless and anonymous: it counts page views, referrers, and page speed in aggregate,
+				without cookies, persistent identifiers, fingerprinting, or profiles of you. The only
+				browser storage this site uses is your theme preference, kept on your device.
 			</p>
 			<p>
 				To be removed from the list, reply to any email we send you, or write to
