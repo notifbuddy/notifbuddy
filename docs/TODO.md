@@ -30,9 +30,31 @@ usecase for this though.~~
 - ~can we sync the icons for the linear statues as well?~
 - ~can we add pics for members and bots as well~
 - Add settings icon to take to linear, github, etc.'s settings page.
-- Invitation needs rework.
+- Remove github for now.
+- ~Invitation needs rework.~
+- remove onboarding
+- Update favicon and header for notifbuddy UI.
+- Deploy for real login is gated to allowlist
+- Validate that channel creation and archival flows are working for linear + slack.
+- Validate that billing is working.
+- Validate that webhooks show up on the integration page for workspace.
+- Validate that member doesn't have access to workspace integrations
+- Add docs for notifbuddy. Deploy docs.
+- Include backlinks to docs from notifybuddy. Include dashboard url from docs.
+- Optimize for SEO, look at pull notifier and axolo.
+- Build public website for notifbuddy.
+- Add an privacy policy, terms and conditions page. Check if there are companies that
+  can handle legal here.
+- Start company registration process and complete it. Link it to stripe.
+- Include support via plain in dashboard.
+
+Phase 2 after launch
+
+- Import members directly from slack instead of traditional invitation flows. Since we have seat based
+  pricing we should let users select the users that they want to import.
 - Explore linear's multi team flows, understand how mutiple teams work are common workspace things, team
   specific things. How do we configure our system to allow multiple teams to integrate.
+- Auto archive for stale linear issues.
 - ~Add stripe account and create billing integration.~
 - `mux.HandleFunc("GET /integrations/github/connect", gateBilling(intgSvc.HandleGitHubConnect))` -> remove gateBilling, connection should happen always but request processing needs to be handled seperately.
 - validate that work os webhook for membership addition and removal works.
@@ -40,7 +62,6 @@ usecase for this though.~~
 - validate that webhook for linear and check that channel creation works.
 - Open discord/slack community for support.
 - plug stipe and work os webhook and keys: https://github.com/PrashantRaj18198/notifbuddy/pull/4
-- fix onboarding
 - change description for github integration to something else
 - sync user profile image when login through github happens
 - Update onboarding screen to accept organization name, generate organization image like github does.
