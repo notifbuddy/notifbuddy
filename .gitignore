@@ -17,6 +17,7 @@ landing/node_modules/
 landing/build/
 landing/.svelte-kit/
 landing/.env
+landing/.wrangler/
 
 # Docs site (Next.js / Fumadocs)
 userdocs/node_modules/
