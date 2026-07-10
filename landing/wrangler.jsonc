@@ -10,7 +10,10 @@
 	"main": "worker/index.js",
 	"assets": {
 		"directory": "./build",
-		"binding": "ASSETS"
+		"binding": "ASSETS",
+		// Unmatched paths get the prerendered src/routes/404 page (built to
+		// build/404.html) with a real 404 status.
+		"not_found_handling": "404-page"
 	},
 	"vars": {
 		// The Cloud Run waitlist service. Stable once created — matches
