@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -86,12 +87,46 @@ type EncryptionConfig struct {
 }
 
 type PubSubConfig struct {
-	// Provider selects the publish backend: "memory" (in-process bus for local
-	// dev) or "sns" (AWS SNS for production).
-	Provider string `yaml:"provider"`
-	// SNSTopicARN is the SNS topic ARN for the GitHub webhook event topic when
-	// Provider=sns.
-	SNSTopicARN string `yaml:"sns_topic_arn"`
+	// Provider selects the eventing backend: "postgres" (watermill over the
+	// app database; local dev and bare-metal deploys) or "gcp" (Google Cloud
+	// Pub/Sub push subscriptions; Cloud Run production). Empty means postgres.
+	// Consumers are provider-agnostic; only wiring differs.
+	Provider string         `yaml:"provider"`
+	Postgres PostgresPubSub `yaml:"postgres"`
+	GCP      GCPPubSub      `yaml:"gcp"`
+}
+
+type PostgresPubSub struct {
+	// PollInterval is how often idle subscribers poll Postgres for new
+	// messages, as a Go duration string ("200ms", "1s"). Empty defaults to 1s.
+	// Lower means snappier delivery; higher means fewer queries (and on Neon,
+	// polling is what keeps compute awake).
+	PollInterval string `yaml:"poll_interval"`
+	// LogEvents wires a dev-logger consumer group that prints every message on
+	// every topic. Enable only in local dev — it doubles per-message reads.
+	LogEvents bool `yaml:"log_events"`
+}
+
+type GCPPubSub struct {
+	// ProjectID is the GCP project owning the Pub/Sub topics/subscriptions
+	// (managed in infra/, never created by the app).
+	ProjectID string `yaml:"project_id"`
+	// PushAudience is the OIDC audience on push deliveries — the public URL of
+	// the push endpoint (https://<backend>/internal/pubsub/push).
+	PushAudience string `yaml:"push_audience"`
+	// PushServiceAccount is the service account email Pub/Sub signs push
+	// tokens with; deliveries from any other principal are rejected.
+	PushServiceAccount string `yaml:"push_service_account"`
+}
+
+// PollIntervalDuration returns the parsed poll interval, defaulting to 1s when
+// unset. validate() has already rejected unparseable or non-positive values.
+func (c PostgresPubSub) PollIntervalDuration() time.Duration {
+	if c.PollInterval == "" {
+		return time.Second
+	}
+	d, _ := time.ParseDuration(c.PollInterval)
+	return d
 }
 
 type GitHubConfig struct {
@@ -186,7 +221,6 @@ func defaultConfig() Config {
 		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
 		Encryption: EncryptionConfig{Provider: "local"},
-		PubSub:     PubSubConfig{Provider: "memory"},
 		GitHub:     GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
 		Slack:      SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
 		Linear: LinearConfig{
@@ -301,6 +335,25 @@ func (c *Config) validate() error {
 	}
 	if len(c.WorkOS.CookiePassword) < 32 {
 		return fmt.Errorf("workos.cookie_password must be at least 32 characters (got %d)", len(c.WorkOS.CookiePassword))
+	}
+	switch c.PubSub.Provider {
+	case "", "postgres":
+		if pi := c.PubSub.Postgres.PollInterval; pi != "" {
+			d, err := time.ParseDuration(pi)
+			if err != nil {
+				return fmt.Errorf("pubsub.postgres.poll_interval: %w", err)
+			}
+			if d <= 0 {
+				return fmt.Errorf("pubsub.postgres.poll_interval must be positive (got %s)", d)
+			}
+		}
+	case "gcp":
+		g := c.PubSub.GCP
+		if g.ProjectID == "" || g.PushAudience == "" || g.PushServiceAccount == "" {
+			return fmt.Errorf("pubsub.provider=gcp requires pubsub.gcp.project_id, push_audience, and push_service_account")
+		}
+	default:
+		return fmt.Errorf("unknown pubsub.provider %q (want postgres or gcp)", c.PubSub.Provider)
 	}
 	return nil
 }

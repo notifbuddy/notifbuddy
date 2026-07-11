@@ -1,0 +1,55 @@
+# Eventing topology — the single source of truth for topics and consumers.
+#
+# Read by BOTH:
+#   - the backend (go:embed in manifest.go): topic creation on the postgres
+#     provider, and the subscription list main.go binds handlers to
+#   - infra (infra via yamldecode): GCP Pub/Sub topics and push
+#     subscriptions
+#
+# Editing this file is how a topic or consumer is added; main.go only binds a
+# handler function to a subscription name, and startup fails on any mismatch.
+# Topic name changes are effectively new topics on both providers (new tables /
+# new GCP topics) — old messages don't migrate.
+
+topics:
+  # Raw webhook deliveries (payload = the provider's raw body), published by
+  # the HTTP receivers after signature verification.
+  - integrations.github.webhook.received
+  - integrations.linear.webhook.received
+  - integrations.slack.webhook.received
+  # Processed webhook envelopes, published by the writer once a delivery is
+  # persisted and deduplicated.
+  - integrations.github.webhook_event
+  - integrations.linear.webhook_event
+  - integrations.slack.webhook_event
+  # Sync-engine audit events (no consumers yet; dev-logger sees them locally).
+  - sync.slack.channel.created
+  - sync.slack.channel.closed
+  - sync.slack.channel.deleted
+  - sync.slack.bots.added
+  - sync.slack.message.posted
+  - sync.linear.comment.posted
+  # Dead-letter parking for messages that exhaust their retries.
+  - pubsub.poison
+
+# One entry per consumer per topic — this is the fanout: every subscription on
+# a topic independently receives every message. The key is the subscription's
+# stable identity (the GCP subscription ID and the watermill handler name);
+# group is the postgres consumer group (subscriptions sharing a group share
+# one delivery offset per topic; GCP ignores it).
+subscriptions:
+  writer-github:
+    topic: integrations.github.webhook.received
+    group: writer
+  writer-linear:
+    topic: integrations.linear.webhook.received
+    group: writer
+  writer-slack:
+    topic: integrations.slack.webhook.received
+    group: writer
+  sync-linear:
+    topic: integrations.linear.webhook_event
+    group: sync-engine
+  sync-slack:
+    topic: integrations.slack.webhook_event
+    group: sync-engine

@@ -66,3 +66,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Pool exposes the underlying pgx pool for components that manage their own
+// queries against the same database (the watermill pub/sub backend).
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }

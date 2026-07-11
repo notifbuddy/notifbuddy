@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"hash"
 	"io"
 	"log"
@@ -15,13 +16,17 @@ import (
 	"xolo/backend/internal/store"
 )
 
-// GitHubWebhookTopic is the logical topic fired for each GitHub webhook we
-// receive. Backends (memory/SNS) map it to a concrete destination.
+// GitHubWebhookReceivedTopic carries each verified raw GitHub delivery from
+// the HTTP receiver to the writer consumer (payload = raw webhook body).
+const GitHubWebhookReceivedTopic = "integrations.github.webhook.received"
+
+// GitHubWebhookTopic is the processed topic the writer fires once a delivery
+// is persisted.
 const GitHubWebhookTopic = "integrations.github.webhook_event"
 
 const maxWebhookBody = 5 << 20 // 5 MiB, generous for GitHub payloads
 
-// githubWebhookEvent is the published event shape (also what subscribers see).
+// githubWebhookEvent is the envelope published on GitHubWebhookTopic.
 type githubWebhookEvent struct {
 	DeliveryID     string `json:"delivery_id"`
 	EventType      string `json:"event_type"`
@@ -30,15 +35,11 @@ type githubWebhookEvent struct {
 	OrgID          string `json:"org_id,omitempty"`
 }
 
-// HandleGitHubWebhook receives a GitHub webhook delivery. It performs two
-// deliberately separate operations:
-//
-//  1. Verify the HMAC signature, then STORE the event durably (source of truth).
-//  2. PUBLISH integrations.github.webhook_event as a notification.
-//
-// Publishing is best-effort: if it fails we log and still return 202, because
-// the event is already stored and we don't want GitHub to redeliver just because
-// the notification fan-out hiccuped. The two ops are never merged.
+// HandleGitHubWebhook receives a GitHub webhook delivery. It only verifies the
+// HMAC signature and publishes the raw body durably on
+// integrations.github.webhook.received; persistence (and dedup on delivery id)
+// happens in the writer consumer. A publish failure returns 5xx so GitHub
+// redelivers.
 func (s *Service) HandleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if !s.Enabled() {
 		http.Error(w, "integrations not configured", http.StatusServiceUnavailable)
@@ -79,66 +80,83 @@ func (s *Service) HandleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		installationID = ""
 	}
 
-	// Resolve which org owns this installation (best-effort).
-	orgID := ""
-	if installationID != "" {
-		if id, err := s.store.OrgIDByGitHubInstallation(r.Context(), installationID); err == nil {
-			orgID = id
-		}
-	}
-
-	// 1b. STORE (op 1) — durable source of truth. Idempotent on delivery id.
-	inserted, err := s.store.InsertGitHubWebhookEvent(r.Context(), store.GitHubWebhookEvent{
-		DeliveryID:     deliveryID,
-		EventType:      eventType,
-		InstallationID: installationID,
-		OrgID:          orgID,
-		Action:         parsed.Action,
-		Payload:        json.RawMessage(body),
-	})
-	if err != nil {
-		log.Printf("integrations: store github webhook %s: %v", deliveryID, err)
-		http.Error(w, "failed to store event", http.StatusInternalServerError)
+	// PUBLISH the raw delivery durably; the writer consumer persists it (dedup
+	// on delivery id) and fires the processed topic. A failed publish means the
+	// delivery is not recorded anywhere, so surface a 5xx for GitHub to retry.
+	if err := s.pub.Publish(r.Context(), pubsub.Message{
+		Topic:   GitHubWebhookReceivedTopic,
+		Payload: body,
+		Attributes: map[string]string{
+			"delivery_id":     deliveryID,
+			"event_type":      eventType,
+			"action":          parsed.Action,
+			"installation_id": installationID,
+		},
+	}); err != nil {
+		log.Printf("integrations: publish github webhook %s: %v", deliveryID, err)
+		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
-	if !inserted {
-		// Redelivery of an already-stored event: ack without re-publishing.
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// 2. PUBLISH (op 2) — separate, best-effort notification.
-	s.publishGitHubWebhook(r, githubWebhookEvent{
-		DeliveryID:     deliveryID,
-		EventType:      eventType,
-		Action:         parsed.Action,
-		InstallationID: installationID,
-		OrgID:          orgID,
-	})
 
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// publishGitHubWebhook fires integrations.github.webhook_event. Failures are
-// logged, not surfaced — the event is already stored.
-func (s *Service) publishGitHubWebhook(r *http.Request, evt githubWebhookEvent) {
+// WriteGitHubWebhook consumes integrations.github.webhook.received: it
+// resolves the owning org, persists the delivery (idempotent on delivery id),
+// and publishes the routing envelope on the processed topic. A returned error
+// nacks the message for redelivery — including when the insert committed but
+// the envelope publish failed, which the envelope_published flag turns into a
+// publish retry instead of a lost event.
+func (s *Service) WriteGitHubWebhook(ctx context.Context, msg pubsub.Message) error {
+	evt := githubWebhookEvent{
+		DeliveryID:     msg.Attributes["delivery_id"],
+		EventType:      msg.Attributes["event_type"],
+		Action:         msg.Attributes["action"],
+		InstallationID: msg.Attributes["installation_id"],
+	}
+
+	// Resolve which org owns this installation (best-effort).
+	if evt.InstallationID != "" {
+		if id, err := s.store.OrgIDByGitHubInstallation(ctx, evt.InstallationID); err == nil {
+			evt.OrgID = id
+		}
+	}
+
+	inserted, published, err := s.store.InsertGitHubWebhookEvent(ctx, store.GitHubWebhookEvent{
+		DeliveryID:     evt.DeliveryID,
+		EventType:      evt.EventType,
+		InstallationID: evt.InstallationID,
+		OrgID:          evt.OrgID,
+		Action:         evt.Action,
+		Payload:        json.RawMessage(msg.Payload),
+	})
+	if err != nil {
+		return fmt.Errorf("store github webhook %s: %w", evt.DeliveryID, err)
+	}
+	if !inserted && published {
+		return nil // redelivery of a fully-processed delivery: consume silently
+	}
+
 	payload, err := json.Marshal(evt)
 	if err != nil {
-		log.Printf("integrations: marshal webhook event %s: %v", evt.DeliveryID, err)
-		return
+		return fmt.Errorf("marshal github envelope %s: %w", evt.DeliveryID, err)
 	}
-	msg := pubsub.Message{
+	if err := s.pub.Publish(ctx, pubsub.Message{
 		Topic:   GitHubWebhookTopic,
 		Payload: payload,
 		Attributes: map[string]string{
 			"event_type": evt.EventType,
 			"org_id":     evt.OrgID,
 		},
+	}); err != nil {
+		return fmt.Errorf("publish github envelope %s: %w", evt.DeliveryID, err)
 	}
-	if err := s.pub.Publish(r.Context(), msg); err != nil {
-		log.Printf("integrations: publish %s for delivery %s failed (event stored): %v",
-			GitHubWebhookTopic, evt.DeliveryID, err)
+	// Failure here only risks a duplicate envelope on a later redelivery,
+	// which downstream consumers must tolerate anyway (at-least-once).
+	if err := s.store.MarkGitHubWebhookPublished(ctx, evt.DeliveryID); err != nil {
+		log.Printf("integrations: %v", err)
 	}
+	return nil
 }
 
 // validGitHubSignature checks the X-Hub-Signature-256 header (format
