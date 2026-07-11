@@ -19,20 +19,36 @@ type GitHubWebhookEvent struct {
 	ReceivedAt     string
 }
 
-// InsertGitHubWebhookEvent stores a received webhook. On a duplicate delivery id
-// (GitHub redelivery) it does nothing and reports inserted=false, so the caller
-// can treat redeliveries idempotently.
-func (s *Store) InsertGitHubWebhookEvent(ctx context.Context, e GitHubWebhookEvent) (inserted bool, err error) {
-	tag, err := s.pool.Exec(ctx, `
+// InsertGitHubWebhookEvent stores a received webhook, idempotent on delivery
+// id. It reports whether this call inserted the row (false on a GitHub
+// redelivery) and whether the processed-topic envelope was already published,
+// so the writer can retry a publish that failed after the insert committed.
+func (s *Store) InsertGitHubWebhookEvent(ctx context.Context, e GitHubWebhookEvent) (inserted, published bool, err error) {
+	// The no-op DO UPDATE makes RETURNING yield a row on conflict too;
+	// xmax = 0 distinguishes a fresh insert from an existing row.
+	err = s.pool.QueryRow(ctx, `
 		INSERT INTO github_webhook_events
 			(delivery_id, event_type, installation_id, org_id, action, payload)
 		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6)
-		ON CONFLICT (delivery_id) DO NOTHING
-	`, e.DeliveryID, e.EventType, e.InstallationID, e.OrgID, e.Action, []byte(e.Payload))
+		ON CONFLICT (delivery_id) DO UPDATE SET delivery_id = EXCLUDED.delivery_id
+		RETURNING (xmax = 0), envelope_published
+	`, e.DeliveryID, e.EventType, e.InstallationID, e.OrgID, e.Action, []byte(e.Payload)).Scan(&inserted, &published)
 	if err != nil {
-		return false, fmt.Errorf("store: insert webhook event: %w", err)
+		return false, false, fmt.Errorf("store: insert webhook event: %w", err)
 	}
-	return tag.RowsAffected() > 0, nil
+	return inserted, published, nil
+}
+
+// MarkGitHubWebhookPublished records that the processed-topic envelope for a
+// delivery has been published.
+func (s *Store) MarkGitHubWebhookPublished(ctx context.Context, deliveryID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE github_webhook_events SET envelope_published = true WHERE delivery_id = $1
+	`, deliveryID)
+	if err != nil {
+		return fmt.Errorf("store: mark webhook published: %w", err)
+	}
+	return nil
 }
 
 // ListGitHubWebhookEvents returns an org's most recent webhook events, newest
@@ -94,20 +110,34 @@ type LinearWebhookEvent struct {
 	ReceivedAt  string
 }
 
-// InsertLinearWebhookEvent stores a received Linear webhook. On a duplicate
-// delivery id (redelivery) it does nothing and reports inserted=false, so the
-// caller can treat redeliveries idempotently.
-func (s *Store) InsertLinearWebhookEvent(ctx context.Context, e LinearWebhookEvent) (inserted bool, err error) {
-	tag, err := s.pool.Exec(ctx, `
+// InsertLinearWebhookEvent stores a received Linear webhook, idempotent on
+// delivery id. It reports whether this call inserted the row (false on a
+// redelivery) and whether the processed-topic envelope was already published,
+// so the writer can retry a publish that failed after the insert committed.
+func (s *Store) InsertLinearWebhookEvent(ctx context.Context, e LinearWebhookEvent) (inserted, published bool, err error) {
+	err = s.pool.QueryRow(ctx, `
 		INSERT INTO linear_webhook_events
 			(delivery_id, event_type, workspace_id, org_id, action, payload)
 		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6)
-		ON CONFLICT (delivery_id) DO NOTHING
-	`, e.DeliveryID, e.EventType, e.WorkspaceID, e.OrgID, e.Action, []byte(e.Payload))
+		ON CONFLICT (delivery_id) DO UPDATE SET delivery_id = EXCLUDED.delivery_id
+		RETURNING (xmax = 0), envelope_published
+	`, e.DeliveryID, e.EventType, e.WorkspaceID, e.OrgID, e.Action, []byte(e.Payload)).Scan(&inserted, &published)
 	if err != nil {
-		return false, fmt.Errorf("store: insert linear webhook event: %w", err)
+		return false, false, fmt.Errorf("store: insert linear webhook event: %w", err)
 	}
-	return tag.RowsAffected() > 0, nil
+	return inserted, published, nil
+}
+
+// MarkLinearWebhookPublished records that the processed-topic envelope for a
+// delivery has been published.
+func (s *Store) MarkLinearWebhookPublished(ctx context.Context, deliveryID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE linear_webhook_events SET envelope_published = true WHERE delivery_id = $1
+	`, deliveryID)
+	if err != nil {
+		return fmt.Errorf("store: mark linear webhook published: %w", err)
+	}
+	return nil
 }
 
 // ListLinearWebhookEvents returns an org's most recent Linear webhook events,
@@ -196,20 +226,34 @@ type SlackWebhookEvent struct {
 	ReceivedAt string
 }
 
-// InsertSlackWebhookEvent stores a received Slack event. On a duplicate event id
-// (Slack retry) it does nothing and reports inserted=false, so the caller can
-// treat retries idempotently.
-func (s *Store) InsertSlackWebhookEvent(ctx context.Context, e SlackWebhookEvent) (inserted bool, err error) {
-	tag, err := s.pool.Exec(ctx, `
+// InsertSlackWebhookEvent stores a received Slack event, idempotent on Slack's
+// event id. It reports whether this call inserted the row (false on a Slack
+// retry) and whether the processed-topic envelope was already published, so
+// the writer can retry a publish that failed after the insert committed.
+func (s *Store) InsertSlackWebhookEvent(ctx context.Context, e SlackWebhookEvent) (inserted, published bool, err error) {
+	err = s.pool.QueryRow(ctx, `
 		INSERT INTO slack_webhook_events
 			(event_id, event_type, team_id, org_id, channel_id, payload)
 		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6)
-		ON CONFLICT (event_id) DO NOTHING
-	`, e.EventID, e.EventType, e.TeamID, e.OrgID, e.ChannelID, []byte(e.Payload))
+		ON CONFLICT (event_id) DO UPDATE SET event_id = EXCLUDED.event_id
+		RETURNING (xmax = 0), envelope_published
+	`, e.EventID, e.EventType, e.TeamID, e.OrgID, e.ChannelID, []byte(e.Payload)).Scan(&inserted, &published)
 	if err != nil {
-		return false, fmt.Errorf("store: insert slack webhook event: %w", err)
+		return false, false, fmt.Errorf("store: insert slack webhook event: %w", err)
 	}
-	return tag.RowsAffected() > 0, nil
+	return inserted, published, nil
+}
+
+// MarkSlackWebhookPublished records that the processed-topic envelope for an
+// event has been published.
+func (s *Store) MarkSlackWebhookPublished(ctx context.Context, eventID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE slack_webhook_events SET envelope_published = true WHERE event_id = $1
+	`, eventID)
+	if err != nil {
+		return fmt.Errorf("store: mark slack webhook published: %w", err)
+	}
+	return nil
 }
 
 // ListSlackWebhookEvents returns an org's most recent Slack webhook events,

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"hash"
 	"io"
 	"log"
@@ -15,11 +16,15 @@ import (
 	"xolo/backend/internal/store"
 )
 
-// LinearWebhookTopic is the logical topic fired for each Linear webhook we
-// receive. Backends (memory/SNS) map it to a concrete destination.
+// LinearWebhookReceivedTopic carries each verified raw Linear delivery from
+// the HTTP receiver to the writer consumer (payload = raw webhook body).
+const LinearWebhookReceivedTopic = "integrations.linear.webhook.received"
+
+// LinearWebhookTopic is the processed topic the writer fires once a delivery
+// is persisted; subscribers (the sync engine) re-read the stored payload.
 const LinearWebhookTopic = "integrations.linear.webhook_event"
 
-// linearWebhookEvent is the published event shape (also what subscribers see).
+// linearWebhookEvent is the envelope published on LinearWebhookTopic.
 type linearWebhookEvent struct {
 	DeliveryID  string `json:"delivery_id"`
 	EventType   string `json:"event_type"`
@@ -28,11 +33,10 @@ type linearWebhookEvent struct {
 	OrgID       string `json:"org_id,omitempty"`
 }
 
-// HandleLinearWebhook receives a Linear webhook delivery. Like the GitHub
-// receiver it performs two deliberately separate operations:
-//
-//  1. Verify the Linear-Signature HMAC, then STORE the event durably.
-//  2. PUBLISH integrations.linear.webhook_event as a best-effort notification.
+// HandleLinearWebhook receives a Linear webhook delivery. It only verifies the
+// Linear-Signature HMAC and publishes the raw body durably on
+// integrations.linear.webhook.received; persistence (and dedup) happens in the
+// writer consumer. A publish failure returns 5xx so Linear redelivers.
 //
 // Linear has no per-delivery header, so the delivery id is derived from the
 // payload's webhookId + webhookTimestamp, which makes redeliveries idempotent.
@@ -83,66 +87,83 @@ func (s *Service) HandleLinearWebhook(w http.ResponseWriter, r *http.Request) {
 		deliveryID = hex.EncodeToString(sum[:])
 	}
 
-	// Resolve which org owns this workspace (best-effort).
-	orgID := ""
-	if parsed.OrganizationID != "" {
-		if id, err := s.store.OrgIDByLinearWorkspace(r.Context(), parsed.OrganizationID); err == nil {
-			orgID = id
-		}
-	}
-
-	// 1b. STORE (op 1) — durable source of truth. Idempotent on delivery id.
-	inserted, err := s.store.InsertLinearWebhookEvent(r.Context(), store.LinearWebhookEvent{
-		DeliveryID:  deliveryID,
-		EventType:   parsed.Type,
-		WorkspaceID: parsed.OrganizationID,
-		OrgID:       orgID,
-		Action:      parsed.Action,
-		Payload:     json.RawMessage(body),
-	})
-	if err != nil {
-		log.Printf("integrations: store linear webhook %s: %v", deliveryID, err)
-		http.Error(w, "failed to store event", http.StatusInternalServerError)
+	// PUBLISH the raw delivery durably; the writer consumer persists it (dedup
+	// on delivery id) and fires the processed topic. A failed publish means the
+	// delivery is not recorded anywhere, so surface a 5xx for Linear to retry.
+	if err := s.pub.Publish(r.Context(), pubsub.Message{
+		Topic:   LinearWebhookReceivedTopic,
+		Payload: body,
+		Attributes: map[string]string{
+			"delivery_id":  deliveryID,
+			"event_type":   parsed.Type,
+			"action":       parsed.Action,
+			"workspace_id": parsed.OrganizationID,
+		},
+	}); err != nil {
+		log.Printf("integrations: publish linear webhook %s: %v", deliveryID, err)
+		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
-	if !inserted {
-		// Redelivery of an already-stored event: ack without re-publishing.
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// 2. PUBLISH (op 2) — separate, best-effort notification.
-	s.publishLinearWebhook(r, linearWebhookEvent{
-		DeliveryID:  deliveryID,
-		EventType:   parsed.Type,
-		Action:      parsed.Action,
-		WorkspaceID: parsed.OrganizationID,
-		OrgID:       orgID,
-	})
 
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// publishLinearWebhook fires integrations.linear.webhook_event. Failures are
-// logged, not surfaced — the event is already stored.
-func (s *Service) publishLinearWebhook(r *http.Request, evt linearWebhookEvent) {
+// WriteLinearWebhook consumes integrations.linear.webhook.received: it
+// resolves the owning org, persists the delivery (idempotent on delivery id),
+// and publishes the routing envelope on the processed topic. A returned error
+// nacks the message for redelivery — including when the insert committed but
+// the envelope publish failed, which the envelope_published flag turns into a
+// publish retry instead of a lost event.
+func (s *Service) WriteLinearWebhook(ctx context.Context, msg pubsub.Message) error {
+	evt := linearWebhookEvent{
+		DeliveryID:  msg.Attributes["delivery_id"],
+		EventType:   msg.Attributes["event_type"],
+		Action:      msg.Attributes["action"],
+		WorkspaceID: msg.Attributes["workspace_id"],
+	}
+
+	// Resolve which org owns this workspace (best-effort).
+	if evt.WorkspaceID != "" {
+		if id, err := s.store.OrgIDByLinearWorkspace(ctx, evt.WorkspaceID); err == nil {
+			evt.OrgID = id
+		}
+	}
+
+	inserted, published, err := s.store.InsertLinearWebhookEvent(ctx, store.LinearWebhookEvent{
+		DeliveryID:  evt.DeliveryID,
+		EventType:   evt.EventType,
+		WorkspaceID: evt.WorkspaceID,
+		OrgID:       evt.OrgID,
+		Action:      evt.Action,
+		Payload:     json.RawMessage(msg.Payload),
+	})
+	if err != nil {
+		return fmt.Errorf("store linear webhook %s: %w", evt.DeliveryID, err)
+	}
+	if !inserted && published {
+		return nil // redelivery of a fully-processed delivery: consume silently
+	}
+
 	payload, err := json.Marshal(evt)
 	if err != nil {
-		log.Printf("integrations: marshal linear webhook event %s: %v", evt.DeliveryID, err)
-		return
+		return fmt.Errorf("marshal linear envelope %s: %w", evt.DeliveryID, err)
 	}
-	msg := pubsub.Message{
+	if err := s.pub.Publish(ctx, pubsub.Message{
 		Topic:   LinearWebhookTopic,
 		Payload: payload,
 		Attributes: map[string]string{
 			"event_type": evt.EventType,
 			"org_id":     evt.OrgID,
 		},
+	}); err != nil {
+		return fmt.Errorf("publish linear envelope %s: %w", evt.DeliveryID, err)
 	}
-	if err := s.pub.Publish(r.Context(), msg); err != nil {
-		log.Printf("integrations: publish %s for delivery %s failed (event stored): %v",
-			LinearWebhookTopic, evt.DeliveryID, err)
+	// Failure here only risks a duplicate envelope on a later redelivery,
+	// which downstream consumers must tolerate anyway (at-least-once).
+	if err := s.store.MarkLinearWebhookPublished(ctx, evt.DeliveryID); err != nil {
+		log.Printf("integrations: %v", err)
 	}
+	return nil
 }
 
 // validLinearSignature checks the Linear-Signature header (a hex-encoded

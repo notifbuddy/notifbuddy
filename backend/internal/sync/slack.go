@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	"xolo/backend/internal/integrations"
@@ -34,64 +35,64 @@ type slackPayload struct {
 }
 
 // OnSlackEvent is the subscriber for integrations.slack.webhook_event. It
-// mirrors a human Slack message in a synced channel into a Linear comment on the
-// mapped issue.
-func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) {
+// mirrors a human Slack message in a synced channel into a Linear comment on
+// the mapped issue. A returned error nacks the message for redelivery; errors
+// after the Linear comment exists are only logged so a retry can't double-post.
+func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	var ref slackEventRef
 	if err := json.Unmarshal(msg.Payload, &ref); err != nil {
 		log.Printf("sync: slack event: bad ref: %v", err)
-		return
+		return nil
 	}
 	if ref.OrgID == "" {
-		return
+		return nil
 	}
 	if e.orgLocked(ctx, ref.OrgID) {
 		log.Printf("sync: slack event %s: org %s locked (billing); dropped", ref.EventID, ref.OrgID)
-		return
+		return nil
 	}
 
+	// The writer persisted the payload before publishing the envelope, so a
+	// failure here is transient and worth a retry.
 	raw, err := e.store.SlackWebhookPayload(ctx, ref.EventID)
 	if err != nil {
-		log.Printf("sync: slack event %s: load payload: %v", ref.EventID, err)
-		return
+		return fmt.Errorf("slack event %s: load payload: %w", ref.EventID, err)
 	}
 	var p slackPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		log.Printf("sync: slack event %s: parse payload: %v", ref.EventID, err)
-		return
+		return nil
 	}
 	ev := p.Event
 
 	// Only real user messages mirror.
 	if ev.Type != "message" {
-		return
+		return nil
 	}
 	// Defense 1: drop the bot's own messages. Our mirrored posts are authored by
 	// the bot (bot_id set); message subtypes like bot_message / message_changed
 	// are also not human posts. This is what stops the Linear->Slack->Linear echo.
 	if ev.BotID != "" || ev.Subtype != "" || ev.User == "" {
-		return
+		return nil
 	}
 
 	token, err := e.intg.SlackBotToken(ctx, ref.OrgID)
 	if err != nil {
-		log.Printf("sync: slack event: slack token: %v", err)
-		return
+		return fmt.Errorf("slack event %s: slack token: %w", ref.EventID, err)
 	}
 	// Belt check: if we can resolve our own bot user id and it authored this,
 	// drop it. (Covers the rare case a mirrored post lacks bot_id.)
 	if botID, err := e.slack.AuthTestUserID(ctx, token); err == nil && botID != "" && botID == ev.User {
-		return
+		return nil
 	}
 
 	// Route: which Linear issue owns this channel?
 	issueID, err := e.store.IssueForChannel(ctx, ref.OrgID, ev.Channel)
 	if errors.Is(err, store.ErrNotFound) {
-		return // message in a channel we don't sync
+		return nil // message in a channel we don't sync
 	}
 	if err != nil {
-		log.Printf("sync: slack event: issue lookup: %v", err)
-		return
+		return fmt.Errorf("slack event %s: issue lookup: %w", ref.EventID, err)
 	}
 
 	// Resolve a thread parent: a reply (thread_ts != ts) maps to the Linear
@@ -116,8 +117,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) {
 		DisplayIconURL: iconURL,
 	})
 	if err != nil {
-		log.Printf("sync: slack event: create linear comment: %v", err)
-		return
+		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)
 	}
 
 	if rootLinearComment == "" {
@@ -141,6 +141,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) {
 		SlackChannel:    ev.Channel,
 		SlackTS:         ev.TS,
 	})
+	return nil
 }
 
 // slackAuthor resolves a Slack user id to a display name + avatar for

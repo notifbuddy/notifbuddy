@@ -17,8 +17,12 @@ import (
 	"xolo/backend/internal/store"
 )
 
-// SlackWebhookTopic is the logical topic fired for each inbound Slack event we
-// receive and store. Backends (memory/SNS) map it to a concrete destination.
+// SlackWebhookReceivedTopic carries each verified raw Slack event_callback
+// from the HTTP receiver to the writer consumer (payload = raw event body).
+const SlackWebhookReceivedTopic = "integrations.slack.webhook.received"
+
+// SlackWebhookTopic is the processed topic the writer fires once an event is
+// persisted; subscribers (the sync engine) re-read the stored payload.
 const SlackWebhookTopic = "integrations.slack.webhook_event"
 
 // slackMaxTimestampSkew is how stale a Slack request timestamp may be before we
@@ -98,67 +102,84 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve which org owns this workspace (best-effort).
-	orgID := ""
-	if env.TeamID != "" {
-		if id, err := s.store.OrgIDBySlackTeam(r.Context(), env.TeamID); err == nil {
-			orgID = id
-		}
-	}
-
-	// 2a. STORE — durable source of truth. Idempotent on Slack's event id.
-	inserted, err := s.store.InsertSlackWebhookEvent(r.Context(), store.SlackWebhookEvent{
-		EventID:   env.EventID,
-		EventType: env.Event.Type,
-		TeamID:    env.TeamID,
-		OrgID:     orgID,
-		ChannelID: env.Event.Channel,
-		Payload:   json.RawMessage(body),
-	})
-	if err != nil {
-		log.Printf("integrations: store slack webhook %s: %v", env.EventID, err)
-		http.Error(w, "failed to store event", http.StatusInternalServerError)
-		return
-	}
-	if !inserted {
-		// Retry of an already-stored event: ack without re-publishing.
-		w.WriteHeader(http.StatusOK)
+	// PUBLISH the raw event durably; the writer consumer persists it (dedup on
+	// Slack's event id) and fires the processed topic. A failed publish means
+	// the event is not recorded anywhere, so surface a 5xx for Slack to retry.
+	// Slack expects a response within 3 seconds; a publish is one INSERT.
+	if err := s.pub.Publish(r.Context(), pubsub.Message{
+		Topic:   SlackWebhookReceivedTopic,
+		Payload: body,
+		Attributes: map[string]string{
+			"event_id":   env.EventID,
+			"event_type": env.Event.Type,
+			"team_id":    env.TeamID,
+			"channel_id": env.Event.Channel,
+		},
+	}); err != nil {
+		log.Printf("integrations: publish slack webhook %s: %v", env.EventID, err)
+		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
 
-	// 2b. PUBLISH — separate, best-effort notification.
-	s.publishSlackWebhook(r, slackWebhookEvent{
-		EventID:   env.EventID,
-		EventType: env.Event.Type,
-		TeamID:    env.TeamID,
-		OrgID:     orgID,
-		ChannelID: env.Event.Channel,
-	})
-
-	// Slack expects a 200 within 3 seconds; publishing is async of that.
 	w.WriteHeader(http.StatusOK)
 }
 
-// publishSlackWebhook fires integrations.slack.webhook_event. Failures are
-// logged, not surfaced — the event is already stored.
-func (s *Service) publishSlackWebhook(r *http.Request, evt slackWebhookEvent) {
+// WriteSlackWebhook consumes integrations.slack.webhook.received: it resolves
+// the owning org, persists the event (idempotent on Slack's event id), and
+// publishes the routing envelope on the processed topic. A returned error
+// nacks the message for redelivery — including when the insert committed but
+// the envelope publish failed, which the envelope_published flag turns into a
+// publish retry instead of a lost event.
+func (s *Service) WriteSlackWebhook(ctx context.Context, msg pubsub.Message) error {
+	evt := slackWebhookEvent{
+		EventID:   msg.Attributes["event_id"],
+		EventType: msg.Attributes["event_type"],
+		TeamID:    msg.Attributes["team_id"],
+		ChannelID: msg.Attributes["channel_id"],
+	}
+
+	// Resolve which org owns this workspace (best-effort).
+	if evt.TeamID != "" {
+		if id, err := s.store.OrgIDBySlackTeam(ctx, evt.TeamID); err == nil {
+			evt.OrgID = id
+		}
+	}
+
+	inserted, published, err := s.store.InsertSlackWebhookEvent(ctx, store.SlackWebhookEvent{
+		EventID:   evt.EventID,
+		EventType: evt.EventType,
+		TeamID:    evt.TeamID,
+		OrgID:     evt.OrgID,
+		ChannelID: evt.ChannelID,
+		Payload:   json.RawMessage(msg.Payload),
+	})
+	if err != nil {
+		return fmt.Errorf("store slack webhook %s: %w", evt.EventID, err)
+	}
+	if !inserted && published {
+		return nil // retry of a fully-processed event: consume silently
+	}
+
 	payload, err := json.Marshal(evt)
 	if err != nil {
-		log.Printf("integrations: marshal slack webhook event %s: %v", evt.EventID, err)
-		return
+		return fmt.Errorf("marshal slack envelope %s: %w", evt.EventID, err)
 	}
-	msg := pubsub.Message{
+	if err := s.pub.Publish(ctx, pubsub.Message{
 		Topic:   SlackWebhookTopic,
 		Payload: payload,
 		Attributes: map[string]string{
 			"event_type": evt.EventType,
 			"org_id":     evt.OrgID,
 		},
+	}); err != nil {
+		return fmt.Errorf("publish slack envelope %s: %w", evt.EventID, err)
 	}
-	if err := s.pub.Publish(r.Context(), msg); err != nil {
-		log.Printf("integrations: publish %s for event %s failed (event stored): %v",
-			SlackWebhookTopic, evt.EventID, err)
+	// Failure here only risks a duplicate envelope on a later redelivery,
+	// which downstream consumers must tolerate anyway (at-least-once).
+	if err := s.store.MarkSlackWebhookPublished(ctx, evt.EventID); err != nil {
+		log.Printf("integrations: %v", err)
 	}
+	return nil
 }
 
 // validSlackSignature verifies the X-Slack-Signature header. Slack computes

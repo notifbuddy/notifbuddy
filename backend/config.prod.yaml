@@ -37,8 +37,13 @@ encryption:
   kms_key_id: ""
 
 pubsub:
-  provider: "memory" # single Cloud Run service → in-process bus is fine; switch to "sns" if you scale out
-  sns_topic_arn: ""
+  # Pub/Sub push keeps Cloud Run + Neon scale-to-zero (no polling). Requires
+  # infra applied (topics/subscriptions/IAM) BEFORE deploying this.
+  provider: "gcp"
+  gcp:
+    project_id: "${GCP_PROJECT_ID}"
+    push_audience: "https://api.notifbuddy.com/internal/pubsub/push" # OIDC audience = push endpoint URL
+    push_service_account: "${PUBSUB_PUSH_SA}" # see infra
 
 github:
   app_slug: "notifbuddy" # TODO: prod GitHub App slug (github.com/apps/<slug>)

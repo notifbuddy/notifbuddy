@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -78,50 +79,53 @@ type linearPayload struct {
 	} `json:"linear"`
 }
 
-// OnLinearEvent is the subscriber for integrations.linear.webhook_event. It is
-// invoked on the bus's delivery goroutine; it does the work synchronously and
-// logs failures (there is no caller to return an error to).
-func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
+// OnLinearEvent is the subscriber for integrations.linear.webhook_event. A
+// returned error nacks the message so it is redelivered and retried; permanent
+// skips (bad payloads, unmapped orgs, our own echoes) return nil so the event
+// is consumed.
+func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	var ref linearEventRef
 	if err := json.Unmarshal(msg.Payload, &ref); err != nil {
 		log.Printf("sync: linear event: bad ref: %v", err)
-		return
+		return nil
 	}
 	if ref.OrgID == "" {
-		return // can't act without knowing the org
+		return nil // can't act without knowing the org
 	}
 	if e.orgLocked(ctx, ref.OrgID) {
 		log.Printf("sync: linear event %s: org %s locked (billing); dropped", ref.DeliveryID, ref.OrgID)
-		return
+		return nil
 	}
 
 	// Load the full stored payload (the ingestion topic carries only routing).
+	// The writer persisted it before publishing the envelope, so a failure here
+	// is transient and worth a retry.
 	raw, err := e.store.LinearWebhookPayload(ctx, ref.DeliveryID)
 	if err != nil {
-		log.Printf("sync: linear event %s: load payload: %v", ref.DeliveryID, err)
-		return
+		return fmt.Errorf("linear event %s: load payload: %w", ref.DeliveryID, err)
 	}
 	var p linearPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		log.Printf("sync: linear event %s: parse payload: %v", ref.DeliveryID, err)
-		return
+		return nil
 	}
 
 	// Defense 1: drop events our own Linear app caused. When we create a comment
 	// with actor=app, the resulting webhook carries a botActor — dropping it
 	// stops the echo from bouncing back into Slack.
 	if p.Linear.Data.BotActor != nil {
-		return
+		return nil
 	}
 
 	switch p.Linear.Type {
 	case "Issue":
-		e.onLinearIssue(ctx, ref.OrgID, p)
+		return e.onLinearIssue(ctx, ref.OrgID, p)
 	case "Comment":
-		e.onLinearComment(ctx, ref.OrgID, raw, p)
+		return e.onLinearComment(ctx, ref.OrgID, raw, p)
 	case "WorkflowState":
-		e.onLinearWorkflowState(ctx, ref.OrgID, p)
+		return e.onLinearWorkflowState(ctx, ref.OrgID, p)
 	}
+	return nil
 }
 
 // onLinearIssue handles the channel-creation and channel-archive rules. One
@@ -130,10 +134,10 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) {
 // issue without one is only a candidate for creation. Templates and conditions
 // evaluate against the forwarded event envelope, exactly as the settings test
 // UI does.
-func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayload) {
+func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayload) error {
 	settings, ok := e.settingForIssue(ctx, orgID, p)
 	if !ok {
-		return // no config applies to this issue's team
+		return nil // no config applies to this issue's team
 	}
 	issueID := p.Linear.Data.ID
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
@@ -147,23 +151,23 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 		archive, err := integrations.ArchiveTriggered(e.tmpl, settings, stateName, evt)
 		if err != nil {
 			log.Printf("sync: archive trigger eval: %v", err)
-			return
+			return nil // deterministic eval error; retrying can't help
 		}
 		if archive {
-			e.closeChannel(ctx, orgID, issueID)
+			return e.closeChannel(ctx, orgID, issueID)
 		}
-		return
+		return nil
 	}
 
 	create, err := integrations.CreateTriggered(e.tmpl, settings, stateName, evt)
 	if err != nil {
 		log.Printf("sync: create trigger eval: %v", err)
-		return
+		return nil // deterministic eval error; retrying can't help
 	}
 	if !create {
-		return
+		return nil
 	}
-	e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode)
+	return e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode)
 }
 
 // settingForIssue resolves the config that applies to an issue event's team.
@@ -197,59 +201,62 @@ func (e *Engine) settingForTeam(ctx context.Context, orgID, teamID string) (inte
 // onLinearWorkflowState keeps the org's synced status snapshot fresh: a
 // create/update upserts the state into its team's list; a remove deletes it.
 // This is what powers the settings status dropdown between full syncs.
-func (e *Engine) onLinearWorkflowState(ctx context.Context, orgID string, p linearPayload) {
+func (e *Engine) onLinearWorkflowState(ctx context.Context, orgID string, p linearPayload) error {
 	d := p.Linear.Data
 	teamID := d.Team.ID
 	if teamID == "" {
 		teamID = d.TeamID
 	}
 	if teamID == "" || d.ID == "" {
-		return
+		return nil
 	}
 	st := store.LinearWorkflowState{
 		ID: d.ID, Name: d.Name, Type: d.Type, Color: d.Color, Position: d.Position,
 	}
 	removed := p.Linear.Action == "remove"
+	// The patch is an idempotent upsert/delete, so a transient DB failure is
+	// safe to retry via redelivery.
 	if err := e.store.PatchLinearTeamState(ctx, orgID, teamID, st, removed); err != nil {
-		log.Printf("sync: linear workflow state %s (team %s): %v", d.ID, teamID, err)
+		return fmt.Errorf("linear workflow state %s (team %s): %w", d.ID, teamID, err)
 	}
+	return nil
 }
 
 // onLinearComment mirrors a human Linear comment into the issue's Slack channel,
-// or handles an @notifbuddy command in the comment body.
-func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, p linearPayload) {
+// or handles an @notifbuddy command in the comment body. Errors before the
+// Slack post are returned for retry; failures after it are only logged so a
+// redelivery can't double-post.
+func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, p linearPayload) error {
 	d := p.Linear.Data
 	if p.Linear.Action != "create" {
-		return // only new comments mirror (edits/removes are out of scope)
+		return nil // only new comments mirror (edits/removes are out of scope)
 	}
 	issueID := d.IssueID
 	if issueID == "" {
 		issueID = d.Issue.ID
 	}
 	if issueID == "" {
-		return
+		return nil
 	}
 
 	// @notifbuddy command? Classify the body; a create/close command short-
 	// circuits mirroring.
 	if e.handleNotifBuddy(ctx, orgID, issueID, d.Body, raw) {
-		return
+		return nil
 	}
 
 	// Otherwise mirror the comment into the channel (if the issue has one).
 	channelID, err := e.store.ChannelForIssue(ctx, orgID, issueID)
 	if errors.Is(err, store.ErrNotFound) {
-		return // no channel for this issue; nothing to mirror to
+		return nil // no channel for this issue; nothing to mirror to
 	}
 	if err != nil {
-		log.Printf("sync: linear comment: channel lookup: %v", err)
-		return
+		return fmt.Errorf("linear comment: channel lookup: %w", err)
 	}
 
 	token, err := e.intg.SlackBotToken(ctx, orgID)
 	if err != nil {
-		log.Printf("sync: linear comment: slack token: %v", err)
-		return
+		return fmt.Errorf("linear comment: slack token: %w", err)
 	}
 
 	// Resolve a thread parent: if this Linear comment is a reply, post it under
@@ -288,8 +295,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 		ThreadTS:  threadTS,
 	})
 	if err != nil {
-		log.Printf("sync: linear comment: post to slack: %v", err)
-		return
+		return fmt.Errorf("linear comment: post to slack: %w", err)
 	}
 
 	if rootSlackTS == "" {
@@ -313,10 +319,14 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 		SlackChannel:    channelID,
 		SlackTS:         ts,
 	})
+	return nil
 }
 
 // handleNotifBuddy classifies a comment body and, on a create/close command,
 // performs it. Returns true if the body was a command (mirroring should stop).
+// Commands stay best-effort: failures are logged, never retried via
+// redelivery — re-running the classifier on a redelivered comment could
+// re-execute a command the user already saw take effect.
 func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body string, raw []byte) bool {
 	if e.classifier == nil || !strings.Contains(strings.ToLower(body), "notifbuddy") {
 		return false
@@ -336,11 +346,15 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 		}
 		evt := template.Event{EventType: "linear", Linear: envelopeLinearRaw(raw)}
 		if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err != nil {
-			e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy")
+			if err := e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy"); err != nil {
+				log.Printf("sync: notifbuddy create: %v", err)
+			}
 		}
 		return true
 	case intent.CloseChannel:
-		e.closeChannel(ctx, orgID, issueID)
+		if err := e.closeChannel(ctx, orgID, issueID); err != nil {
+			log.Printf("sync: notifbuddy close: %v", err)
+		}
 		return true
 	default:
 		return false

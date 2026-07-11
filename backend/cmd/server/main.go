@@ -4,9 +4,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -24,6 +28,7 @@ import (
 	syncengine "xolo/backend/internal/sync"
 )
 
+
 func main() {
 	// Best-effort load of backend/.env so the env vars referenced by the config
 	// (e.g. $WORKOS_API_KEY) are present without any shell setup. Real env vars
@@ -37,7 +42,10 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
-	ctx := context.Background()
+	// Root context: canceled on SIGINT/SIGTERM, which drives the graceful
+	// shutdown of both the HTTP server and the pub/sub router.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Persistence: connect to Postgres (if configured) and run migrations.
 	// Integrations require it; if no DATABASE_URL is set we run without a store
@@ -67,11 +75,20 @@ func main() {
 	// Auth (WorkOS): redirect handlers + the session-loading middleware.
 	authSvc := auth.New(cfg)
 
-	// Pub/sub: provider-agnostic publisher for integration events. Local dev uses
-	// an in-memory bus; production selects SNS. Callers only see pubsub.Publisher.
-	// When the backend is the in-memory bus we also keep the concrete *MemoryBus
-	// so the sync engine can subscribe to the ingestion + processing topics.
-	publisher, bus := buildPublisher(cfg)
+	// Pub/sub: the provider-agnostic eventing bus (postgres/watermill or GCP
+	// Pub/Sub push, per pubsub.provider). Publishers and consumers see only
+	// the pubsub abstractions. Without a database we run degraded with
+	// pubsub.Nop and no consumers (webhook endpoints already report "not
+	// configured" in that mode).
+	var publisher pubsub.Publisher = pubsub.Nop
+	var bus pubsub.Bus
+	if st != nil {
+		bus, err = pubsub.NewBus(ctx, cfg.PubSub, st.Pool())
+		if err != nil {
+			log.Fatalf("pubsub: %v", err)
+		}
+		publisher = bus
+	}
 
 	// Integrations (GitHub/Slack/Linear): reads the caller's org/user from the
 	// session via auth.OrgUserFromRequest. Runs with a nil store when no DB is
@@ -89,11 +106,11 @@ func main() {
 		return len(members), nil
 	})
 
-	// Sync engine: subscribes to the Linear/Slack ingestion topics and performs
-	// the bidirectional sync (channel creation, comment mirroring). Only wired
-	// when there is a store and an in-memory bus to subscribe on; the SNS path
-	// consumes via a separate worker (not built here).
-	if st != nil && bus != nil {
+	// Consumers: the writer (persists raw webhook deliveries, then fires the
+	// processed topic) and the sync engine (bidirectional Slack<->Linear sync).
+	// Each Subscription is an independent consumer — every one receives every
+	// message of its topic, with its own retry state, on both providers.
+	if bus != nil {
 		classifier := intent.NewCloudflareClassifier(cfg.Cloudflare)
 		// Billing enforcement: locked orgs (expired trial, no subscription)
 		// have their inbound events dropped instead of synced.
@@ -105,9 +122,25 @@ func main() {
 			return status.Locked
 		}
 		engine := syncengine.New(st, slackapi.New(), intgSvc, classifier, publisher, orgLocked)
-		bus.Subscribe(integrations.LinearWebhookTopic, engine.OnLinearEvent)
-		bus.Subscribe(integrations.SlackWebhookTopic, engine.OnSlackEvent)
-		log.Printf("sync engine subscribed to linear + slack ingestion topics")
+
+		// The topology (topics + subscriptions with their topics/groups) lives
+		// in internal/pubsub/manifest.yaml, shared with infra; this map
+		// only binds a handler to each subscription name. BindSubscriptions
+		// fails on any mismatch in either direction.
+		subs, err := pubsub.BindSubscriptions(map[string]pubsub.Handler{
+			"writer-github": intgSvc.WriteGitHubWebhook,
+			"writer-linear": intgSvc.WriteLinearWebhook,
+			"writer-slack":  intgSvc.WriteSlackWebhook,
+			"sync-linear":   engine.OnLinearEvent,
+			"sync-slack":    engine.OnSlackEvent,
+		})
+		if err != nil {
+			log.Fatalf("pubsub: %v", err)
+		}
+		if err := bus.Start(ctx, subs); err != nil {
+			log.Fatalf("pubsub start: %v", err)
+		}
+		log.Printf("pubsub consumers running (provider %q)", cfg.PubSub.Provider)
 	}
 
 	// API handler (implements the ogen interface) + the generated server.
@@ -152,13 +185,40 @@ func main() {
 	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
 	mux.HandleFunc("POST /billing/stripe/webhook", billingSvc.HandleStripeWebhook)
 	mux.HandleFunc("POST /auth/workos/webhook", billingSvc.HandleWorkOSWebhook)
+	// Push-based pub/sub providers (gcp) deliver messages here; the handler
+	// does its own OIDC auth, like the provider webhooks above do signatures.
+	if bus != nil {
+		if push := bus.PushHandler(); push != nil {
+			mux.Handle("POST "+pubsub.PushPath, push)
+		}
+	}
 	mux.Handle("/", srv)
 
 	handler := httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin)
 
-	log.Printf("listening on %s (CORS allow-origin: %s)", cfg.Server.Addr, cfg.CORS.AllowOrigin)
-	if err := http.ListenAndServe(cfg.Server.Addr, handler); err != nil {
-		log.Fatalf("server: %v", err)
+	// Consumers are already live (bus.Start above), so serve HTTP. On
+	// SIGINT/SIGTERM: stop accepting HTTP (no new publishes, and on gcp no
+	// new push deliveries), then close the bus (drains consumers, flushes
+	// publishers), then the deferred st.Close() releases the pool.
+	httpSrv := &http.Server{Addr: cfg.Server.Addr, Handler: handler}
+	go func() {
+		log.Printf("listening on %s (CORS allow-origin: %s)", cfg.Server.Addr, cfg.CORS.AllowOrigin)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Printf("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("http shutdown: %v", err)
+	}
+	if bus != nil {
+		if err := bus.Close(); err != nil {
+			log.Printf("pubsub close: %v", err)
+		}
 	}
 }
 
@@ -184,40 +244,6 @@ func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, e
 		return nil, errWrap("encryption.provider=kms requires a KMS client to be wired into buildEncryptor")
 	default:
 		return nil, errWrap("unknown encryption.provider: " + cfg.Encryption.Provider)
-	}
-}
-
-// buildPublisher constructs the pub/sub Publisher from config. "memory" builds
-// an in-process bus and registers a logging subscriber on the webhook + sync
-// topics so published events are visible in dev; it returns the concrete
-// *MemoryBus too so callers (the sync engine) can subscribe. "sns" needs an AWS
-// SNS client wired into pubsub.NewSNSPublisher — until then it falls back to Nop
-// with a warning so the app still runs (and returns a nil bus).
-func buildPublisher(cfg config.Config) (pubsub.Publisher, *pubsub.MemoryBus) {
-	switch cfg.PubSub.Provider {
-	case "", "memory":
-		bus := pubsub.NewMemoryBus()
-		logSub := func(_ context.Context, msg pubsub.Message) {
-			log.Printf("pubsub(memory): %s %s", msg.Topic, string(msg.Payload))
-		}
-		for _, topic := range append([]string{
-			integrations.GitHubWebhookTopic,
-			integrations.LinearWebhookTopic,
-			integrations.SlackWebhookTopic,
-		}, syncengine.AllTopics...) {
-			bus.Subscribe(topic, logSub)
-		}
-		return bus, bus
-	case "sns":
-		// Wire your AWS SNS client here, e.g.:
-		//   client := awssns.New(...)
-		//   resolver := func(string) (string, bool) { return cfg.PubSub.SNSTopicARN, cfg.PubSub.SNSTopicARN != "" }
-		//   pub, err := pubsub.NewSNSPublisher(client, resolver)
-		log.Printf("warning: pubsub.provider=sns but no SNS client is wired — publishing disabled (Nop). See buildPublisher.")
-		return pubsub.Nop, nil
-	default:
-		log.Printf("warning: unknown pubsub.provider %q — publishing disabled (Nop)", cfg.PubSub.Provider)
-		return pubsub.Nop, nil
 	}
 }
 

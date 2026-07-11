@@ -18,35 +18,39 @@ import (
 // (name template + condition), records the issue↔channel mapping, auto-adds the
 // configured bots, and fires the processing topics. Caller has already checked
 // that no channel exists yet. trigger is "status" or "notifbuddy".
-func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, settings integrations.LinearSettings, evt template.Event, trigger string) {
-	// Condition gate (if configured): must evaluate true to proceed.
+//
+// Errors before the channel is created are returned so the event can be
+// redelivered and retried; once the channel exists, later failures are only
+// logged — a retry would create a duplicate channel, which is worse than a
+// missing mapping or invite.
+func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, settings integrations.LinearSettings, evt template.Event, trigger string) error {
+	// Condition gate (if configured): must evaluate true to proceed. Eval errors
+	// are deterministic (bad expression), so retrying can't help.
 	if settings.ConditionExpr != "" {
 		ok, err := e.tmpl.Evaluate(settings.ConditionExpr, evt)
 		if err != nil {
 			log.Printf("sync: ensureChannel: condition eval: %v", err)
-			return
+			return nil
 		}
 		if !ok {
-			return
+			return nil
 		}
 	}
 
 	name, err := e.channelName(settings, evt)
 	if err != nil {
 		log.Printf("sync: ensureChannel: name: %v", err)
-		return
+		return nil
 	}
 
 	token, err := e.intg.SlackBotToken(ctx, orgID)
 	if err != nil {
-		log.Printf("sync: ensureChannel: slack token: %v", err)
-		return
+		return fmt.Errorf("ensureChannel: slack token: %w", err)
 	}
 
 	channelID, err := e.slack.CreateChannel(ctx, token, name)
 	if err != nil {
-		log.Printf("sync: ensureChannel: create: %v", err)
-		return
+		return fmt.Errorf("ensureChannel: create %q: %w", name, err)
 	}
 	if err := e.store.UpsertIssueChannel(ctx, store.IssueChannel{
 		OrgID:          orgID,
@@ -73,27 +77,29 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 			e.fireBots(ctx, orgID, channelID, settings.AutoAddMembers)
 		}
 	}
+	return nil
 }
 
 // closeChannel archives the issue's channel and removes the mapping. Archiving
 // (not deleting) is the default "close" per the product spec.
-func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) {
+//
+// Errors up to and including the archive call are returned for redelivery
+// (archiving hasn't happened, so a retry is safe); a mapping-delete failure
+// after a successful archive is only logged.
+func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) error {
 	channelID, err := e.store.ChannelForIssue(ctx, orgID, issueID)
 	if errors.Is(err, store.ErrNotFound) {
-		return
+		return nil
 	}
 	if err != nil {
-		log.Printf("sync: closeChannel: lookup: %v", err)
-		return
+		return fmt.Errorf("closeChannel: lookup: %w", err)
 	}
 	token, err := e.intg.SlackBotToken(ctx, orgID)
 	if err != nil {
-		log.Printf("sync: closeChannel: slack token: %v", err)
-		return
+		return fmt.Errorf("closeChannel: slack token: %w", err)
 	}
 	if err := e.slack.ArchiveChannel(ctx, token, channelID); err != nil {
-		log.Printf("sync: closeChannel: archive: %v", err)
-		return
+		return fmt.Errorf("closeChannel: archive %s: %w", channelID, err)
 	}
 	if err := e.store.DeleteIssueChannel(ctx, orgID, issueID); err != nil {
 		log.Printf("sync: closeChannel: delete mapping: %v", err)
@@ -103,6 +109,7 @@ func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) {
 		LinearIssueID: issueID,
 		SlackChannel:  channelID,
 	})
+	return nil
 }
 
 // channelName renders the settings name template, falling back to a

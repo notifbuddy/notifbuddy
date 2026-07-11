@@ -35,8 +35,10 @@ encryption:
   kms_key_id: "" # key ID/ARN for provider=kms (wire a KMSClient in buildEncryptor)
 
 pubsub:
-  provider: "memory" # "memory" (in-process bus, local) or "sns" (wire an SNS client in buildPublisher)
-  sns_topic_arn: "" # SNS topic ARN for the webhook event topic when provider=sns
+  provider: "postgres" # eventing backend: "postgres" (watermill over the app DB) or "gcp" (Pub/Sub push)
+  postgres:
+    poll_interval: "200ms" # fast polling + event logging for dev
+    log_events: true # extra consumer group printing every message (dev visibility)
 
 github:
   app_slug: "notifbuddy-local" # github.com/apps/<slug>
