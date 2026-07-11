@@ -21,6 +21,7 @@ import (
 // Config is the full application configuration.
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
+	Logging    LoggingConfig    `yaml:"logging"`
 	CORS       CORSConfig       `yaml:"cors"`
 	WorkOS     WorkOSConfig     `yaml:"workos"`
 	App        AppConfig        `yaml:"app"`
@@ -37,6 +38,14 @@ type Config struct {
 type ServerConfig struct {
 	// Addr is the listen address.
 	Addr string `yaml:"addr"`
+}
+
+type LoggingConfig struct {
+	// Format selects the log output: "text" (human-readable, local dev) or
+	// "json" (one object per line on stdout; what Datadog/Cloud Run ingest).
+	Format string `yaml:"format"`
+	// Level is the minimum level emitted: "debug", "info", "warn", "error".
+	Level string `yaml:"level"`
 }
 
 type CORSConfig struct {
@@ -217,6 +226,7 @@ type StripeConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:     ServerConfig{Addr: ":8080"},
+		Logging:    LoggingConfig{Format: "text", Level: "info"},
 		CORS:       CORSConfig{AllowOrigin: "http://localhost:5173"},
 		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
@@ -335,6 +345,16 @@ func (c *Config) validate() error {
 	}
 	if len(c.WorkOS.CookiePassword) < 32 {
 		return fmt.Errorf("workos.cookie_password must be at least 32 characters (got %d)", len(c.WorkOS.CookiePassword))
+	}
+	switch c.Logging.Format {
+	case "", "text", "json":
+	default:
+		return fmt.Errorf("unknown logging.format %q (want text or json)", c.Logging.Format)
+	}
+	switch c.Logging.Level {
+	case "", "debug", "info", "warn", "error":
+	default:
+		return fmt.Errorf("unknown logging.level %q (want debug, info, warn, or error)", c.Logging.Level)
 	}
 	switch c.PubSub.Provider {
 	case "", "postgres":

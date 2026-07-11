@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"xolo/backend/internal/pubsub"
@@ -54,7 +54,7 @@ func (s *Service) HandleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	// 1a. Verify signature. If a webhook secret is configured, it must match.
 	if secret := s.cfg.GitHub.WebhookSecret; secret != "" {
 		if !validGitHubSignature(secret, body, r.Header.Get("X-Hub-Signature-256")) {
-			log.Printf("integrations: github webhook signature mismatch (delivery %s)", r.Header.Get("X-GitHub-Delivery"))
+			slog.WarnContext(r.Context(), "integrations: github webhook signature mismatch", "delivery_id", r.Header.Get("X-GitHub-Delivery"))
 			http.Error(w, "invalid signature", http.StatusUnauthorized)
 			return
 		}
@@ -93,7 +93,7 @@ func (s *Service) HandleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 			"installation_id": installationID,
 		},
 	}); err != nil {
-		log.Printf("integrations: publish github webhook %s: %v", deliveryID, err)
+		slog.ErrorContext(r.Context(), "integrations: publish github webhook", "delivery_id", deliveryID, "error", err)
 		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
@@ -154,7 +154,7 @@ func (s *Service) WriteGitHubWebhook(ctx context.Context, msg pubsub.Message) er
 	// Failure here only risks a duplicate envelope on a later redelivery,
 	// which downstream consumers must tolerate anyway (at-least-once).
 	if err := s.store.MarkGitHubWebhookPublished(ctx, evt.DeliveryID); err != nil {
-		log.Printf("integrations: %v", err)
+		slog.ErrorContext(ctx, "integrations: mark github webhook published", "delivery_id", evt.DeliveryID, "error", err)
 	}
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -36,8 +36,9 @@ func (s *Service) HandleGitHubConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	// User-level connections use the user-to-server OAuth flow, not App install.
 	reqLevel := r.URL.Query().Get("level")
-	log.Printf("integrations: github connect: raw_query=%q level=%q -> %s flow",
-		r.URL.RawQuery, reqLevel, map[bool]string{true: "user", false: "workspace"}[reqLevel == string(store.LevelUser)])
+	slog.InfoContext(r.Context(), "integrations: github connect",
+		"raw_query", r.URL.RawQuery, "level", reqLevel,
+		"flow", map[bool]string{true: "user", false: "workspace"}[reqLevel == string(store.LevelUser)])
 	if reqLevel == string(store.LevelUser) {
 		s.handleGitHubUserConnect(w, r, orgID, userID)
 		return
@@ -48,7 +49,7 @@ func (s *Service) HandleGitHubConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Nonce: newNonce()})
 	if err != nil {
-		log.Printf("integrations: seal github state: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: seal github state", "error", err)
 		http.Error(w, "failed to start github connect", http.StatusInternalServerError)
 		return
 	}
@@ -71,8 +72,9 @@ func (s *Service) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// User-level callbacks complete the user-to-server OAuth flow.
-	log.Printf("integrations: github callback: raw_query=%q state.level=%q -> %s flow",
-		r.URL.RawQuery, st.Level, map[bool]string{true: "user", false: "workspace"}[st.Level == string(store.LevelUser)])
+	slog.InfoContext(r.Context(), "integrations: github callback",
+		"raw_query", r.URL.RawQuery, "state_level", st.Level,
+		"flow", map[bool]string{true: "user", false: "workspace"}[st.Level == string(store.LevelUser)])
 	if st.Level == string(store.LevelUser) {
 		s.handleGitHubUserCallback(w, r, st)
 		return
@@ -101,7 +103,7 @@ func (s *Service) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		log.Printf("integrations: store github installation: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: store github installation", "error", err)
 		http.Error(w, "failed to save github installation", http.StatusInternalServerError)
 		return
 	}

@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"xolo/backend/internal/api"
@@ -29,7 +29,7 @@ func (h Handler) GetBilling(ctx context.Context) (api.GetBillingRes, error) {
 	h.billing.ReconcileSeats(ctx, user.OrgID)
 	status, err := h.billing.StatusForOrg(ctx, user.OrgID)
 	if err != nil {
-		log.Printf("httpapi: billing status for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: billing status failed", "org_id", user.OrgID, "error", err)
 		return &api.GetBillingBadRequest{Message: "billing is not configured"}, nil
 	}
 	return toBillingStatusResponse(status), nil
@@ -55,7 +55,7 @@ func (h Handler) CreateBillingCheckout(ctx context.Context) (api.CreateBillingCh
 	case errors.Is(err, billing.ErrNotConfigured):
 		return &api.CreateBillingCheckoutBadRequest{Message: "billing is not configured"}, nil
 	case err != nil:
-		log.Printf("httpapi: create checkout for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: create checkout failed", "org_id", user.OrgID, "error", err)
 		return &api.CreateBillingCheckoutBadRequest{Message: "failed to start checkout"}, nil
 	}
 	return &api.BillingRedirectResponse{URL: url}, nil
@@ -81,7 +81,7 @@ func (h Handler) CreateBillingPortal(ctx context.Context) (api.CreateBillingPort
 	case errors.Is(err, billing.ErrNotConfigured):
 		return &api.CreateBillingPortalBadRequest{Message: "billing is not configured"}, nil
 	case err != nil:
-		log.Printf("httpapi: create portal for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: create portal failed", "org_id", user.OrgID, "error", err)
 		return &api.CreateBillingPortalBadRequest{Message: "failed to open the billing portal"}, nil
 	}
 	return &api.BillingRedirectResponse{URL: url}, nil
@@ -113,7 +113,7 @@ func (h Handler) SubmitOssApplication(ctx context.Context, req *api.OssApplicati
 	case errors.Is(err, billing.ErrAlreadySubscribed):
 		return &api.SubmitOssApplicationConflict{Message: "already approved or subscribed"}, nil
 	case err != nil:
-		log.Printf("httpapi: oss application for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: oss application failed", "org_id", user.OrgID, "error", err)
 		return &api.SubmitOssApplicationBadRequest{Message: "failed to record the application"}, nil
 	}
 	return toBillingStatusResponse(status), nil

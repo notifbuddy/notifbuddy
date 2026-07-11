@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -126,7 +126,7 @@ func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	url, err := a.client.GetAuthKitAuthorizationURL(params)
 	if err != nil {
-		log.Printf("auth: build authorization URL: %v", err)
+		slog.ErrorContext(r.Context(), "auth: build authorization URL failed", "error", err)
 		http.Error(w, "failed to start login", http.StatusInternalServerError)
 		return
 	}
@@ -141,7 +141,7 @@ func (a *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	if code == "" {
 		// AuthKit returns error/error_description on failure (e.g. user cancelled).
 		if e := r.URL.Query().Get("error"); e != "" {
-			log.Printf("auth: callback error: %s — %s", e, r.URL.Query().Get("error_description"))
+			slog.WarnContext(r.Context(), "auth: callback error", "error", e, "error_description", r.URL.Query().Get("error_description"))
 		}
 		http.Error(w, "missing authorization code", http.StatusBadRequest)
 		return
@@ -176,10 +176,12 @@ func (a *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		// Any other error: log the structured details and fail.
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("auth: exchange code failed: status=%d code=%q message=%q error=%q error_description=%q request_id=%q body=%s",
-				apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.ErrorCode, apiErr.ErrorDescription, apiErr.RequestID, apiErr.RawBody)
+			slog.ErrorContext(r.Context(), "auth: exchange code failed",
+				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message,
+				"error_code", apiErr.ErrorCode, "error_description", apiErr.ErrorDescription,
+				"request_id", apiErr.RequestID, "body", apiErr.RawBody)
 		} else {
-			log.Printf("auth: exchange code failed: %v", err)
+			slog.ErrorContext(r.Context(), "auth: exchange code failed", "error", err)
 		}
 		http.Error(w, "authentication failed", http.StatusUnauthorized)
 		return
@@ -197,13 +199,13 @@ func (a *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 // shows the code-entry step. WorkOS has already emailed the code.
 func (a *Service) startEmailVerification(w http.ResponseWriter, r *http.Request, pendingToken string) {
 	if pendingToken == "" {
-		log.Printf("auth: email_verification_required but no pending token returned")
+		slog.ErrorContext(r.Context(), "auth: email_verification_required but no pending token returned")
 		http.Error(w, "authentication failed", http.StatusUnauthorized)
 		return
 	}
 	sealed, err := workos.Seal(pendingToken, a.cookiePassword)
 	if err != nil {
-		log.Printf("auth: seal pending token: %v", err)
+		slog.ErrorContext(r.Context(), "auth: seal pending token failed", "error", err)
 		http.Error(w, "failed to start verification", http.StatusInternalServerError)
 		return
 	}
@@ -229,7 +231,7 @@ func (a *Service) establishSession(w http.ResponseWriter, resp *workos.Authentic
 	sealed, err := workos.SealSessionFromAuthResponse(
 		resp.AccessToken, resp.RefreshToken, resp.User, resp.Impersonator, a.cookiePassword)
 	if err != nil {
-		log.Printf("auth: seal session: %v", err)
+		slog.Error("auth: seal session failed", "error", err)
 		return nil, err
 	}
 	a.setSessionCookie(w, sealed)
@@ -268,10 +270,10 @@ func (a *Service) CompleteEmailVerification(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("auth: verify email failed: status=%d code=%q message=%q request_id=%q",
-				apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
+			slog.WarnContext(r.Context(), "auth: verify email failed",
+				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
 		} else {
-			log.Printf("auth: verify email failed: %v", err)
+			slog.WarnContext(r.Context(), "auth: verify email failed", "error", err)
 		}
 		return nil, errors.New("verification failed")
 	}
@@ -302,7 +304,7 @@ func (a *Service) clearPendingCookie(w http.ResponseWriter) {
 // the choices via GET /auth/pending-orgs and POSTs the pick to /auth/select-org.
 func (a *Service) startOrgSelection(w http.ResponseWriter, r *http.Request, pendingToken string, orgs []workos.PendingAuthenticationOrganization) {
 	if pendingToken == "" || len(orgs) == 0 {
-		log.Printf("auth: organization_selection_required but missing token/orgs")
+		slog.ErrorContext(r.Context(), "auth: organization_selection_required but missing token/orgs")
 		http.Error(w, "authentication failed", http.StatusUnauthorized)
 		return
 	}
@@ -312,7 +314,7 @@ func (a *Service) startOrgSelection(w http.ResponseWriter, r *http.Request, pend
 	}
 	sealed, err := workos.Seal(state, a.cookiePassword)
 	if err != nil {
-		log.Printf("auth: seal org-selection state: %v", err)
+		slog.ErrorContext(r.Context(), "auth: seal org-selection state failed", "error", err)
 		http.Error(w, "failed to start org selection", http.StatusInternalServerError)
 		return
 	}
@@ -381,10 +383,10 @@ func (a *Service) CompleteOrgSelection(w http.ResponseWriter, r *http.Request, o
 	if err != nil {
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("auth: org selection failed: status=%d code=%q message=%q request_id=%q",
-				apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
+			slog.WarnContext(r.Context(), "auth: org selection failed",
+				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
 		} else {
-			log.Printf("auth: org selection failed: %v", err)
+			slog.WarnContext(r.Context(), "auth: org selection failed", "error", err)
 		}
 		return nil, errors.New("organization selection failed")
 	}
@@ -436,7 +438,7 @@ func (a *Service) ListUserOrganizations(ctx context.Context, userID string, limi
 		out = append(out, om)
 	}
 	if err := it.Err(); err != nil {
-		log.Printf("auth: list user organizations failed: %v", err)
+		slog.ErrorContext(ctx, "auth: list user organizations failed", "error", err)
 		return nil
 	}
 	return out
@@ -486,7 +488,7 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 		out = append(out, a.memberFromMembership(ctx, *it.Current()))
 	}
 	if err := it.Err(); err != nil {
-		log.Printf("auth: list organization members failed: %v", err)
+		slog.ErrorContext(ctx, "auth: list organization members failed", "error", err)
 		return nil, err
 	}
 	return out, nil
@@ -496,7 +498,7 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
 	org, err := a.client.Organizations().Get(ctx, orgID)
 	if err != nil {
-		log.Printf("auth: get organization %q failed: %v", orgID, err)
+		slog.ErrorContext(ctx, "auth: get organization failed", "org_id", orgID, "error", err)
 		return "", err
 	}
 	return org.Name, nil
@@ -514,7 +516,7 @@ func (e UserMessageError) Error() string { return e.Msg }
 func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string) (string, error) {
 	org, err := a.client.Organizations().Update(ctx, orgID, &workos.OrganizationsUpdateParams{Name: &name})
 	if err != nil {
-		log.Printf("auth: update organization %q name failed: %v", orgID, err)
+		slog.ErrorContext(ctx, "auth: update organization name failed", "org_id", orgID, "error", err)
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) && apiErr.Message != "" {
 			return "", UserMessageError{Msg: apiErr.Message}
@@ -533,7 +535,7 @@ func (a *Service) memberFromMembership(ctx context.Context, m workos.UserOrganiz
 		member.Role = m.Role.Slug
 	}
 	if u, err := a.client.UserManagement().Get(ctx, m.UserID); err != nil {
-		log.Printf("auth: resolve member user %q failed: %v", m.UserID, err)
+		slog.ErrorContext(ctx, "auth: resolve member user failed", "user_id", m.UserID, "error", err)
 	} else {
 		member.Email = u.Email
 		member.FirstName = deref(u.FirstName)
@@ -550,7 +552,7 @@ func (a *Service) memberFromMembership(ctx context.Context, m workos.UserOrganiz
 func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, callerUserID, membershipID, roleSlug string) (Member, error) {
 	m, err := a.client.OrganizationMembership().Get(ctx, membershipID)
 	if err != nil {
-		log.Printf("auth: get membership %q failed: %v", membershipID, err)
+		slog.ErrorContext(ctx, "auth: get membership failed", "membership_id", membershipID, "error", err)
 		return Member{}, ErrMembershipNotFound
 	}
 	if m.OrganizationID != orgID {
@@ -563,7 +565,7 @@ func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, calle
 		Role: workos.OrganizationMembershipRoleSingle{Slug: roleSlug},
 	})
 	if err != nil {
-		log.Printf("auth: update membership %q role failed: %v", membershipID, err)
+		slog.ErrorContext(ctx, "auth: update membership role failed", "membership_id", membershipID, "error", err)
 		return Member{}, err
 	}
 	return a.memberFromMembership(ctx, *updated), nil
@@ -599,10 +601,10 @@ func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, invite
 	if err != nil {
 		var apiErr *workos.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("auth: send Invitation failed: status=%d code=%q message=%q request_id=%q",
-				apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
+			slog.ErrorContext(ctx, "auth: send Invitation failed",
+				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
 		} else {
-			log.Printf("auth: send Invitation failed: %v", err)
+			slog.ErrorContext(ctx, "auth: send Invitation failed", "error", err)
 		}
 		return nil, err
 	}
@@ -619,7 +621,7 @@ func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) 
 		out = append(out, Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt, Role: deref(inv.RoleSlug)})
 	}
 	if err := it.Err(); err != nil {
-		log.Printf("auth: list invitations failed: %v", err)
+		slog.ErrorContext(ctx, "auth: list invitations failed", "error", err)
 		return nil, err
 	}
 	return out, nil
@@ -631,7 +633,7 @@ func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) 
 func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID string) (*Invitation, error) {
 	inv, err := a.client.UserManagement().GetInvitation(ctx, invitationID)
 	if err != nil {
-		log.Printf("auth: get invitation %q failed: %v", invitationID, err)
+		slog.ErrorContext(ctx, "auth: get invitation failed", "invitation_id", invitationID, "error", err)
 		return nil, ErrInvitationNotFound
 	}
 	if deref(inv.OrganizationID) != orgID {
@@ -639,7 +641,7 @@ func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID stri
 	}
 	revoked, err := a.client.UserManagement().RevokeInvitation(ctx, invitationID)
 	if err != nil {
-		log.Printf("auth: revoke invitation %q failed: %v", invitationID, err)
+		slog.ErrorContext(ctx, "auth: revoke invitation failed", "invitation_id", invitationID, "error", err)
 		return nil, err
 	}
 	return &Invitation{ID: revoked.ID, Email: revoked.Email, State: string(revoked.State), ExpiresAt: revoked.ExpiresAt, Role: deref(revoked.RoleSlug)}, nil
@@ -656,7 +658,7 @@ func (a *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		if url, err := session.GetLogoutURL(r.Context(), a.postLoginURL); err == nil {
 			logoutURL = url
 		} else {
-			log.Printf("auth: build logout URL: %v", err)
+			slog.WarnContext(r.Context(), "auth: build logout URL failed", "error", err)
 		}
 	}
 

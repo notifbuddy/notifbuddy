@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/stripe/stripe-go/v86"
@@ -39,7 +39,7 @@ func (s *Service) HandleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 
 	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), s.cfg.Stripe.WebhookSecret)
 	if err != nil {
-		log.Printf("billing: stripe webhook signature verification failed: %v", err)
+		slog.WarnContext(r.Context(), "billing: stripe webhook signature verification failed", "error", err)
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}
@@ -52,7 +52,7 @@ func (s *Service) HandleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		OrgID:     orgID,
 		Payload:   json.RawMessage(body),
 	}); err != nil {
-		log.Printf("billing: store stripe webhook %s: %v", event.ID, err)
+		slog.ErrorContext(r.Context(), "billing: store stripe webhook failed", "event_id", event.ID, "error", err)
 		http.Error(w, "failed to store event", http.StatusInternalServerError)
 		return
 	}
@@ -60,13 +60,13 @@ func (s *Service) HandleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	if orgID == "" {
 		// Not ours to act on (e.g. an event for a customer we never created).
 		// Stored above for the audit trail; ack so Stripe stops retrying.
-		log.Printf("billing: stripe event %s (%s) resolved to no org; ignored", event.ID, event.Type)
+		slog.InfoContext(r.Context(), "billing: stripe event resolved to no org; ignored", "event_id", event.ID, "event_type", event.Type)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if err := s.applyStripeEvent(r.Context(), orgID, event); err != nil {
-		log.Printf("billing: apply stripe event %s (%s) for %s: %v", event.ID, event.Type, orgID, err)
+		slog.ErrorContext(r.Context(), "billing: apply stripe event failed", "event_id", event.ID, "event_type", event.Type, "org_id", orgID, "error", err)
 		http.Error(w, "failed to apply event", http.StatusInternalServerError)
 		return
 	}

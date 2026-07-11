@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -66,7 +66,7 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 	if secret := s.cfg.Slack.SigningSecret; secret != "" {
 		if !validSlackSignature(secret, body, r.Header.Get("X-Slack-Request-Timestamp"),
 			r.Header.Get("X-Slack-Signature"), time.Now()) {
-			log.Printf("integrations: slack webhook signature mismatch")
+			slog.WarnContext(r.Context(), "integrations: slack webhook signature mismatch")
 			http.Error(w, "invalid signature", http.StatusUnauthorized)
 			return
 		}
@@ -116,7 +116,7 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 			"channel_id": env.Event.Channel,
 		},
 	}); err != nil {
-		log.Printf("integrations: publish slack webhook %s: %v", env.EventID, err)
+		slog.ErrorContext(r.Context(), "integrations: publish slack webhook", "event_id", env.EventID, "error", err)
 		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
@@ -177,7 +177,7 @@ func (s *Service) WriteSlackWebhook(ctx context.Context, msg pubsub.Message) err
 	// Failure here only risks a duplicate envelope on a later redelivery,
 	// which downstream consumers must tolerate anyway (at-least-once).
 	if err := s.store.MarkSlackWebhookPublished(ctx, evt.EventID); err != nil {
-		log.Printf("integrations: %v", err)
+		slog.ErrorContext(ctx, "integrations: mark slack webhook published", "event_id", evt.EventID, "error", err)
 	}
 	return nil
 }

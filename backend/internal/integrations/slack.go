@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -36,7 +36,7 @@ func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: newNonce()})
 	if err != nil {
-		log.Printf("integrations: seal slack state: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: seal slack state", "error", err)
 		http.Error(w, "failed to start slack connect", http.StatusInternalServerError)
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
-		log.Printf("integrations: slack callback error: %s", e)
+		slog.WarnContext(r.Context(), "integrations: slack callback error", "error", e)
 		http.Redirect(w, r, s.redirectAfter("slack", "error"), http.StatusFound)
 		return
 	}
@@ -77,7 +77,7 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 
 	access, err := s.slackExchangeCode(r.Context(), code)
 	if err != nil {
-		log.Printf("integrations: slack exchange: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: slack exchange", "error", err)
 		http.Redirect(w, r, s.redirectAfter("slack", "error"), http.StatusFound)
 		return
 	}
@@ -93,7 +93,7 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	var rawToken string
 	if st.Level == string(store.LevelUser) {
 		if access.AuthedUser.AccessToken == "" {
-			log.Printf("integrations: slack user callback missing authed_user token")
+			slog.ErrorContext(r.Context(), "integrations: slack user callback missing authed_user token")
 			http.Redirect(w, r, s.redirectAfter("slack", "error"), http.StatusFound)
 			return
 		}
@@ -118,14 +118,14 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	// The token is the sensitive value; encrypt it before storing.
 	encToken, err := s.enc.Encrypt([]byte(rawToken))
 	if err != nil {
-		log.Printf("integrations: encrypt slack token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: encrypt slack token", "error", err)
 		http.Error(w, "failed to secure slack token", http.StatusInternalServerError)
 		return
 	}
 	in.EncryptedToken = encToken
 
 	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
-		log.Printf("integrations: store slack token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: store slack token", "error", err)
 		http.Error(w, "failed to save slack connection", http.StatusInternalServerError)
 		return
 	}
@@ -139,7 +139,7 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := s.SyncSlackMembers(ctx, orgID); err != nil {
-				log.Printf("integrations: initial slack member sync for org %s: %v", orgID, err)
+				slog.ErrorContext(ctx, "integrations: initial slack member sync", "org_id", orgID, "error", err)
 			}
 		}()
 	}

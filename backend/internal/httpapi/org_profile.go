@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"xolo/backend/internal/api"
@@ -94,7 +94,7 @@ func (h Handler) UploadOrganizationAvatar(ctx context.Context, req *api.UploadOr
 		return &api.UploadOrganizationAvatarBadRequest{Message: err.Error()}, nil
 	}
 	if err := h.store.SetOrgAvatarImage(ctx, user.OrgID, image, contentType); err != nil {
-		log.Printf("httpapi: set org avatar for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: set org avatar failed", "org_id", user.OrgID, "error", err)
 		return &api.UploadOrganizationAvatarBadRequest{Message: "failed to store the avatar"}, nil
 	}
 	resp, err := h.orgProfileResponse(ctx, user.OrgID)
@@ -118,7 +118,7 @@ func (h Handler) DeleteOrganizationAvatar(ctx context.Context) (api.DeleteOrgani
 		return &api.DeleteOrganizationAvatarForbidden{Message: orgAdminOnlyMsg}, nil
 	}
 	if err := h.store.ClearOrgAvatarImage(ctx, user.OrgID); err != nil {
-		log.Printf("httpapi: clear org avatar for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: clear org avatar failed", "org_id", user.OrgID, "error", err)
 		return &api.DeleteOrganizationAvatarBadRequest{Message: "failed to remove the avatar"}, nil
 	}
 	resp, err := h.orgProfileResponse(ctx, user.OrgID)
@@ -143,7 +143,7 @@ func (h Handler) RegenerateOrganizationAvatar(ctx context.Context) (api.Regenera
 		return &api.RegenerateOrganizationAvatarForbidden{Message: orgAdminOnlyMsg}, nil
 	}
 	if err := h.store.RegenerateOrgAvatarSeed(ctx, user.OrgID); err != nil {
-		log.Printf("httpapi: regenerate org avatar for %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: regenerate org avatar failed", "org_id", user.OrgID, "error", err)
 		return &api.RegenerateOrganizationAvatarBadRequest{Message: "failed to regenerate the avatar"}, nil
 	}
 	resp, err := h.orgProfileResponse(ctx, user.OrgID)
@@ -162,7 +162,7 @@ func (h Handler) orgProfileResponse(ctx context.Context, orgID string) (*api.Org
 	}
 	p, err := h.store.GetOrgProfile(ctx, orgID)
 	if err != nil {
-		log.Printf("httpapi: get org profile for %s: %v", orgID, err)
+		slog.ErrorContext(ctx, "httpapi: get org profile failed", "org_id", orgID, "error", err)
 		return nil, err
 	}
 	resp := &api.OrgProfileResponse{ID: orgID, Name: name, AvatarSeed: p.AvatarSeed}

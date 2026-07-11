@@ -3,7 +3,7 @@ package billing
 import (
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	workos "github.com/workos/workos-go/v9"
@@ -34,7 +34,7 @@ func (s *Service) HandleWorkOSWebhook(w http.ResponseWriter, r *http.Request) {
 
 	event, err := workos.NewWebhookVerifier(secret).ConstructEvent(r.Header.Get("WorkOS-Signature"), string(body))
 	if err != nil {
-		log.Printf("billing: workos webhook signature verification failed: %v", err)
+		slog.WarnContext(r.Context(), "billing: workos webhook signature verification failed", "error", err)
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Service) HandleWorkOSWebhook(w http.ResponseWriter, r *http.Request) {
 		Payload:   json.RawMessage(body),
 	})
 	if err != nil {
-		log.Printf("billing: store workos webhook %s: %v", event.ID, err)
+		slog.ErrorContext(r.Context(), "billing: store workos webhook failed", "event_id", event.ID, "error", err)
 		http.Error(w, "failed to store event", http.StatusInternalServerError)
 		return
 	}

@@ -2,7 +2,7 @@ package pubsub
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -44,12 +44,12 @@ func (s *pushServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	email, err := s.verify.Verify(ctx, token, s.audience)
 	if err != nil {
-		log.Printf("pubsub push: token rejected: %v", err)
+		slog.WarnContext(ctx, "pubsub push: token rejected", "error", err)
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
 	if email != s.wantEmail {
-		log.Printf("pubsub push: token from unexpected principal %s", email)
+		slog.WarnContext(ctx, "pubsub push: token from unexpected principal", "principal", email)
 		http.Error(w, "unexpected principal", http.StatusForbidden)
 		return
 	}
@@ -58,7 +58,7 @@ func (s *pushServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
 		// Malformed body: 400 nacks it so it retries and eventually lands in
 		// the dead-letter topic instead of vanishing silently.
-		log.Printf("pubsub push: bad envelope: %v", err)
+		slog.WarnContext(ctx, "pubsub push: bad envelope", "error", err)
 		http.Error(w, "bad envelope", http.StatusBadRequest)
 		return
 	}
@@ -72,7 +72,7 @@ func (s *pushServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Unknown subscription: nack. Correct during rolling deploys — the
 		// message retries until an instance that knows the subscription serves
 		// it, or it dead-letters.
-		log.Printf("pubsub push: no handler for subscription %q", name)
+		slog.WarnContext(ctx, "pubsub push: no handler for subscription", "subscription", name)
 		http.Error(w, "unknown subscription", http.StatusNotFound)
 		return
 	}
@@ -82,7 +82,7 @@ func (s *pushServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Payload:    env.Message.Data,
 		Attributes: env.Message.Attributes,
 	}); err != nil {
-		log.Printf("pubsub push: %s (attempt %d, message %s): %v", name, env.DeliveryAttempt, env.Message.MessageID, err)
+		slog.ErrorContext(ctx, "pubsub push: handler failed", "subscription", name, "delivery_attempt", env.DeliveryAttempt, "message_id", env.Message.MessageID, "error", err)
 		http.Error(w, "handler error", http.StatusInternalServerError)
 		return
 	}
