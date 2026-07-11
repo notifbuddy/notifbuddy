@@ -16,7 +16,19 @@ export default defineConfig({
 			// fallback SPA shell) so crawlers and link unfurlers get real
 			// content. The only runtime call is the waitlist form's POST to the
 			// standalone waitlist service.
-			adapter: adapter()
+			adapter: adapter(),
+
+			// Components shared with the dashboard app (repo-root shared/): the
+			// brand mark and the "signal lost" error page. Tailwind scans the
+			// directory via `@source` in routes/layout.css.
+			alias: { $shared: '../shared' },
+
+			// Fatal-error fallback (rendered when the app itself can't boot, so
+			// it's self-contained HTML) — also shared with the dashboard app.
+			files: { errorTemplate: '../shared/templates/error.html' }
 		})
-	]
+	],
+	// Let the dev server serve files from shared/, which sits outside this
+	// app's root (one level up = the repo root).
+	server: { fs: { allow: ['..'] } }
 });

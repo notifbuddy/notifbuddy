@@ -4,6 +4,10 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/outfit";
 
+/* Repo-root shared/ components ($shared alias) sit outside this app's
+   auto-detected content, so their classes must be scanned explicitly. */
+@source '../../../shared';
+
 @custom-variant dark (&:is(.dark *));
 
 /* Theme: QraftHive (tweakcn). Golden-orange primary, 0.75rem radius. */

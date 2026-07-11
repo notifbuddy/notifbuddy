@@ -1,1 +1,1 @@
-../../assets/robots.txt
+../../shared/assets/robots.txt
