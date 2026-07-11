@@ -3,7 +3,7 @@ package billing
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/stripe/stripe-go/v86"
 )
@@ -148,7 +148,7 @@ func (s *Service) ReconcileSeats(ctx context.Context, orgID string) {
 	}
 	seats, err := s.seatCount(ctx, orgID)
 	if err != nil {
-		log.Printf("billing: reconcile seats for %s: count members: %v", orgID, err)
+		slog.ErrorContext(ctx, "billing: reconcile seats: count members failed", "org_id", orgID, "error", err)
 		return
 	}
 	if seats == b.Seats {
@@ -156,7 +156,7 @@ func (s *Service) ReconcileSeats(ctx context.Context, orgID string) {
 	}
 	sub, err := sc.V1Subscriptions.Retrieve(ctx, b.StripeSubscriptionID, nil)
 	if err != nil || sub.Items == nil || len(sub.Items.Data) == 0 {
-		log.Printf("billing: reconcile seats for %s: retrieve subscription: %v", orgID, err)
+		slog.ErrorContext(ctx, "billing: reconcile seats: retrieve subscription failed", "org_id", orgID, "error", err)
 		return
 	}
 	_, err = sc.V1Subscriptions.Update(ctx, b.StripeSubscriptionID, &stripe.SubscriptionUpdateParams{
@@ -167,13 +167,13 @@ func (s *Service) ReconcileSeats(ctx context.Context, orgID string) {
 		ProrationBehavior: stripe.String("create_prorations"),
 	})
 	if err != nil {
-		log.Printf("billing: reconcile seats for %s: update quantity: %v", orgID, err)
+		slog.ErrorContext(ctx, "billing: reconcile seats: update quantity failed", "org_id", orgID, "error", err)
 		return
 	}
 	if err := s.st.SetSeats(ctx, orgID, seats); err != nil {
-		log.Printf("billing: reconcile seats for %s: store seats: %v", orgID, err)
+		slog.ErrorContext(ctx, "billing: reconcile seats: store seats failed", "org_id", orgID, "error", err)
 	}
-	log.Printf("billing: reconciled %s to %d seats (was %d)", orgID, seats, b.Seats)
+	slog.InfoContext(ctx, "billing: reconciled seats", "org_id", orgID, "seats", seats, "previous_seats", b.Seats)
 }
 
 // SubmitOSSApplication records a free open-source tier application. Fails with

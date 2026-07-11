@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,7 +40,7 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: newNonce()})
 	if err != nil {
-		log.Printf("integrations: seal linear state: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: seal linear state", "error", err)
 		http.Error(w, "failed to start linear connect", http.StatusInternalServerError)
 		return
 	}
@@ -65,7 +65,7 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
-		log.Printf("integrations: linear callback error: %s", e)
+		slog.WarnContext(r.Context(), "integrations: linear callback error", "error", e)
 		http.Redirect(w, r, s.redirectAfter("linear", "error"), http.StatusFound)
 		return
 	}
@@ -82,7 +82,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 
 	access, err := s.linearExchangeCode(r.Context(), code)
 	if err != nil {
-		log.Printf("integrations: linear exchange: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: linear exchange", "error", err)
 		http.Redirect(w, r, s.redirectAfter("linear", "error"), http.StatusFound)
 		return
 	}
@@ -93,7 +93,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 
 	encToken, err := s.enc.Encrypt([]byte(access.AccessToken))
 	if err != nil {
-		log.Printf("integrations: encrypt linear token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: encrypt linear token", "error", err)
 		http.Error(w, "failed to secure linear token", http.StatusInternalServerError)
 		return
 	}
@@ -115,7 +115,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		in.ConnectedUserID = st.UserID
 	}
 	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
-		log.Printf("integrations: store linear token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: store linear token", "error", err)
 		http.Error(w, "failed to save linear connection", http.StatusInternalServerError)
 		return
 	}
@@ -130,7 +130,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := s.SyncLinearTeamStates(ctx, orgID); err != nil {
-				log.Printf("integrations: initial linear team-state sync for org %s: %v", orgID, err)
+				slog.ErrorContext(ctx, "integrations: initial linear team-state sync", "org_id", orgID, "error", err)
 			}
 		}()
 	}
@@ -193,7 +193,7 @@ func (s *Service) linearWorkspace(ctx context.Context, token string) (id, name s
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"https://api.linear.app/graphql", bytes.NewReader([]byte(query)))
 	if err != nil {
-		log.Printf("integrations: linear workspace request: %v", err)
+		slog.ErrorContext(ctx, "integrations: linear workspace request", "error", err)
 		return "", ""
 	}
 	req.Header.Set("Authorization", token)
@@ -201,7 +201,7 @@ func (s *Service) linearWorkspace(ctx context.Context, token string) (id, name s
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("integrations: linear workspace query: %v", err)
+		slog.ErrorContext(ctx, "integrations: linear workspace query", "error", err)
 		return "", ""
 	}
 	defer resp.Body.Close()
@@ -215,7 +215,7 @@ func (s *Service) linearWorkspace(ctx context.Context, token string) (id, name s
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		log.Printf("integrations: linear workspace decode: %v", err)
+		slog.ErrorContext(ctx, "integrations: linear workspace decode", "error", err)
 		return "", ""
 	}
 	return body.Data.Organization.ID, body.Data.Organization.Name

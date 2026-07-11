@@ -3,7 +3,7 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -29,7 +29,7 @@ type PostgresOptions struct {
 	// Topics is every topic the app publishes, for deterministic table
 	// creation at Start and the dev-logger fanout.
 	Topics []string
-	// Logger defaults to watermill's std logger.
+	// Logger defaults to a watermill adapter over the slog default logger.
 	Logger watermill.LoggerAdapter
 }
 
@@ -47,7 +47,7 @@ type PostgresBus struct {
 // online with Start.
 func NewPostgresBus(pool *pgxpool.Pool, opts PostgresOptions) (*PostgresBus, error) {
 	if opts.Logger == nil {
-		opts.Logger = watermill.NewStdLogger(false, false)
+		opts.Logger = watermill.NewSlogLogger(slog.Default())
 	}
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Second
@@ -132,8 +132,8 @@ func (b *PostgresBus) Start(ctx context.Context, subs []Subscription) error {
 		}
 		for _, topic := range b.opts.Topics {
 			router.AddConsumerHandler("log-"+topic, topic, gs, watermillHandler(topic,
-				func(_ context.Context, msg Message) error {
-					log.Printf("pubsub: %s %s", msg.Topic, string(msg.Payload))
+				func(ctx context.Context, msg Message) error {
+					slog.InfoContext(ctx, "pubsub message", "topic", msg.Topic, "payload", string(msg.Payload))
 					return nil
 				}))
 		}
@@ -142,7 +142,7 @@ func (b *PostgresBus) Start(ctx context.Context, subs []Subscription) error {
 	b.router = router
 	go func() {
 		if err := router.Run(ctx); err != nil {
-			log.Printf("pubsub router: %v", err)
+			slog.Error("pubsub router stopped", "error", err)
 		}
 	}()
 	<-router.Running()

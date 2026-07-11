@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,7 +29,7 @@ func (s *Service) handleGitHubUserConnect(w http.ResponseWriter, r *http.Request
 	}
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(store.LevelUser), Nonce: newNonce()})
 	if err != nil {
-		log.Printf("integrations: seal github user state: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: seal github user state", "error", err)
 		http.Error(w, "failed to start github connect", http.StatusInternalServerError)
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Service) handleGitHubUserConnect(w http.ResponseWriter, r *http.Request
 func (s *Service) handleGitHubUserCallback(w http.ResponseWriter, r *http.Request, st oauthState) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
-		log.Printf("integrations: github user callback error: %s", e)
+		slog.WarnContext(r.Context(), "integrations: github user callback error", "error", e)
 		http.Redirect(w, r, s.redirectAfter("github", "error"), http.StatusFound)
 		return
 	}
@@ -60,14 +60,14 @@ func (s *Service) handleGitHubUserCallback(w http.ResponseWriter, r *http.Reques
 
 	access, login, err := s.githubExchangeUserCode(r.Context(), code)
 	if err != nil {
-		log.Printf("integrations: github user exchange: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: github user exchange", "error", err)
 		http.Redirect(w, r, s.redirectAfter("github", "error"), http.StatusFound)
 		return
 	}
 
 	encToken, err := s.enc.Encrypt([]byte(access))
 	if err != nil {
-		log.Printf("integrations: encrypt github user token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: encrypt github user token", "error", err)
 		http.Error(w, "failed to secure github token", http.StatusInternalServerError)
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Service) handleGitHubUserCallback(w http.ResponseWriter, r *http.Reques
 		Metadata:        map[string]any{"account_login": login},
 	})
 	if err != nil {
-		log.Printf("integrations: store github user token: %v", err)
+		slog.ErrorContext(r.Context(), "integrations: store github user token", "error", err)
 		http.Error(w, "failed to save github connection", http.StatusInternalServerError)
 		return
 	}

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -29,7 +29,7 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 	if settings.ConditionExpr != "" {
 		ok, err := e.tmpl.Evaluate(settings.ConditionExpr, evt)
 		if err != nil {
-			log.Printf("sync: ensureChannel: condition eval: %v", err)
+			slog.WarnContext(ctx, "sync: ensureChannel: condition eval failed", "error", err)
 			return nil
 		}
 		if !ok {
@@ -39,7 +39,7 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 
 	name, err := e.channelName(settings, evt)
 	if err != nil {
-		log.Printf("sync: ensureChannel: name: %v", err)
+		slog.WarnContext(ctx, "sync: ensureChannel: name render failed", "error", err)
 		return nil
 	}
 
@@ -57,7 +57,7 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 		LinearIssueID:  issueID,
 		SlackChannelID: channelID,
 	}); err != nil {
-		log.Printf("sync: ensureChannel: record mapping: %v", err)
+		slog.ErrorContext(ctx, "sync: ensureChannel: record mapping failed", "org_id", orgID, "issue_id", issueID, "channel_id", channelID, "error", err)
 	}
 
 	e.fireChannel(ctx, orgID, TopicChannelCreated, ChannelEvent{
@@ -72,7 +72,7 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 	// single conversations.invite call.
 	if len(settings.AutoAddMembers) > 0 {
 		if err := e.slack.InviteUsers(ctx, token, channelID, settings.AutoAddMembers); err != nil {
-			log.Printf("sync: ensureChannel: invite members: %v", err)
+			slog.ErrorContext(ctx, "sync: ensureChannel: invite members failed", "org_id", orgID, "channel_id", channelID, "error", err)
 		} else {
 			e.fireBots(ctx, orgID, channelID, settings.AutoAddMembers)
 		}
@@ -102,7 +102,7 @@ func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) error 
 		return fmt.Errorf("closeChannel: archive %s: %w", channelID, err)
 	}
 	if err := e.store.DeleteIssueChannel(ctx, orgID, issueID); err != nil {
-		log.Printf("sync: closeChannel: delete mapping: %v", err)
+		slog.ErrorContext(ctx, "sync: closeChannel: delete mapping failed", "org_id", orgID, "issue_id", issueID, "error", err)
 	}
 	e.fireChannel(ctx, orgID, TopicChannelClosed, ChannelEvent{
 		OrgID:         orgID,

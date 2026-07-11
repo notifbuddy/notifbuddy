@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -123,7 +123,7 @@ func (r cfRunResponse) resultText() string {
 // to an Intent. Every failure mode resolves to NoAction.
 func (c *CloudflareClassifier) Classify(ctx context.Context, text string) Intent {
 	if !c.configured() {
-		log.Printf("intent: cloudflare classifier not configured — returning no-action")
+		slog.WarnContext(ctx, "intent: cloudflare classifier not configured — returning no-action")
 		return NoAction
 	}
 	if strings.TrimSpace(text) == "" {
@@ -135,7 +135,7 @@ func (c *CloudflareClassifier) Classify(ctx context.Context, text string) Intent
 		{Role: "user", Content: text},
 	}})
 	if err != nil {
-		log.Printf("intent: marshal request: %v", err)
+		slog.ErrorContext(ctx, "intent: marshal request failed", "error", err)
 		return NoAction
 	}
 
@@ -143,7 +143,7 @@ func (c *CloudflareClassifier) Classify(ctx context.Context, text string) Intent
 		c.accountID, c.model)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("intent: build request: %v", err)
+		slog.ErrorContext(ctx, "intent: build request failed", "error", err)
 		return NoAction
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiToken)
@@ -151,23 +151,23 @@ func (c *CloudflareClassifier) Classify(ctx context.Context, text string) Intent
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		log.Printf("intent: cloudflare request: %v", err)
+		slog.ErrorContext(ctx, "intent: cloudflare request failed", "model", c.model, "error", err)
 		return NoAction
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("intent: cloudflare status %d", resp.StatusCode)
+		slog.ErrorContext(ctx, "intent: cloudflare unexpected status", "status", resp.StatusCode, "model", c.model)
 		return NoAction
 	}
 
 	var out cfRunResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		log.Printf("intent: decode response: %v", err)
+		slog.ErrorContext(ctx, "intent: decode response failed", "error", err)
 		return NoAction
 	}
 	if !out.Success {
-		log.Printf("intent: cloudflare reported failure: %v", out.Errors)
+		slog.ErrorContext(ctx, "intent: cloudflare reported failure", "errors", out.Errors, "model", c.model)
 		return NoAction
 	}
 

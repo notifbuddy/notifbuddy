@@ -11,6 +11,10 @@
 server:
   addr: ":8080" # listen address
 
+logging:
+  format: "text" # human-readable for dev; "json" for anything log-shipped
+  level: "info"
+
 cors:
   allow_origin: "http://localhost:5173" # exact SPA origin (credentialed CORS: no "*")
 

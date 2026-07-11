@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
 
 	"xolo/backend/internal/api"
@@ -301,7 +301,7 @@ func (h Handler) ListGithubWebhooks(ctx context.Context) (api.ListGithubWebhooks
 	}
 	events, err := h.integrations.ListGitHubWebhooks(ctx, user.OrgID, webhookListLimit)
 	if err != nil {
-		log.Printf("httpapi: list github webhooks for org %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: list github webhooks failed", "org_id", user.OrgID, "error", err)
 		return &api.Error{Message: "failed to list webhooks"}, nil
 	}
 	return webhookListResponse(events), nil
@@ -316,7 +316,7 @@ func (h Handler) ListLinearWebhooks(ctx context.Context) (api.ListLinearWebhooks
 	}
 	events, err := h.integrations.ListLinearWebhooks(ctx, user.OrgID, webhookListLimit)
 	if err != nil {
-		log.Printf("httpapi: list linear webhooks for org %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: list linear webhooks failed", "org_id", user.OrgID, "error", err)
 		return &api.Error{Message: "failed to list webhooks"}, nil
 	}
 	return webhookListResponse(events), nil
@@ -330,7 +330,7 @@ func (h Handler) GetLinearSettings(ctx context.Context) (api.GetLinearSettingsRe
 	}
 	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
 	if err != nil {
-		log.Printf("httpapi: get linear settings for org %s: %v", user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: get linear settings failed", "org_id", user.OrgID, "error", err)
 		return &api.Error{Message: "failed to read linear settings"}, nil
 	}
 	return resp, nil
@@ -391,7 +391,7 @@ func (h Handler) DeleteLinearSettings(ctx context.Context, params api.DeleteLine
 		return &api.DeleteLinearSettingsPaymentRequired{Message: billingLockedMsg}, nil
 	}
 	if err := h.integrations.DeleteLinearSetting(ctx, user.OrgID, params.SettingId); err != nil {
-		log.Printf("httpapi: delete linear setting %s for org %s: %v", params.SettingId, user.OrgID, err)
+		slog.ErrorContext(ctx, "httpapi: delete linear setting failed", "setting_id", params.SettingId, "org_id", user.OrgID, "error", err)
 		return &api.DeleteLinearSettingsUnauthorized{Message: "failed to delete config"}, nil
 	}
 	resp, err := h.linearSettingsResponse(ctx, user.OrgID)
@@ -419,13 +419,13 @@ func (h Handler) SyncSettings(ctx context.Context) (api.SyncSettingsRes, error) 
 	go func() {
 		defer wg.Done()
 		if err := h.integrations.SyncLinearTeamStates(ctx, orgID); err != nil {
-			log.Printf("httpapi: sync linear team states for org %s: %v", orgID, err)
+			slog.ErrorContext(ctx, "httpapi: sync linear team states failed", "org_id", orgID, "error", err)
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		if err := h.integrations.SyncSlackMembers(ctx, orgID); err != nil {
-			log.Printf("httpapi: sync slack members for org %s: %v", orgID, err)
+			slog.ErrorContext(ctx, "httpapi: sync slack members failed", "org_id", orgID, "error", err)
 		}
 	}()
 	wg.Wait()

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"xolo/backend/internal/integrations"
@@ -86,14 +86,14 @@ type linearPayload struct {
 func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	var ref linearEventRef
 	if err := json.Unmarshal(msg.Payload, &ref); err != nil {
-		log.Printf("sync: linear event: bad ref: %v", err)
+		slog.WarnContext(ctx, "sync: linear event: bad ref", "error", err)
 		return nil
 	}
 	if ref.OrgID == "" {
 		return nil // can't act without knowing the org
 	}
 	if e.orgLocked(ctx, ref.OrgID) {
-		log.Printf("sync: linear event %s: org %s locked (billing); dropped", ref.DeliveryID, ref.OrgID)
+		slog.InfoContext(ctx, "sync: linear event dropped: org locked (billing)", "delivery_id", ref.DeliveryID, "org_id", ref.OrgID)
 		return nil
 	}
 
@@ -106,7 +106,7 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 	var p linearPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		log.Printf("sync: linear event %s: parse payload: %v", ref.DeliveryID, err)
+		slog.WarnContext(ctx, "sync: linear event: parse payload failed", "delivery_id", ref.DeliveryID, "error", err)
 		return nil
 	}
 
@@ -150,7 +150,7 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err == nil {
 		archive, err := integrations.ArchiveTriggered(e.tmpl, settings, stateName, evt)
 		if err != nil {
-			log.Printf("sync: archive trigger eval: %v", err)
+			slog.WarnContext(ctx, "sync: archive trigger eval failed", "org_id", orgID, "issue_id", issueID, "error", err)
 			return nil // deterministic eval error; retrying can't help
 		}
 		if archive {
@@ -161,7 +161,7 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 
 	create, err := integrations.CreateTriggered(e.tmpl, settings, stateName, evt)
 	if err != nil {
-		log.Printf("sync: create trigger eval: %v", err)
+		slog.WarnContext(ctx, "sync: create trigger eval failed", "org_id", orgID, "issue_id", issueID, "error", err)
 		return nil // deterministic eval error; retrying can't help
 	}
 	if !create {
@@ -192,7 +192,7 @@ func (e *Engine) settingForTeam(ctx context.Context, orgID, teamID string) (inte
 		return integrations.LinearSettings{}, false
 	}
 	if err != nil {
-		log.Printf("sync: linear: resolve setting for team %s: %v", teamID, err)
+		slog.ErrorContext(ctx, "sync: linear: resolve setting for team failed", "org_id", orgID, "team_id", teamID, "error", err)
 		return integrations.LinearSettings{}, false
 	}
 	return settings, true
@@ -308,7 +308,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 		SlackTS:         ts,
 		RootSlackTS:     rootSlackTS,
 	}); err != nil {
-		log.Printf("sync: linear comment: record link: %v", err)
+		slog.ErrorContext(ctx, "sync: linear comment: record link failed", "org_id", orgID, "comment_id", d.ID, "channel_id", channelID, "error", err)
 	}
 
 	e.fireMessage(ctx, orgID, TopicSlackMessage, MessageEvent{
@@ -337,7 +337,7 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 		// doesn't reliably carry the team, so fetch the issue for it.
 		issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
 		if err != nil {
-			log.Printf("sync: notifbuddy create: fetch issue: %v", err)
+			slog.ErrorContext(ctx, "sync: notifbuddy create: fetch issue failed", "org_id", orgID, "issue_id", issueID, "error", err)
 			return true
 		}
 		settings, ok := e.settingForTeam(ctx, orgID, issue.TeamID)
@@ -347,13 +347,13 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 		evt := template.Event{EventType: "linear", Linear: envelopeLinearRaw(raw)}
 		if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err != nil {
 			if err := e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy"); err != nil {
-				log.Printf("sync: notifbuddy create: %v", err)
+				slog.ErrorContext(ctx, "sync: notifbuddy create failed", "org_id", orgID, "issue_id", issueID, "error", err)
 			}
 		}
 		return true
 	case intent.CloseChannel:
 		if err := e.closeChannel(ctx, orgID, issueID); err != nil {
-			log.Printf("sync: notifbuddy close: %v", err)
+			slog.ErrorContext(ctx, "sync: notifbuddy close failed", "org_id", orgID, "issue_id", issueID, "error", err)
 		}
 		return true
 	default:

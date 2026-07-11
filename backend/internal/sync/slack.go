@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/pubsub"
@@ -41,14 +41,14 @@ type slackPayload struct {
 func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	var ref slackEventRef
 	if err := json.Unmarshal(msg.Payload, &ref); err != nil {
-		log.Printf("sync: slack event: bad ref: %v", err)
+		slog.WarnContext(ctx, "sync: slack event: bad ref", "error", err)
 		return nil
 	}
 	if ref.OrgID == "" {
 		return nil
 	}
 	if e.orgLocked(ctx, ref.OrgID) {
-		log.Printf("sync: slack event %s: org %s locked (billing); dropped", ref.EventID, ref.OrgID)
+		slog.InfoContext(ctx, "sync: slack event dropped: org locked (billing)", "event_id", ref.EventID, "org_id", ref.OrgID)
 		return nil
 	}
 
@@ -60,7 +60,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 	var p slackPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		log.Printf("sync: slack event %s: parse payload: %v", ref.EventID, err)
+		slog.WarnContext(ctx, "sync: slack event: parse payload failed", "event_id", ref.EventID, "error", err)
 		return nil
 	}
 	ev := p.Event
@@ -130,7 +130,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		SlackTS:             ev.TS,
 		RootLinearCommentID: rootLinearComment,
 	}); err != nil {
-		log.Printf("sync: slack event: record link: %v", err)
+		slog.ErrorContext(ctx, "sync: slack event: record link failed", "event_id", ref.EventID, "org_id", ref.OrgID, "channel_id", ev.Channel, "error", err)
 	}
 
 	e.fireMessage(ctx, ref.OrgID, TopicLinearComment, MessageEvent{
@@ -150,7 +150,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 func (e *Engine) slackAuthor(ctx context.Context, token, userID string) (name, iconURL string) {
 	u, err := e.slack.UserByID(ctx, token, userID)
 	if err != nil {
-		log.Printf("sync: slack author lookup %s: %v", userID, err)
+		slog.ErrorContext(ctx, "sync: slack author lookup failed", "user_id", userID, "error", err)
 		return "", ""
 	}
 	return u.Name, u.IconURL

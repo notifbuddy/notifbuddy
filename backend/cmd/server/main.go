@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,25 +22,30 @@ import (
 	"xolo/backend/internal/httpapi"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/intent"
+	"xolo/backend/internal/logging"
 	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
 	syncengine "xolo/backend/internal/sync"
 )
 
-
 func main() {
 	// Best-effort load of backend/.env so the env vars referenced by the config
 	// (e.g. $WORKOS_API_KEY) are present without any shell setup. Real env vars
 	// already set take precedence; a missing file is not an error.
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Printf("note: could not load .env (%v); relying on real environment", err)
+		slog.Warn("could not load .env; relying on real environment", "error", err)
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("%v", err)
+		fatal("config", err)
 	}
+
+	// Structured logging (log/slog): JSON in prod (Datadog-parseable), text in
+	// dev. Installed as the slog default; the stdlib log package routes through
+	// it too, so third-party log output also comes out structured.
+	logging.Setup(cfg.Logging.Format, cfg.Logging.Level)
 
 	// Root context: canceled on SIGINT/SIGTERM, which drives the graceful
 	// shutdown of both the HTTP server and the pub/sub router.
@@ -54,22 +59,22 @@ func main() {
 	if cfg.Database.URL != "" {
 		st, err = store.New(ctx, cfg.Database.URL)
 		if err != nil {
-			log.Fatalf("database: %v", err)
+			fatal("database connect", err)
 		}
 		defer st.Close()
 		if err := st.Migrate(ctx); err != nil {
-			log.Fatalf("migrate: %v", err)
+			fatal("database migrate", err)
 		}
-		log.Printf("database connected and migrated")
+		slog.Info("database connected and migrated")
 	} else {
-		log.Printf("note: database.url not set — integrations disabled")
+		slog.Warn("database.url not set — integrations disabled")
 	}
 
 	// At-rest encryption for integration tokens (currently only the local
 	// provider is wired; plug a KMS client into crypto.NewKMSEncryptor for prod).
 	enc, err := buildEncryptor(ctx, cfg)
 	if err != nil {
-		log.Fatalf("encryption: %v", err)
+		fatal("encryption", err)
 	}
 
 	// Auth (WorkOS): redirect handlers + the session-loading middleware.
@@ -85,7 +90,7 @@ func main() {
 	if st != nil {
 		bus, err = pubsub.NewBus(ctx, cfg.PubSub, st.Pool())
 		if err != nil {
-			log.Fatalf("pubsub: %v", err)
+			fatal("pubsub", err)
 		}
 		publisher = bus
 	}
@@ -135,19 +140,19 @@ func main() {
 			"sync-slack":    engine.OnSlackEvent,
 		})
 		if err != nil {
-			log.Fatalf("pubsub: %v", err)
+			fatal("pubsub subscriptions", err)
 		}
 		if err := bus.Start(ctx, subs); err != nil {
-			log.Fatalf("pubsub start: %v", err)
+			fatal("pubsub start", err)
 		}
-		log.Printf("pubsub consumers running (provider %q)", cfg.PubSub.Provider)
+		slog.Info("pubsub consumers running", "provider", cfg.PubSub.Provider)
 	}
 
 	// API handler (implements the ogen interface) + the generated server.
 	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc, st)
 	srv, err := api.NewServer(apiHandler)
 	if err != nil {
-		log.Fatalf("create server: %v", err)
+		fatal("create api server", err)
 	}
 
 	// Route: browser-redirect endpoints are plain net/http handlers (302 +
@@ -194,7 +199,7 @@ func main() {
 	}
 	mux.Handle("/", srv)
 
-	handler := httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin)
+	handler := httpapi.WithRequestLog(httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin))
 
 	// Consumers are already live (bus.Start above), so serve HTTP. On
 	// SIGINT/SIGTERM: stop accepting HTTP (no new publishes, and on gcp no
@@ -202,24 +207,30 @@ func main() {
 	// publishers), then the deferred st.Close() releases the pool.
 	httpSrv := &http.Server{Addr: cfg.Server.Addr, Handler: handler}
 	go func() {
-		log.Printf("listening on %s (CORS allow-origin: %s)", cfg.Server.Addr, cfg.CORS.AllowOrigin)
+		slog.Info("listening", "addr", cfg.Server.Addr, "cors_allow_origin", cfg.CORS.AllowOrigin)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server: %v", err)
+			fatal("http server", err)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Printf("shutting down")
+	slog.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("http shutdown: %v", err)
+		slog.Error("http shutdown", "error", err)
 	}
 	if bus != nil {
 		if err := bus.Close(); err != nil {
-			log.Printf("pubsub close: %v", err)
+			slog.Error("pubsub close", "error", err)
 		}
 	}
+}
+
+// fatal is the slog replacement for log.Fatalf: log at error level, then exit.
+func fatal(msg string, err error) {
+	slog.Error(msg, "error", err)
+	os.Exit(1)
 }
 
 // buildEncryptor constructs the at-rest Encryptor from config. The "local"
@@ -234,7 +245,7 @@ func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, e
 			return nil, err
 		}
 		if cfg.Encryption.LocalKey == "" {
-			log.Printf("warning: encryption.local_key not set — generated an ephemeral dev key (%d-char base64); stored tokens will not decrypt after restart", len(keyB64))
+			slog.Warn("encryption.local_key not set — generated an ephemeral dev key; stored tokens will not decrypt after restart", "key_base64_len", len(keyB64))
 		}
 		return enc, nil
 	case "kms":

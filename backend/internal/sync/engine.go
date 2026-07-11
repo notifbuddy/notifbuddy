@@ -15,7 +15,7 @@ package sync
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/intent"
@@ -122,6 +122,6 @@ func (e *Engine) publish(ctx context.Context, topic string, payload []byte, orgI
 		Payload:    payload,
 		Attributes: map[string]string{"org_id": orgID},
 	}); err != nil {
-		log.Printf("sync: publish %s failed: %v", topic, err)
+		slog.ErrorContext(ctx, "sync: publish failed", "topic", topic, "org_id", orgID, "error", err)
 	}
 }

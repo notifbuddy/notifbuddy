@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"xolo/backend/internal/pubsub"
@@ -54,7 +54,7 @@ func (s *Service) HandleLinearWebhook(w http.ResponseWriter, r *http.Request) {
 	// 1a. Verify signature. If a webhook secret is configured, it must match.
 	if secret := s.cfg.Linear.WebhookSecret; secret != "" {
 		if !validLinearSignature(secret, body, r.Header.Get("Linear-Signature")) {
-			log.Printf("integrations: linear webhook signature mismatch")
+			slog.WarnContext(r.Context(), "integrations: linear webhook signature mismatch")
 			http.Error(w, "invalid signature", http.StatusUnauthorized)
 			return
 		}
@@ -100,7 +100,7 @@ func (s *Service) HandleLinearWebhook(w http.ResponseWriter, r *http.Request) {
 			"workspace_id": parsed.OrganizationID,
 		},
 	}); err != nil {
-		log.Printf("integrations: publish linear webhook %s: %v", deliveryID, err)
+		slog.ErrorContext(r.Context(), "integrations: publish linear webhook", "delivery_id", deliveryID, "error", err)
 		http.Error(w, "failed to accept event", http.StatusInternalServerError)
 		return
 	}
@@ -161,7 +161,7 @@ func (s *Service) WriteLinearWebhook(ctx context.Context, msg pubsub.Message) er
 	// Failure here only risks a duplicate envelope on a later redelivery,
 	// which downstream consumers must tolerate anyway (at-least-once).
 	if err := s.store.MarkLinearWebhookPublished(ctx, evt.DeliveryID); err != nil {
-		log.Printf("integrations: %v", err)
+		slog.ErrorContext(ctx, "integrations: mark linear webhook published", "delivery_id", evt.DeliveryID, "error", err)
 	}
 	return nil
 }
