@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Logo from '$lib/components/logo.svelte';
+	import Logo from '$shared/components/logo.svelte';
 	import LinearIcon from '$lib/icons/linear.svelte';
 	import GithubIcon from '$lib/icons/github.svelte';
 	import SlackIcon from '$lib/icons/slack.svelte';

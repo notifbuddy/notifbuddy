@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import Logo from '$lib/components/app/logo.svelte';
+	import Logo from '$shared/components/logo.svelte';
 	import GithubIcon from '$lib/icons/github.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import BuildingIcon from '@lucide/svelte/icons/building-2';

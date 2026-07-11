@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ErrorPage from '$lib/components/error-page.svelte';
+	import ErrorPage from '$shared/components/error-page.svelte';
 </script>
 
 <svelte:head>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex" />
+		<title>Something went wrong — notifbuddy</title>
+		<!-- Fallback for fatal errors where the app itself can't render (so no
+		     Tailwind, no theme tokens, no components). A minimal, self-contained
+		     echo of the "signal lost" board; +error.svelte handles everything the
+		     running app can catch. -->
+		<style>
+			:root {
+				--bg: #ffffff;
+				--fg: #2a2925;
+				--muted: rgba(42, 41, 37, 0.6);
+				--clay: oklch(0.64 0.058 45);
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #201f22;
+					--fg: #f3f0e9;
+					--muted: rgba(243, 240, 233, 0.6);
+					--clay: oklch(0.7 0.06 48);
+				}
+			}
+			body {
+				margin: 0;
+				min-height: 100svh;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: 1.25rem;
+				text-align: center;
+				padding: 2rem 1rem;
+				background: var(--bg);
+				color: var(--fg);
+				font-family:
+					ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+					sans-serif;
+			}
+			.pip {
+				width: 10px;
+				height: 10px;
+				border-radius: 999px;
+				background: var(--clay);
+				box-shadow: 0 0 10px var(--clay);
+				animation: breathe 3.5s ease-in-out infinite;
+			}
+			@keyframes breathe {
+				0%,
+				100% {
+					opacity: 1;
+				}
+				50% {
+					opacity: 0.35;
+				}
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.pip {
+					animation: none;
+				}
+			}
+			.eyebrow {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 12px;
+				letter-spacing: 0.18em;
+				text-transform: uppercase;
+				color: var(--muted);
+			}
+			h1 {
+				margin: 0;
+				font-size: clamp(2rem, 6vw, 3rem);
+				line-height: 1.05;
+				letter-spacing: -0.02em;
+			}
+			h1 span {
+				color: var(--clay);
+			}
+			p {
+				margin: 0;
+				max-width: 28rem;
+				line-height: 1.6;
+				color: var(--muted);
+			}
+			a {
+				display: inline-flex;
+				align-items: center;
+				height: 2.5rem;
+				padding: 0 1.25rem;
+				border-radius: 0.375rem;
+				background: var(--clay);
+				color: #fff;
+				font-size: 14px;
+				font-weight: 500;
+				text-decoration: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="pip" aria-hidden="true"></div>
+		<p class="eyebrow">http %sveltekit.status% — signal interrupted</p>
+		<h1>Something broke<br />the sync<span>.</span></h1>
+		<p>%sveltekit.error.message%</p>
+		<a href="/">Back to the signal</a>
+	</body>
+</html>

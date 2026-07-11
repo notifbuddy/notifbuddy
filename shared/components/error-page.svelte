@@ -1,11 +1,17 @@
 <script lang="ts">
-	// The branded error page — the "signal lost" board. Rendered two ways: by
-	// src/routes/404/+page.svelte (prerendered to build/404.html, which
-	// Cloudflare serves for unmatched paths in production) and by
-	// src/routes/+error.svelte (dev-server 404s and any kit-rendered error).
-	import Logo from '$lib/components/logo.svelte';
+	// The branded error page — the "signal lost" board, shared by both apps
+	// via the `$shared` alias. On the landing site it's rendered by
+	// routes/404/+page.svelte (prerendered to build/404.html, which Cloudflare
+	// serves for unmatched paths) and routes/+error.svelte; in the dashboard
+	// SPA by routes/+error.svelte. Theme tokens (--primary etc.) come from
+	// whichever app renders it — both share the same QraftHive values, so the
+	// page looks identical on either surface.
+	import Logo from './logo.svelte';
 
-	let { status = 404 }: { status?: number } = $props();
+	let {
+		status = 404,
+		privacyHref = '/privacy'
+	}: { status?: number; privacyHref?: string } = $props();
 	const notFound = $derived(status === 404);
 </script>
 
@@ -83,7 +89,7 @@
 		</p>
 		<a
 			class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
-			href="/privacy">privacy</a
+			href={privacyHref}>privacy</a
 		>
 	</footer>
 </div>
