@@ -5,17 +5,29 @@
 	import AppShell from '$lib/components/app/app-shell.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { userStore } from '$lib/user.svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 
 	let { children } = $props();
 
 	// Load the session once for the whole app. `user` is a tri-state:
 	//   undefined → still checking (don't render the page yet)
 	//   null      → signed out (render children bare: the centered login card)
-	//   User      → signed in (wrap children in the app shell)
+	//   User      → signed in; the app shell additionally requires an
+	//               organization — an org-less session (fresh sign-up mid
+	//               create-org step) renders bare, full-page, like the rest of
+	//               the login flow.
 	// Collapsing undefined+null would render deep routes bare/full-width for a
 	// frame before the shell mounts, causing a width flash on reload.
 	userStore.load();
 	const user = $derived(userStore.user);
+
+	// Org-scoped routes need an active organization: bounce org-less sessions
+	// that deep-link anywhere else back to the entry route, which shows the
+	// create-organization step.
+	$effect(() => {
+		if (user && !user.organizationId && page.url.pathname !== '/') goto('/');
+	});
 </script>
 
 <svelte:head>
@@ -63,7 +75,7 @@
 			</div>
 		</main>
 	</div>
-{:else if user}
+{:else if user && user.organizationId}
 	<AppShell>
 		{@render children()}
 	</AppShell>
