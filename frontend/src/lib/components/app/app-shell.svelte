@@ -6,20 +6,14 @@
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import CreditCardIcon from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
 	import { userStore } from '$lib/user.svelte';
 	import { trialDaysLeft } from '$lib/billing';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
 
-	// Org-scoped pages need an active organization. A session without one
-	// (fresh sign-up that deep-linked into the app) goes back to the entry
-	// route, which shows the create-organization step.
-	$effect(() => {
-		const u = userStore.user;
-		if (u && !u.organizationId) goto('/');
-	});
+	// Org-less sessions never reach this shell: the root layout renders them
+	// bare and bounces them to the entry route's create-organization step.
 
 	const billing = $derived(userStore.user?.billing);
 	const path = $derived(page.url.pathname);
