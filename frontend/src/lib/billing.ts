@@ -56,6 +56,8 @@ export function formatPrice(cents: number): string {
 // Human label for a plan key.
 export function planLabel(plan: string): string {
 	switch (plan) {
+		case 'beta':
+			return 'Beta';
 		case 'pro':
 			return 'Pro';
 		case 'oss_free':

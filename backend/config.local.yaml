@@ -95,6 +95,12 @@ cloudflare:
   api_token: "${CF_API_TOKEN}" # SECRET — Bearer token for the Workers AI REST API
   model: "@cf/meta/llama-3.1-8b-instruct" # text-generation model id; swappable
 
+billing:
+  # "beta": billing is disabled — every org reports the free "beta" plan,
+  # nothing locks, checkout/portal are off. Flip to "live" (or remove) to
+  # re-enable trials + Stripe.
+  mode: "beta"
+
 stripe:
   # Billing (Pro plan checkout + Customer Portal). Use a RESTRICTED key
   # (rk_test_...) with write on Customers/Checkout Sessions/Subscriptions/

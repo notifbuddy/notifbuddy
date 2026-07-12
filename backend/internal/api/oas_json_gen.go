@@ -387,6 +387,8 @@ func (s *BillingStatusResponsePlan) Decode(d *jx.Decoder) error {
 		*s = BillingStatusResponsePlanOssFree
 	case BillingStatusResponsePlanEnterprise:
 		*s = BillingStatusResponsePlanEnterprise
+	case BillingStatusResponsePlanBeta:
+		*s = BillingStatusResponsePlanBeta
 	default:
 		*s = BillingStatusResponsePlan(v)
 	}
@@ -559,6 +561,8 @@ func (s *BillingSummaryPlan) Decode(d *jx.Decoder) error {
 		*s = BillingSummaryPlanOssFree
 	case BillingSummaryPlanEnterprise:
 		*s = BillingSummaryPlanEnterprise
+	case BillingSummaryPlanBeta:
+		*s = BillingSummaryPlanBeta
 	default:
 		*s = BillingSummaryPlan(v)
 	}

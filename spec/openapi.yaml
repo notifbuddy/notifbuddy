@@ -1025,8 +1025,11 @@ components:
       properties:
         plan:
           type: string
-          description: The organization's plan.
-          enum: [trial, pro, oss_free, enterprise]
+          description: |
+            The organization's plan. "beta" is reported for every organization
+            while billing is disabled during the beta (nothing locks, nothing
+            is charged).
+          enum: [trial, pro, oss_free, enterprise, beta]
           example: trial
         locked:
           type: boolean
@@ -1046,8 +1049,11 @@ components:
       properties:
         plan:
           type: string
-          description: The organization's plan.
-          enum: [trial, pro, oss_free, enterprise]
+          description: |
+            The organization's plan. "beta" is reported for every organization
+            while billing is disabled during the beta (nothing locks, nothing
+            is charged).
+          enum: [trial, pro, oss_free, enterprise, beta]
           example: trial
         locked:
           type: boolean

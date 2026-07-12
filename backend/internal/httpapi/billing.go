@@ -50,6 +50,8 @@ func (h Handler) CreateBillingCheckout(ctx context.Context) (api.CreateBillingCh
 	}
 	url, err := h.billing.CreateCheckout(ctx, user.OrgID, user.Email)
 	switch {
+	case errors.Is(err, billing.ErrDisabled):
+		return &api.CreateBillingCheckoutBadRequest{Message: "billing is disabled while NotifBuddy is in beta"}, nil
 	case errors.Is(err, billing.ErrAlreadySubscribed):
 		return &api.CreateBillingCheckoutConflict{Message: "already subscribed"}, nil
 	case errors.Is(err, billing.ErrNotConfigured):
@@ -76,6 +78,8 @@ func (h Handler) CreateBillingPortal(ctx context.Context) (api.CreateBillingPort
 	}
 	url, err := h.billing.CreatePortal(ctx, user.OrgID)
 	switch {
+	case errors.Is(err, billing.ErrDisabled):
+		return &api.CreateBillingPortalBadRequest{Message: "billing is disabled while NotifBuddy is in beta"}, nil
 	case errors.Is(err, billing.ErrNoCustomer):
 		return &api.CreateBillingPortalBadRequest{Message: "no billing account yet — subscribe first"}, nil
 	case errors.Is(err, billing.ErrNotConfigured):
@@ -110,6 +114,8 @@ func (h Handler) SubmitOssApplication(ctx context.Context, req *api.OssApplicati
 	}
 	status, err := h.billing.SubmitOSSApplication(ctx, user.OrgID, sponsorURL, note)
 	switch {
+	case errors.Is(err, billing.ErrDisabled):
+		return &api.SubmitOssApplicationBadRequest{Message: "billing is disabled while NotifBuddy is in beta"}, nil
 	case errors.Is(err, billing.ErrAlreadySubscribed):
 		return &api.SubmitOssApplicationConflict{Message: "already approved or subscribed"}, nil
 	case err != nil:

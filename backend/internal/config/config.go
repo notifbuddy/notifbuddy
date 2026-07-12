@@ -32,6 +32,15 @@ type Config struct {
 	Linear     LinearConfig     `yaml:"linear"`
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 	Stripe     StripeConfig     `yaml:"stripe"`
+	Billing    BillingConfig    `yaml:"billing"`
+}
+
+// BillingConfig controls plan enforcement.
+type BillingConfig struct {
+	// Mode selects billing behavior: "live" (or empty — 21-day trials plus
+	// Stripe subscriptions) or "beta" (everything free: no trial lock, no
+	// checkout; status reports the "beta" plan).
+	Mode string `yaml:"mode"`
 }
 
 type ServerConfig struct {

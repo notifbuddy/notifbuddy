@@ -35,6 +35,14 @@ type Service struct {
 // ErrNotConfigured reports that billing has no database or Stripe config.
 var ErrNotConfigured = fmt.Errorf("billing: not configured")
 
+// ErrDisabled reports that billing is switched off (billing.mode "beta"):
+// everything is free, so checkout/portal/OSS applications are refused.
+var ErrDisabled = fmt.Errorf("billing: disabled during beta")
+
+// beta reports whether billing enforcement is switched off (billing.mode
+// "beta" — the product is free while in beta).
+func (s *Service) beta() bool { return s.cfg.Billing.Mode == "beta" }
+
 // New builds the billing service. st may be nil when the app runs without a
 // database.
 func New(st *store.Store, cfg config.Config, countMembers MemberCounter) *Service {
@@ -54,6 +62,11 @@ func (s *Service) EnsureOrg(ctx context.Context, orgID string) error {
 // StatusForOrg returns the org's billing status, creating the row (and
 // starting the trial) on first touch.
 func (s *Service) StatusForOrg(ctx context.Context, orgID string) (Status, error) {
+	// Beta: everything is free and nothing locks — no trial row is created,
+	// so no clock starts ticking until billing goes live.
+	if s.beta() {
+		return Status{Plan: PlanBeta, Locked: false}, nil
+	}
 	if s.st == nil {
 		return Status{}, ErrNotConfigured
 	}
