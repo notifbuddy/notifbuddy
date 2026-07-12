@@ -70,8 +70,8 @@ func main() {
 		slog.Warn("database.url not set — integrations disabled")
 	}
 
-	// At-rest encryption for integration tokens (currently only the local
-	// provider is wired; plug a KMS client into crypto.NewKMSEncryptor for prod).
+	// At-rest encryption for integration tokens: local AES-GCM for dev,
+	// Google Cloud KMS in prod (encryption.provider in config).
 	enc, err := buildEncryptor(ctx, cfg)
 	if err != nil {
 		fatal("encryption", err)
@@ -235,8 +235,8 @@ func fatal(msg string, err error) {
 
 // buildEncryptor constructs the at-rest Encryptor from config. The "local"
 // provider uses an AES-GCM key (generating an ephemeral dev key if none is set,
-// logging a warning). The "kms" provider needs a KMSClient wired in — see
-// crypto.NewKMSEncryptor.
+// logging a warning). The "gcpkms" provider encrypts against a Google Cloud KMS
+// key (created by infra) via Application Default Credentials.
 func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, error) {
 	switch cfg.Encryption.Provider {
 	case "", "local":
@@ -248,11 +248,15 @@ func buildEncryptor(ctx context.Context, cfg config.Config) (crypto.Encryptor, e
 			slog.Warn("encryption.local_key not set — generated an ephemeral dev key; stored tokens will not decrypt after restart", "key_base64_len", len(keyB64))
 		}
 		return enc, nil
-	case "kms":
-		// Plug your provider's KMSClient here, e.g.:
-		//   client := awskms.New(...)
-		//   return crypto.NewKMSEncryptor(ctx, client, cfg.Encryption.KMSKeyID)
-		return nil, errWrap("encryption.provider=kms requires a KMS client to be wired into buildEncryptor")
+	case "gcpkms":
+		// The client lives for the process — no explicit Close. KMSKeyID is
+		// the crypto key's full resource name; Decrypt resolves the version
+		// from each ciphertext, so rotation needs no app changes.
+		client, err := crypto.NewGCPKMSClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return crypto.NewKMSEncryptor(ctx, client, cfg.Encryption.KMSKeyID)
 	default:
 		return nil, errWrap("unknown encryption.provider: " + cfg.Encryption.Provider)
 	}

@@ -36,9 +36,13 @@ database:
   url: "${DATABASE_URL}" # injected by infra from the Neon connection string
 
 encryption:
-  provider: "local" # "local" (AES-GCM) or "kms"
-  local_key: "${INTEGRATION_ENC_KEY}" # SECRET — base64 32-byte key; MUST be set + stable in prod (empty = ephemeral, loses stored tokens on restart)
-  kms_key_id: ""
+  # Google Cloud KMS via the Cloud Run runtime SA (ADC). The key is created by
+  # infra and must be applied BEFORE deploying this config. Cutover from
+  # provider="local" invalidates previously stored tokens (they were sealed
+  # with the old env-var key) — reconnect the integrations after switching.
+  provider: "gcpkms"
+  local_key: "" # unused with provider=gcpkms; INTEGRATION_ENC_KEY env no longer needed
+  kms_key_id: "${KMS_KEY_ID}" # resource name, not a secret (infra output kms_key_id)
 
 pubsub:
   # Pub/Sub push keeps Cloud Run + Neon scale-to-zero (no polling). Requires
