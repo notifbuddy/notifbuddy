@@ -95,7 +95,7 @@ func main() {
 		publisher = bus
 	}
 
-	// Integrations (GitHub/Slack/Linear): reads the caller's org/user from the
+	// Integrations (Slack/Linear): reads the caller's org/user from the
 	// session via auth.OrgUserFromRequest. Runs with a nil store when no DB is
 	// configured (Enabled() == false), reporting "not configured".
 	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
@@ -133,7 +133,6 @@ func main() {
 		// only binds a handler to each subscription name. BindSubscriptions
 		// fails on any mismatch in either direction.
 		subs, err := pubsub.BindSubscriptions(map[string]pubsub.Handler{
-			"writer-github": intgSvc.WriteGitHubWebhook,
 			"writer-linear": intgSvc.WriteLinearWebhook,
 			"writer-slack":  intgSvc.WriteSlackWebhook,
 			"sync-linear":   engine.OnLinearEvent,
@@ -179,9 +178,6 @@ func main() {
 	mux.HandleFunc("GET /auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("GET /auth/callback", authSvc.HandleCallback)
 	mux.HandleFunc("GET /auth/logout", authSvc.HandleLogout)
-	mux.HandleFunc("GET /integrations/github/connect", gateBilling(intgSvc.HandleGitHubConnect))
-	mux.HandleFunc("GET /integrations/github/callback", intgSvc.HandleGitHubCallback)
-	mux.HandleFunc("POST /integrations/github/webhook", intgSvc.HandleGitHubWebhook)
 	mux.HandleFunc("GET /integrations/slack/connect", gateBilling(intgSvc.HandleSlackConnect))
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
 	mux.HandleFunc("POST /integrations/slack/webhook", intgSvc.HandleSlackWebhook)

@@ -74,7 +74,7 @@ type Handler interface {
 	GetBilling(ctx context.Context) (GetBillingRes, error)
 	// GetIntegrationStatus implements getIntegrationStatus operation.
 	//
-	// Returns the connection state of each supported integration (GitHub, Slack, Linear) for the caller's
+	// Returns the connection state of each supported integration (Slack, Slack, Linear) for the caller's
 	// active organization. Drives the integrations settings view. The actual connect/callback flows are
 	// browser redirects (GET /integrations/{provider}/connect) and are not part of this JSON spec.
 	//
@@ -112,14 +112,6 @@ type Handler interface {
 	//
 	// GET /auth/pending-orgs
 	GetPendingOrgs(ctx context.Context) (GetPendingOrgsRes, error)
-	// ListGithubWebhooks implements listGithubWebhooks operation.
-	//
-	// Returns the GitHub webhook events we have received and stored for the caller's active organization,
-	// newest first. Events are stored when GitHub delivers them to POST /integrations/github/webhook (a
-	// browser-external redirect-style route, not part of this JSON spec).
-	//
-	// GET /integrations/github/webhooks
-	ListGithubWebhooks(ctx context.Context) (ListGithubWebhooksRes, error)
 	// ListInvitations implements listInvitations operation.
 	//
 	// Returns the invitations for the caller's active organization. Requires a session scoped to an

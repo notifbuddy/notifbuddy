@@ -23,10 +23,8 @@ func TestPublishedTopicsAreInManifest(t *testing.T) {
 	}
 
 	published := []string{
-		integrations.GitHubWebhookReceivedTopic,
 		integrations.LinearWebhookReceivedTopic,
 		integrations.SlackWebhookReceivedTopic,
-		integrations.GitHubWebhookTopic,
 		integrations.LinearWebhookTopic,
 		integrations.SlackWebhookTopic,
 		pubsub.PoisonTopic,

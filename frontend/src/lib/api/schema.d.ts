@@ -299,7 +299,7 @@ export interface paths {
         };
         /**
          * Integration connection status for the active organization
-         * @description Returns the connection state of each supported integration (GitHub,
+         * @description Returns the connection state of each supported integration (Slack,
          *     Slack, Linear) for the caller's active organization. Drives the
          *     integrations settings view. The actual connect/callback flows are
          *     browser redirects (GET /integrations/{provider}/connect) and are not
@@ -330,29 +330,6 @@ export interface paths {
          *     level=user removes only the caller's own per-user connection.
          */
         post: operations["disconnectIntegration"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/integrations/github/webhooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Recent GitHub webhook deliveries for the active organization
-         * @description Returns the GitHub webhook events we have received and stored for the
-         *     caller's active organization, newest first. Events are stored when GitHub
-         *     delivers them to POST /integrations/github/webhook (a browser-external
-         *     redirect-style route, not part of this JSON spec).
-         */
-        get: operations["listGithubWebhooks"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -881,7 +858,7 @@ export interface components {
         IntegrationStatus: {
             /**
              * @description The provider key.
-             * @example github
+             * @example slack
              */
             provider: string;
             /**
@@ -894,7 +871,7 @@ export interface components {
             /** @description Whether this provider is connected at this level. */
             connected: boolean;
             /**
-             * @description The connected account/workspace label (GitHub login, Slack team).
+             * @description The connected account/workspace label (Slack team, Linear workspace).
              * @example acme
              */
             account?: string;
@@ -910,15 +887,15 @@ export interface components {
             /** @description Whether the integration service is configured (database available) on the server. */
             configured: boolean;
         };
-        /** @description A stored GitHub webhook delivery. */
+        /** @description A stored provider webhook delivery. */
         WebhookEvent: {
             /**
-             * @description The X-GitHub-Delivery id (unique per delivery).
+             * @description The provider's unique delivery id.
              * @example 12345678-1234-1234-1234-123456789012
              */
             deliveryId: string;
             /**
-             * @description The X-GitHub-Event type.
+             * @description The provider's event type.
              * @example push
              */
             eventType: string;
@@ -1801,7 +1778,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                provider: "github" | "slack" | "linear";
+                provider: "slack" | "linear";
             };
             cookie?: never;
         };
@@ -1814,35 +1791,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationStatusResponse"];
-                };
-            };
-            /** @description No valid session. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listGithubWebhooks: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recent webhook events. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookListResponse"];
                 };
             };
             /** @description No valid session. */

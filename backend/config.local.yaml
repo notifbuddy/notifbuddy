@@ -44,21 +44,6 @@ pubsub:
     poll_interval: "200ms" # fast polling + event logging for dev
     log_events: true # extra consumer group printing every message (dev visibility)
 
-github:
-  app_slug: "notifbuddy-local" # github.com/apps/<slug>
-  app_id: "4151532" # numeric GitHub App ID
-  client_id: "Iv23li54M6KJDfbqwvtu  " # App OAuth client id
-  client_secret: "${GITHUB_APP_CLIENT_SECRET}" # SECRET
-  private_key: "${GITHUB_APP_PRIVATE_KEY}" # SECRET — PEM contents, used to mint installation tokens
-  webhook_secret: "${GITHUB_WEBHOOK_SECRET}" # SECRET — verifies X-Hub-Signature-256; empty disables verification
-  callback_url: "http://localhost:8080/integrations/github/callback"
-  # User-level (user-to-server) connection: scopes requested when a user connects
-  # their own GitHub account (acts as the user for two-way sync). Empty is valid.
-  user_scopes:
-    - repo
-    - read:user
-  user_callback_url: "http://localhost:8080/integrations/github/callback" # user-to-server redirect
-
 slack:
   client_id: "11457434980017.11440212651047" # Slack app client id
   client_secret: "${SLACK_CLIENT_SECRET}" # SECRET

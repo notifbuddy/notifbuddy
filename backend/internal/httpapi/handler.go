@@ -292,21 +292,6 @@ func (h Handler) DisconnectIntegration(ctx context.Context, params api.Disconnec
 // webhookListLimit caps how many webhook events the list endpoint returns.
 const webhookListLimit = 100
 
-// ListGithubWebhooks implements `listGithubWebhooks`: GET /integrations/github/webhooks.
-// Returns the active organization's recent stored GitHub webhook deliveries.
-func (h Handler) ListGithubWebhooks(ctx context.Context) (api.ListGithubWebhooksRes, error) {
-	user := auth.UserFromContext(ctx)
-	if user == nil {
-		return &api.Error{Message: "unauthorized"}, nil
-	}
-	events, err := h.integrations.ListGitHubWebhooks(ctx, user.OrgID, webhookListLimit)
-	if err != nil {
-		slog.ErrorContext(ctx, "httpapi: list github webhooks failed", "org_id", user.OrgID, "error", err)
-		return &api.Error{Message: "failed to list webhooks"}, nil
-	}
-	return webhookListResponse(events), nil
-}
-
 // ListLinearWebhooks implements `listLinearWebhooks`: GET /integrations/linear/webhooks.
 // Returns the active organization's recent stored Linear webhook deliveries.
 func (h Handler) ListLinearWebhooks(ctx context.Context) (api.ListLinearWebhooksRes, error) {

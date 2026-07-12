@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
-	import { SiGithub, SiLinear } from '@icons-pack/svelte-simple-icons';
+	import { SiLinear } from '@icons-pack/svelte-simple-icons';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import PlugIcon from '@lucide/svelte/icons/plug';
@@ -42,21 +42,14 @@
 		if (next) intg = next;
 	}
 
-	const icon = (key: string) =>
-		key === 'github' ? SiGithub : key === 'linear' ? SiLinear : SlackIcon;
+	const icon = (key: string) => (key === 'linear' ? SiLinear : SlackIcon);
 
 	const blurbOf = (p: (typeof PROVIDERS)[number]) =>
 		level === 'user' ? p.userBlurb : p.workspaceBlurb;
 
 	// Webhook views are workspace-scoped (org deliveries), so only shown there.
 	const webhooksHref = (key: string) =>
-		level !== 'workspace'
-			? ''
-			: key === 'github'
-				? '/settings/integrations/webhooks'
-				: key === 'linear'
-					? '/settings/integrations/linear-webhooks'
-					: '';
+		level === 'workspace' && key === 'linear' ? '/settings/integrations/linear-webhooks' : '';
 </script>
 
 {#if intg === undefined}

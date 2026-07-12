@@ -14,12 +14,10 @@
 topics:
   # Raw webhook deliveries (payload = the provider's raw body), published by
   # the HTTP receivers after signature verification.
-  - integrations.github.webhook.received
   - integrations.linear.webhook.received
   - integrations.slack.webhook.received
   # Processed webhook envelopes, published by the writer once a delivery is
   # persisted and deduplicated.
-  - integrations.github.webhook_event
   - integrations.linear.webhook_event
   - integrations.slack.webhook_event
   # Sync-engine audit events (no consumers yet; dev-logger sees them locally).
@@ -38,9 +36,6 @@ topics:
 # group is the postgres consumer group (subscriptions sharing a group share
 # one delivery offset per topic; GCP ignores it).
 subscriptions:
-  writer-github:
-    topic: integrations.github.webhook.received
-    group: writer
   writer-linear:
     topic: integrations.linear.webhook.received
     group: writer

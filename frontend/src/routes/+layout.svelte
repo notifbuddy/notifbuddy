@@ -25,13 +25,13 @@
 	     domain so links unfurl the same everywhere. -->
 	<meta
 		name="description"
-		content="notifbuddy moves notifications both ways between Linear, GitHub, Plain and Slack."
+		content="notifbuddy moves notifications both ways between Linear, Plain and Slack."
 	/>
 	<meta property="og:site_name" content="notifbuddy" />
 	<meta property="og:title" content="notifbuddy — all the noise, one signal" />
 	<meta
 		property="og:description"
-		content="Two-way notification sync between Linear, GitHub, Plain and Slack."
+		content="Two-way notification sync between Linear, Plain and Slack."
 	/>
 	<meta property="og:image" content="https://notifbuddy.com/og-card.png" />
 	<meta property="og:image:width" content="1200" />
