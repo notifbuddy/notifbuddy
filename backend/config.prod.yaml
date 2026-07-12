@@ -21,7 +21,7 @@ cors:
   allow_origin: "https://app.notifbuddy.com" # TODO: exact prod SPA origin (credentialed CORS: no "*")
 
 workos:
-  client_id: "client_01KW191FHXJTNC0X9X9W39DWMX"
+  client_id: "${WORKOS_CLIENT_ID}"
   api_key: "${WORKOS_API_KEY}" # SECRET
   cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET (>=32 chars)
   redirect_uri: "https://api.notifbuddy.com/auth/callback" # TODO: prod backend base + /auth/callback; must match a WorkOS dashboard redirect
