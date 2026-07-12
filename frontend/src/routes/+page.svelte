@@ -153,9 +153,10 @@
 	];
 </script>
 
-{#if user && !needsVerify && !needsSelectOrg}
-	<!-- Signed in: the $effect above redirects to /dashboard/linear; show a brief
-	     placeholder while navigation happens so the page isn't blank. -->
+{#if user && !needsVerify && !needsSelectOrg && !needsCreateOrg}
+	<!-- Signed in with an org: the $effect above redirects to /dashboard/linear;
+	     show a brief placeholder while navigation happens so the page isn't
+	     blank. (Org-less sessions fall through to the create-org card below.) -->
 	<main class="flex min-h-svh items-center justify-center p-6">
 		<LoaderIcon class="text-muted-foreground animate-spin" />
 	</main>
