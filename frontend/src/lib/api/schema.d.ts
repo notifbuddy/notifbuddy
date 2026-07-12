@@ -214,6 +214,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an organization and scope the session to it
+         * @description For signed-in users with no organization (fresh sign-ups that didn't
+         *     arrive via an invitation). Creates the organization, adds the caller as
+         *     its first member, refreshes the session scoped to the new organization
+         *     (the session cookie is re-set), and returns the updated user.
+         */
+        post: operations["createOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organization/profile": {
         parameters: {
             query?: never;
@@ -716,6 +739,14 @@ export interface components {
              * @example 123456
              */
             code: string;
+        };
+        /** @description The organization to create for the signed-in user. */
+        CreateOrganizationRequest: {
+            /**
+             * @description Display name of the new organization.
+             * @example Acme Inc
+             */
+            name: string;
         };
         /** @description The organization the user chose during the org-selection step. */
         SelectOrgRequest: {
@@ -1499,6 +1530,48 @@ export interface operations {
             };
             /** @description No such membership in the active organization. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Organization created; the session is now scoped to it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Invalid name, or the session already has an organization. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

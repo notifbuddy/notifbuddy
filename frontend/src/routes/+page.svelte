@@ -29,6 +29,13 @@
 	let selectingOrgId = $state<string | null>(null);
 	let selectOrgError = $state<string | null>(null);
 
+	// ---- Organization creation step (signed in but org-less: fresh sign-ups
+	// that didn't arrive via an invitation) ----
+	const needsCreateOrg = $derived(!!user && !user.organizationId);
+	let orgName = $state('');
+	let creatingOrg = $state(false);
+	let createOrgError = $state<string | null>(null);
+
 	// Boot: pick the right entry path. If a step is in progress there's no session
 	// yet, so we don't call /me.
 	if (startInSelectOrg) {
@@ -41,7 +48,7 @@
 	// session resolves to a real user (and we're not mid verify/select-org), send
 	// them into the app at the first dashboard product.
 	$effect(() => {
-		if (user && !needsVerify && !needsSelectOrg) goto('/dashboard/linear');
+		if (user && !needsVerify && !needsSelectOrg && !needsCreateOrg) goto('/dashboard/linear');
 	});
 
 	async function loadUser() {
@@ -88,8 +95,25 @@
 		finishLogin(data as User);
 	}
 
-	// Common tail for verify / select-org: session cookie is now set; show the
-	// signed-in UI and clean the URL.
+	async function submitCreateOrg(e: SubmitEvent) {
+		e.preventDefault();
+		creatingOrg = true;
+		createOrgError = null;
+		const { data, error: reqError } = await api.POST('/organizations', {
+			body: { name: orgName.trim() }
+		});
+		creatingOrg = false;
+		if (reqError || !data) {
+			const msg = (reqError as { message?: string })?.message;
+			createOrgError = msg?.trim() ? msg : 'Could not create the organization. Please try again.';
+			return;
+		}
+		// The session is now scoped to the new org; the redirect effect fires.
+		finishLogin(data as User);
+	}
+
+	// Common tail for verify / select-org / create-org: session cookie is now
+	// set; show the signed-in UI and clean the URL.
 	function finishLogin(u: User) {
 		needsVerify = false;
 		needsSelectOrg = false;
@@ -163,6 +187,8 @@
 						Check your email
 					{:else if needsSelectOrg}
 						Choose an organization
+					{:else if needsCreateOrg}
+						Create your organization
 					{:else}
 						Streamline your notifications
 					{/if}
@@ -172,6 +198,8 @@
 						Enter the verification code we emailed you to finish signing in.
 					{:else if needsSelectOrg}
 						Pick the organization you want to sign in to.
+					{:else if needsCreateOrg}
+						Name the organization your team will share — you can rename it later.
 					{:else}
 						Route your Linear notifications into one calm Slack feed.
 					{/if}
@@ -233,6 +261,31 @@
 					{/if}
 					{#if selectOrgError}
 						<p class="text-destructive text-center text-sm">{selectOrgError}</p>
+					{/if}
+				{:else if needsCreateOrg}
+					<!-- Organization creation step (signed in, no organization yet). -->
+					<form class="flex flex-col gap-3" onsubmit={submitCreateOrg}>
+						<input
+							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
+							type="text"
+							placeholder="Acme Inc"
+							maxlength="100"
+							bind:value={orgName}
+							disabled={creatingOrg}
+							required
+						/>
+						<Button type="submit" size="lg" disabled={creatingOrg || orgName.trim() === ''}>
+							{#if creatingOrg}
+								<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								Creating…
+							{:else}
+								<BuildingIcon data-icon="inline-start" />
+								Create organization
+							{/if}
+						</Button>
+					</form>
+					{#if createOrgError}
+						<p class="text-destructive text-center text-sm">{createOrgError}</p>
 					{/if}
 				{:else if user === undefined}
 					<!-- Still checking the session: skeleton in place of the action. -->

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"xolo/backend/internal/api"
@@ -128,6 +129,37 @@ func (h Handler) SelectOrg(ctx context.Context, req *api.SelectOrgRequest) (api.
 		return &api.Error{Message: "organization selection failed"}, nil
 	}
 	return h.toUserResponse(ctx, user), nil
+}
+
+// CreateOrganization implements `createOrganization`: POST /organizations.
+// Creates a WorkOS org for a signed-in-but-orgless user, adds them as its
+// first member, and re-scopes the session cookie to it.
+func (h Handler) CreateOrganization(ctx context.Context, req *api.CreateOrganizationRequest) (api.CreateOrganizationRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.CreateOrganizationUnauthorized{Message: "unauthorized"}, nil
+	}
+	if user.OrgID != "" {
+		return &api.CreateOrganizationBadRequest{Message: "session already has an organization"}, nil
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return &api.CreateOrganizationBadRequest{Message: "organization name is required"}, nil
+	}
+	p, ok := auth.HTTPFromContext(ctx)
+	if !ok {
+		return &api.CreateOrganizationUnauthorized{Message: "unauthorized"}, nil
+	}
+	created, err := h.auth.CreateOrganizationForUser(p.W, p.R, name)
+	if err != nil {
+		var userMsg auth.UserMessageError
+		if errors.As(err, &userMsg) {
+			return &api.CreateOrganizationBadRequest{Message: userMsg.Msg}, nil
+		}
+		slog.ErrorContext(ctx, "httpapi: create organization failed", "user_id", user.ID, "error", err)
+		return &api.CreateOrganizationBadRequest{Message: "could not create the organization"}, nil
+	}
+	return h.toUserResponse(ctx, created), nil
 }
 
 // ListInvitations implements `listInvitations`: GET /invitations.

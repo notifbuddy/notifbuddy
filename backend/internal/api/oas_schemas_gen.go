@@ -416,6 +416,31 @@ type CreateLinearSettingsUnauthorized Error
 
 func (*CreateLinearSettingsUnauthorized) createLinearSettingsRes() {}
 
+type CreateOrganizationBadRequest Error
+
+func (*CreateOrganizationBadRequest) createOrganizationRes() {}
+
+// The organization to create for the signed-in user.
+// Ref: #/components/schemas/CreateOrganizationRequest
+type CreateOrganizationRequest struct {
+	// Display name of the new organization.
+	Name string `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *CreateOrganizationRequest) GetName() string {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *CreateOrganizationRequest) SetName(val string) {
+	s.Name = val
+}
+
+type CreateOrganizationUnauthorized Error
+
+func (*CreateOrganizationUnauthorized) createOrganizationRes() {}
+
 type DeleteLinearSettingsPaymentRequired Error
 
 func (*DeleteLinearSettingsPaymentRequired) deleteLinearSettingsRes() {}
@@ -2395,9 +2420,10 @@ func (s *UserResponse) SetBilling(val OptBillingSummary) {
 	s.Billing = val
 }
 
-func (*UserResponse) getMeRes()       {}
-func (*UserResponse) selectOrgRes()   {}
-func (*UserResponse) verifyEmailRes() {}
+func (*UserResponse) createOrganizationRes() {}
+func (*UserResponse) getMeRes()              {}
+func (*UserResponse) selectOrgRes()          {}
+func (*UserResponse) verifyEmailRes()        {}
 
 // The verification code the user received by email.
 // Ref: #/components/schemas/VerifyEmailRequest

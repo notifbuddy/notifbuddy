@@ -57,6 +57,17 @@ func (UnimplementedHandler) CreateLinearSettings(ctx context.Context, req *Linea
 	return r, ht.ErrNotImplemented
 }
 
+// CreateOrganization implements createOrganization operation.
+//
+// For signed-in users with no organization (fresh sign-ups that didn't arrive via an invitation).
+// Creates the organization, adds the caller as its first member, refreshes the session scoped to the
+// new organization (the session cookie is re-set), and returns the updated user.
+//
+// POST /organizations
+func (UnimplementedHandler) CreateOrganization(ctx context.Context, req *CreateOrganizationRequest) (r CreateOrganizationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DeleteLinearSettings implements deleteLinearSettings operation.
 //
 // Removes the config (and its team mappings). Returns the refreshed configs + context.

@@ -242,6 +242,49 @@ func encodeCreateLinearSettingsResponse(response CreateLinearSettingsRes, w http
 	}
 }
 
+func encodeCreateOrganizationResponse(response CreateOrganizationRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *UserResponse:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *CreateOrganizationBadRequest:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(400)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *CreateOrganizationUnauthorized:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeDeleteLinearSettingsResponse(response DeleteLinearSettingsRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *LinearSettingsResponse:

@@ -311,6 +311,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /organizations:
+    post:
+      operationId: createOrganization
+      summary: Create an organization and scope the session to it
+      description: |
+        For signed-in users with no organization (fresh sign-ups that didn't
+        arrive via an invitation). Creates the organization, adds the caller as
+        its first member, refreshes the session scoped to the new organization
+        (the session cookie is re-set), and returns the updated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationRequest"
+      responses:
+        "200":
+          description: Organization created; the session is now scoped to it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Invalid name, or the session already has an organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /organization/profile:
     get:
       operationId: getOrganizationProfile
@@ -1096,6 +1130,18 @@ components:
           example: "123456"
       required:
         - code
+    CreateOrganizationRequest:
+      type: object
+      description: The organization to create for the signed-in user.
+      properties:
+        name:
+          type: string
+          description: Display name of the new organization.
+          minLength: 1
+          maxLength: 100
+          example: Acme Inc
+      required:
+        - name
     SelectOrgRequest:
       type: object
       description: The organization the user chose during the org-selection step.
