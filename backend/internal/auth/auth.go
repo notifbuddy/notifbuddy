@@ -505,9 +505,11 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 // creation succeeds but a later step fails, the WorkOS org exists without a
 // scoped session — safe: retrying creates a fresh org and the empty one is
 // invisible to the user (a nuisance for the WorkOS dashboard, not a bug).
-func (a *Service) CreateOrganizationForUser(w http.ResponseWriter, r *http.Request, name string) (*SessionUser, error) {
-	su := UserFromContext(r.Context())
-	if su == nil {
+func (a *Service) CreateOrganizationForUser(w http.ResponseWriter, r *http.Request, userID, name string) (*SessionUser, error) {
+	// NB: userID comes from the caller (the ogen handler's context) — the
+	// HTTPPair request predates the middleware's user injection, so its own
+	// context deliberately can't answer UserFromContext.
+	if userID == "" {
 		return nil, errors.New("unauthenticated")
 	}
 	c, err := r.Cookie(sessionCookieName)
@@ -530,10 +532,10 @@ func (a *Service) CreateOrganizationForUser(w http.ResponseWriter, r *http.Reque
 	}
 
 	if _, err := a.client.OrganizationMembership().Create(r.Context(), &workos.OrganizationMembershipCreateParams{
-		UserID:         su.ID,
+		UserID:         userID,
 		OrganizationID: org.ID,
 	}); err != nil {
-		slog.ErrorContext(r.Context(), "auth: create organization membership failed", "org_id", org.ID, "user_id", su.ID, "error", err)
+		slog.ErrorContext(r.Context(), "auth: create organization membership failed", "org_id", org.ID, "user_id", userID, "error", err)
 		return nil, err
 	}
 

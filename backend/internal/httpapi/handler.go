@@ -150,7 +150,7 @@ func (h Handler) CreateOrganization(ctx context.Context, req *api.CreateOrganiza
 	if !ok {
 		return &api.CreateOrganizationUnauthorized{Message: "unauthorized"}, nil
 	}
-	created, err := h.auth.CreateOrganizationForUser(p.W, p.R, name)
+	created, err := h.auth.CreateOrganizationForUser(p.W, p.R, user.ID, name)
 	if err != nil {
 		var userMsg auth.UserMessageError
 		if errors.As(err, &userMsg) {
