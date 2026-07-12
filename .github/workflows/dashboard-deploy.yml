@@ -1,0 +1,51 @@
+name: Dashboard build & deploy
+
+# Builds the dashboard SPA (frontend/) and deploys it as a Cloudflare Worker
+# with static assets (`wrangler deploy` — creates the Worker on first run,
+# updates it after). Manual trigger only (Actions tab → Run workflow).
+# infra (infra) attaches dashboard.notifbuddy.com to it; the
+# Worker's own config lives in frontend/wrangler.jsonc.
+#
+# First-time order: run THIS once before `infra → apply`, because the custom
+# domain can only attach to an existing Worker.
+#
+# Secrets: CLOUDFLARE_API_KEY must hold a scoped API token with
+# "Workers Scripts: Edit" (the same token the other Cloudflare workflows use).
+#
+# PUBLIC_API_BASE_URL bakes the backend origin into the bundle at build time
+# ($env/static/public): api.<zone>, infra-managed proxy Worker in
+# front of Cloud Run.
+
+on:
+  workflow_dispatch: # manual only — trigger from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load deploy config
+        run: |
+          # yq is preinstalled on ubuntu-latest runners.
+          echo "PUBLIC_API_BASE_URL=https://api.notifbuddy.com" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy Worker + static assets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
+        run: npx wrangler@4 deploy
