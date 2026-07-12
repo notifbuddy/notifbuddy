@@ -480,7 +480,6 @@ func (s *DisconnectIntegrationLevel) UnmarshalText(data []byte) error {
 type DisconnectIntegrationProvider string
 
 const (
-	DisconnectIntegrationProviderGithub DisconnectIntegrationProvider = "github"
 	DisconnectIntegrationProviderSlack  DisconnectIntegrationProvider = "slack"
 	DisconnectIntegrationProviderLinear DisconnectIntegrationProvider = "linear"
 )
@@ -488,7 +487,6 @@ const (
 // AllValues returns all DisconnectIntegrationProvider values.
 func (DisconnectIntegrationProvider) AllValues() []DisconnectIntegrationProvider {
 	return []DisconnectIntegrationProvider{
-		DisconnectIntegrationProviderGithub,
 		DisconnectIntegrationProviderSlack,
 		DisconnectIntegrationProviderLinear,
 	}
@@ -497,8 +495,6 @@ func (DisconnectIntegrationProvider) AllValues() []DisconnectIntegrationProvider
 // MarshalText implements encoding.TextMarshaler.
 func (s DisconnectIntegrationProvider) MarshalText() ([]byte, error) {
 	switch s {
-	case DisconnectIntegrationProviderGithub:
-		return []byte(s), nil
 	case DisconnectIntegrationProviderSlack:
 		return []byte(s), nil
 	case DisconnectIntegrationProviderLinear:
@@ -511,9 +507,6 @@ func (s DisconnectIntegrationProvider) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *DisconnectIntegrationProvider) UnmarshalText(data []byte) error {
 	switch DisconnectIntegrationProvider(data) {
-	case DisconnectIntegrationProviderGithub:
-		*s = DisconnectIntegrationProviderGithub
-		return nil
 	case DisconnectIntegrationProviderSlack:
 		*s = DisconnectIntegrationProviderSlack
 		return nil
@@ -547,7 +540,6 @@ func (*Error) getIntegrationStatusRes()  {}
 func (*Error) getLinearSettingsRes()     {}
 func (*Error) getMeRes()                 {}
 func (*Error) getPendingOrgsRes()        {}
-func (*Error) listGithubWebhooksRes()    {}
 func (*Error) listInvitationsRes()       {}
 func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
@@ -581,7 +573,7 @@ type IntegrationStatus struct {
 	Level IntegrationStatusLevel `json:"level"`
 	// Whether this provider is connected at this level.
 	Connected bool `json:"connected"`
-	// The connected account/workspace label (GitHub login, Slack team).
+	// The connected account/workspace label (Slack team, Linear workspace).
 	Account OptString `json:"account"`
 	// The WorkOS user id who connected it, if known.
 	ConnectedBy OptString `json:"connectedBy"`
@@ -2424,12 +2416,12 @@ func (s *VerifyEmailRequest) SetCode(val string) {
 	s.Code = val
 }
 
-// A stored GitHub webhook delivery.
+// A stored provider webhook delivery.
 // Ref: #/components/schemas/WebhookEvent
 type WebhookEvent struct {
-	// The X-GitHub-Delivery id (unique per delivery).
+	// The provider's unique delivery id.
 	DeliveryId string `json:"deliveryId"`
-	// The X-GitHub-Event type.
+	// The provider's event type.
 	EventType string `json:"eventType"`
 	// The payload action, when present.
 	Action OptString `json:"action"`
@@ -2505,5 +2497,4 @@ func (s *WebhookListResponse) SetEvents(val []WebhookEvent) {
 	s.Events = val
 }
 
-func (*WebhookListResponse) listGithubWebhooksRes() {}
 func (*WebhookListResponse) listLinearWebhooksRes() {}

@@ -28,7 +28,6 @@ type Config struct {
 	Database   DatabaseConfig   `yaml:"database"`
 	Encryption EncryptionConfig `yaml:"encryption"`
 	PubSub     PubSubConfig     `yaml:"pubsub"`
-	GitHub     GitHubConfig     `yaml:"github"`
 	Slack      SlackConfig      `yaml:"slack"`
 	Linear     LinearConfig     `yaml:"linear"`
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
@@ -138,31 +137,6 @@ func (c PostgresPubSub) PollIntervalDuration() time.Duration {
 	return d
 }
 
-type GitHubConfig struct {
-	// AppSlug is the GitHub App's URL slug (github.com/apps/<slug>).
-	AppSlug string `yaml:"app_slug"`
-	// AppID is the numeric GitHub App ID (used to sign the app JWT).
-	AppID string `yaml:"app_id"`
-	// ClientID / ClientSecret are the App's OAuth credentials (user identity on
-	// the callback). ClientSecret is SECRET — env ref.
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	// PrivateKey is the App's PEM private key, used to mint installation tokens.
-	// SECRET — env ref (the PEM contents, or a $VAR holding them).
-	PrivateKey string `yaml:"private_key"`
-	// WebhookSecret verifies incoming webhook HMAC signatures
-	// (X-Hub-Signature-256). SECRET — env ref. Empty disables verification.
-	WebhookSecret string `yaml:"webhook_secret"`
-	// CallbackURL is where GitHub redirects after install/authorize.
-	CallbackURL string `yaml:"callback_url"`
-	// UserScopes are the OAuth scopes requested for a user-level (user-to-server)
-	// connection, requested on the /login/oauth/authorize flow.
-	UserScopes []string `yaml:"user_scopes"`
-	// UserCallbackURL is where GitHub redirects after the user-to-server
-	// authorize. Distinct from CallbackURL (the App installation callback).
-	UserCallbackURL string `yaml:"user_callback_url"`
-}
-
 type SlackConfig struct {
 	// ClientID / ClientSecret are the Slack app's OAuth credentials.
 	// ClientSecret is SECRET — env ref.
@@ -231,7 +205,6 @@ func defaultConfig() Config {
 		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
 		Encryption: EncryptionConfig{Provider: "local"},
-		GitHub:     GitHubConfig{CallbackURL: "http://localhost:8080/integrations/github/callback"},
 		Slack:      SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
 		Linear: LinearConfig{
 			CallbackURL: "http://localhost:8080/integrations/linear/callback",
@@ -319,7 +292,7 @@ func walkStrings(v reflect.Value, prefix string, fn func(path, s string) (string
 // it returns the value unchanged.
 //
 // Unset references expand to "" rather than erroring: optional integration
-// fields (GitHub/Slack/DB) are routinely left unconfigured, and those flows
+// fields (Slack/Linear/DB) are routinely left unconfigured, and those flows
 // report "not configured" at use. The genuinely-required fields are enforced
 // afterwards by validate(), which produces a precise message.
 func expandEnvRef(value, fieldName string) (string, error) {

@@ -49,7 +49,7 @@ Only available when linear workspace is connected to notifbuddy. We support the 
 | Frontend     | SvelteKit (SPA via `adapter-static`), shadcn-svelte, Tailwind v4 |
 | API client   | [openapi-typescript](https://openapi-ts.dev) + openapi-fetch  |
 | Auth         | [WorkOS AuthKit](https://workos.com/docs/authkit) via [workos-go v9](https://github.com/workos/workos-go) (hosted login, orgs, sealed-session cookie) |
-| Integrations | GitHub App + Slack OAuth, per-organization, stored in Postgres |
+| Integrations | Slack + Linear OAuth, per-organization, stored in Postgres (GitHub parked until phase 2) |
 | Persistence  | Postgres via [pgx](https://github.com/jackc/pgx); auto-migrated on startup |
 | Transport    | Browser → Go directly (credentialed CORS, no proxy)           |
 
@@ -69,13 +69,13 @@ Only available when linear workspace is connected to notifbuddy. We support the 
 - `backend/internal/config/` — loads `config.yaml`, resolves `$VAR` secret references (reflection-based, recursive).
 - `backend/internal/store/` — pgx pool, embedded migrations, the `org_integrations` repository.
 - `backend/internal/crypto/` — `Encryptor` interface (local AES-GCM + KMS seam) for token encryption at rest.
-- `backend/internal/integrations/` — GitHub App + Slack OAuth flows, status, disconnect.
+- `backend/internal/integrations/` — Slack + Linear OAuth flows, status, disconnect.
 - `frontend/src/lib/api/client.ts`, `src/lib/integrations.ts` — typed client + integration helpers.
 - `frontend/src/routes/+page.svelte`, `routes/settings/integrations/` — the UI.
 
 **Deliberate exception to "no hand-written transport":** the browser redirect
 routes — `GET /auth/{login,callback,logout}` and
-`GET /integrations/{github,slack}/{connect,callback}` — are plain `net/http`
+`GET /integrations/{slack,linear}/{connect,callback}` — are plain `net/http`
 handlers, **not** in the spec. They are 302 redirects (OAuth/installation flows
 that set cookies), not JSON operations, which ogen does not model cleanly.
 Everything else — `/ping`, `/me`, `/auth/verify-email`, `/auth/pending-orgs`,
@@ -227,6 +227,11 @@ In the WorkOS dashboard (Staging):
    pass its slug as `role`.
 
 ## Integrations (GitHub + Slack)
+
+> **Phase 2 note:** the GitHub integration described below is currently
+> **removed from the codebase** — phase 1 focuses on Slack + Linear. The docs
+> in this section are kept as the design/setup reference for reintroducing it
+> (the removal commit is the restoration guide).
 
 Each WorkOS organization can connect a **GitHub App installation** and a **Slack
 workspace**. Integration records (installation id / team id, encrypted tokens,

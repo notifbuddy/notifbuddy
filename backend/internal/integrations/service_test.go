@@ -45,9 +45,9 @@ func TestStatus_ShapeWhenNotEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	// Expect one entry per (provider, level): 3 providers x 2 levels.
-	if len(out) != 6 {
-		t.Fatalf("len(Status) = %d, want 6", len(out))
+	// Expect one entry per (provider, level): 2 providers x 2 levels.
+	if len(out) != 4 {
+		t.Fatalf("len(Status) = %d, want 4", len(out))
 	}
 	seen := map[string]bool{}
 	for _, st := range out {
@@ -59,7 +59,7 @@ func TestStatus_ShapeWhenNotEnabled(t *testing.T) {
 		}
 		seen[st.Provider+"/"+st.Level] = true
 	}
-	for _, p := range []string{"github", "slack", "linear"} {
+	for _, p := range []string{"slack", "linear"} {
 		for _, l := range []string{"workspace", "user"} {
 			if !seen[p+"/"+l] {
 				t.Errorf("missing entry %s/%s", p, l)

@@ -21,12 +21,6 @@ export type IntegrationState = {
 // the org-wide install, user describes the personal connection used for sync.
 export const PROVIDERS = [
 	{
-		key: 'github',
-		label: 'GitHub',
-		workspaceBlurb: 'Install the GitHub App to connect your repositories.',
-		userBlurb: 'Connect your GitHub account so actions sync as you.'
-	},
-	{
 		key: 'slack',
 		label: 'Slack',
 		workspaceBlurb: 'Authorize Slack so we can post to your workspace.',
@@ -61,7 +55,7 @@ export async function disconnect(
 ): Promise<IntegrationState | null> {
 	const { data, error } = await api.POST('/integrations/{provider}/disconnect', {
 		params: {
-			path: { provider: provider as 'github' | 'slack' | 'linear' },
+			path: { provider: provider as 'slack' | 'linear' },
 			query: { level }
 		}
 	});
@@ -205,14 +199,6 @@ export async function testLinearTemplate(req: {
 	const { data, error } = await api.POST('/integrations/linear/settings/test', { body: req });
 	if (error || !data) return null;
 	return data as TemplateTestResult;
-}
-
-// Fetch recent GitHub webhook deliveries for the active org. Returns null when
-// unauthenticated.
-export async function fetchGithubWebhooks(): Promise<WebhookEvent[] | null> {
-	const { data, error } = await api.GET('/integrations/github/webhooks');
-	if (error || !data) return null;
-	return (data.events ?? []) as WebhookEvent[];
 }
 
 // Fetch recent Linear webhook deliveries for the active org. Returns null when

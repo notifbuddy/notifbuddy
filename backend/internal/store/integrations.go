@@ -13,7 +13,6 @@ import (
 type Provider string
 
 const (
-	ProviderGitHub Provider = "github"
 	ProviderSlack  Provider = "slack"
 	ProviderLinear Provider = "linear"
 )

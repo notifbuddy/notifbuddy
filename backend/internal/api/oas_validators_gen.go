@@ -159,8 +159,6 @@ func (s DisconnectIntegrationLevel) Validate() error {
 
 func (s DisconnectIntegrationProvider) Validate() error {
 	switch s {
-	case "github":
-		return nil
 	case "slack":
 		return nil
 	case "linear":

@@ -19,7 +19,6 @@ const (
 	GetMeOperation                        OperationName = "GetMe"
 	GetOrganizationProfileOperation       OperationName = "GetOrganizationProfile"
 	GetPendingOrgsOperation               OperationName = "GetPendingOrgs"
-	ListGithubWebhooksOperation           OperationName = "ListGithubWebhooks"
 	ListInvitationsOperation              OperationName = "ListInvitations"
 	ListLinearWebhooksOperation           OperationName = "ListLinearWebhooks"
 	ListMembersOperation                  OperationName = "ListMembers"

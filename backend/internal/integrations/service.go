@@ -1,5 +1,5 @@
 // Package integrations connects a WorkOS organization to third-party providers
-// (GitHub App installations, Slack workspaces). It owns the OAuth/installation
+// (Slack workspaces, Linear workspaces). It owns the OAuth/installation
 // redirect flows, persists the resulting installation/token in the store
 // (tokens encrypted via crypto.Encryptor), and reports connection status.
 //
@@ -11,6 +11,7 @@ package integrations
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -69,13 +70,14 @@ type ProviderStatus struct {
 	Provider    string         `json:"provider"`
 	Level       string         `json:"level"` // "workspace" | "user"
 	Connected   bool           `json:"connected"`
-	Account     string         `json:"account,omitempty"` // GitHub login / Slack team name
+	Account     string         `json:"account,omitempty"` // Slack team / Linear workspace name
 	ConnectedBy string         `json:"connectedBy,omitempty"`
 	Metadata    map[string]any `json:"-"`
 }
 
-// providers is the canonical provider list, in display order.
-var providers = []store.Provider{store.ProviderGitHub, store.ProviderSlack, store.ProviderLinear}
+// providers is the canonical provider list, in display order. (GitHub is
+// parked until phase 2.)
+var providers = []store.Provider{store.ProviderSlack, store.ProviderLinear}
 
 // Status returns, for each provider, both the org's workspace connection state
 // and the given user's own (user-level) connection state. The result is a flat
@@ -150,10 +152,10 @@ func (s *Service) redirectAfter(provider, status string) string {
 	return fmt.Sprintf("%s/settings/integrations?provider=%s&status=%s", base, provider, status)
 }
 
-// accountLabel derives a human label (GitHub login / Slack team name) from the
-// stored metadata.
+// accountLabel derives a human label (Slack team / Linear workspace name) from
+// the stored metadata.
 func accountLabel(in store.Integration) string {
-	for _, k := range []string{"account_login", "team_name", "workspace_name", "login", "name"} {
+	for _, k := range []string{"team_name", "workspace_name", "login", "name"} {
 		if v, ok := in.Metadata[k].(string); ok && v != "" {
 			return v
 		}
@@ -184,6 +186,13 @@ func (s *Service) sealState(st oauthState) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(ct), nil
+}
+
+// newNonce returns a random URL-safe nonce for the sealed OAuth state.
+func newNonce() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 func (s *Service) openState(encoded string) (oauthState, error) {

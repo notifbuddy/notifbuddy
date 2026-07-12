@@ -483,7 +483,7 @@ paths:
       operationId: getIntegrationStatus
       summary: Integration connection status for the active organization
       description: |
-        Returns the connection state of each supported integration (GitHub,
+        Returns the connection state of each supported integration (Slack,
         Slack, Linear) for the caller's active organization. Drives the
         integrations settings view. The actual connect/callback flows are
         browser redirects (GET /integrations/{provider}/connect) and are not
@@ -515,7 +515,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [github, slack, linear]
+            enum: [slack, linear]
         - name: level
           in: query
           required: false
@@ -530,28 +530,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/IntegrationStatusResponse"
-        "401":
-          description: No valid session.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /integrations/github/webhooks:
-    get:
-      operationId: listGithubWebhooks
-      summary: Recent GitHub webhook deliveries for the active organization
-      description: |
-        Returns the GitHub webhook events we have received and stored for the
-        caller's active organization, newest first. Events are stored when GitHub
-        delivers them to POST /integrations/github/webhook (a browser-external
-        redirect-style route, not part of this JSON spec).
-      responses:
-        "200":
-          description: Recent webhook events.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookListResponse"
         "401":
           description: No valid session.
           content:
@@ -1306,7 +1284,7 @@ components:
         provider:
           type: string
           description: The provider key.
-          example: github
+          example: slack
         level:
           type: string
           description: |
@@ -1319,7 +1297,7 @@ components:
           description: Whether this provider is connected at this level.
         account:
           type: string
-          description: The connected account/workspace label (GitHub login, Slack team).
+          description: The connected account/workspace label (Slack team, Linear workspace).
           example: acme
         connectedBy:
           type: string
@@ -1345,15 +1323,15 @@ components:
         - configured
     WebhookEvent:
       type: object
-      description: A stored GitHub webhook delivery.
+      description: A stored provider webhook delivery.
       properties:
         deliveryId:
           type: string
-          description: The X-GitHub-Delivery id (unique per delivery).
+          description: The provider's unique delivery id.
           example: 12345678-1234-1234-1234-123456789012
         eventType:
           type: string
-          description: The X-GitHub-Event type.
+          description: The provider's event type.
           example: push
         action:
           type: string

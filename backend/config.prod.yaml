@@ -8,7 +8,7 @@
 # ⚠️ FILL IN THE PLACEHOLDER URLs after `infra apply` allocates the Cloud Run
 #    URL (infra output backend_url) and you know the prod frontend origin.
 #    Every OAuth redirect/callback below must also be registered in the
-#    respective provider dashboards (WorkOS, GitHub App, Slack app, Linear app).
+#    respective provider dashboards (WorkOS, Slack app, Linear app).
 
 server:
   addr: ":8080" # Cloud Run routes $PORT (default 8080) to this
@@ -52,19 +52,6 @@ pubsub:
     project_id: "${GCP_PROJECT_ID}"
     push_audience: "https://api.notifbuddy.com/internal/pubsub/push" # OIDC audience = push endpoint URL
     push_service_account: "${PUBSUB_PUSH_SA}" # see infra
-
-github:
-  app_slug: "notifbuddy" # TODO: prod GitHub App slug (github.com/apps/<slug>)
-  app_id: "4151532" # TODO: prod GitHub App numeric id
-  client_id: "Iv23li54M6KJDfbqwvtu" # TODO: prod App OAuth client id
-  client_secret: "${GITHUB_APP_CLIENT_SECRET}" # SECRET
-  private_key: "${GITHUB_APP_PRIVATE_KEY}" # SECRET — PEM contents
-  webhook_secret: "${GITHUB_WEBHOOK_SECRET}" # SECRET
-  callback_url: "https://api.notifbuddy.com/integrations/github/callback" # TODO: prod backend base
-  user_scopes:
-    - repo
-    - read:user
-  user_callback_url: "https://api.notifbuddy.com/integrations/github/callback" # TODO: prod backend base
 
 slack:
   client_id: "11457434980017.11440212651047" # TODO: prod Slack app client id

@@ -173,7 +173,7 @@
 					{:else if needsSelectOrg}
 						Pick the organization you want to sign in to.
 					{:else}
-						Route your Linear and GitHub notifications into one calm Slack feed.
+						Route your Linear notifications into one calm Slack feed.
 					{/if}
 				</p>
 			</div>
