@@ -34,9 +34,9 @@ database:
   url: "${DATABASE_URL}" # Postgres connection string (secret-ish; from env). Empty disables integrations.
 
 encryption:
-  provider: "local" # "local" (AES-GCM) or "kms" (customer-managed key)
+  provider: "local" # "local" (AES-GCM) or "gcpkms" (Google Cloud KMS)
   local_key: "${INTEGRATION_ENC_KEY}" # base64 32-byte key for provider=local; empty = ephemeral dev key
-  kms_key_id: "" # key ID/ARN for provider=kms (wire a KMSClient in buildEncryptor)
+  kms_key_id: "" # full GCP crypto-key resource name for provider=gcpkms (see infra; prod uses this)
 
 pubsub:
   provider: "postgres" # eventing backend: "postgres" (watermill over the app DB) or "gcp" (Pub/Sub push)

@@ -85,13 +85,13 @@ type DatabaseConfig struct {
 
 type EncryptionConfig struct {
 	// Provider selects how integration tokens are encrypted at rest:
-	// "local" (AES-GCM with LocalKey) or "kms" (customer-managed KMS).
+	// "local" (AES-GCM with LocalKey) or "gcpkms" (Google Cloud KMS).
 	Provider string `yaml:"provider"`
 	// LocalKey is a base64-encoded 32-byte key for provider=local. Empty means
 	// generate an ephemeral dev key at startup (tokens won't survive a restart).
 	// SECRET — set to an env ref in any shared environment.
 	LocalKey string `yaml:"local_key"`
-	// KMSKeyID is the key ID/ARN for provider=kms.
+	// KMSKeyID is the crypto-key resource name for provider=gcpkms.
 	KMSKeyID string `yaml:"kms_key_id"`
 }
 
