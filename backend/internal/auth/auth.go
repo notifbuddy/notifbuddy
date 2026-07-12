@@ -494,6 +494,61 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 	return out, nil
 }
 
+// CreateOrganizationForUser creates a WorkOS organization for the signed-in
+// user (fresh sign-ups that didn't arrive via an invitation have none), adds
+// them as its first member, and re-scopes the session to the new organization
+// by exchanging the session's refresh token with the new organization_id —
+// the same mechanism WorkOS uses for org switching. The re-issued session is
+// sealed back into the cookie; the returned SessionUser carries the new OrgID.
+//
+// The membership is created with the environment's default role. If the org
+// creation succeeds but a later step fails, the WorkOS org exists without a
+// scoped session — safe: retrying creates a fresh org and the empty one is
+// invisible to the user (a nuisance for the WorkOS dashboard, not a bug).
+func (a *Service) CreateOrganizationForUser(w http.ResponseWriter, r *http.Request, name string) (*SessionUser, error) {
+	su := UserFromContext(r.Context())
+	if su == nil {
+		return nil, errors.New("unauthenticated")
+	}
+	c, err := r.Cookie(sessionCookieName)
+	if err != nil || c.Value == "" {
+		return nil, errors.New("no session cookie")
+	}
+	sd, err := workos.Unseal[workos.SessionData](c.Value, a.cookiePassword)
+	if err != nil || sd.RefreshToken == "" {
+		return nil, errors.New("invalid session cookie")
+	}
+
+	org, err := a.client.Organizations().Create(r.Context(), &workos.OrganizationsCreateParams{Name: name})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "auth: create organization failed", "error", err)
+		var apiErr *workos.APIError
+		if errors.As(err, &apiErr) && apiErr.Message != "" {
+			return nil, UserMessageError{Msg: apiErr.Message}
+		}
+		return nil, err
+	}
+
+	if _, err := a.client.OrganizationMembership().Create(r.Context(), &workos.OrganizationMembershipCreateParams{
+		UserID:         su.ID,
+		OrganizationID: org.ID,
+	}); err != nil {
+		slog.ErrorContext(r.Context(), "auth: create organization membership failed", "org_id", org.ID, "user_id", su.ID, "error", err)
+		return nil, err
+	}
+
+	resp, err := a.client.UserManagement().AuthenticateWithRefreshToken(r.Context(),
+		&workos.UserManagementAuthenticateWithRefreshTokenParams{
+			RefreshToken:   sd.RefreshToken,
+			OrganizationID: &org.ID,
+		})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "auth: rescope session to new org failed", "org_id", org.ID, "error", err)
+		return nil, err
+	}
+	return a.establishSession(w, resp)
+}
+
 // GetOrganizationName returns the organization's display name from WorkOS.
 func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
 	org, err := a.client.Organizations().Get(ctx, orgID)

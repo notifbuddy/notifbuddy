@@ -17,6 +17,10 @@ type CreateLinearSettingsRes interface {
 	createLinearSettingsRes()
 }
 
+type CreateOrganizationRes interface {
+	createOrganizationRes()
+}
+
 type DeleteLinearSettingsRes interface {
 	deleteLinearSettingsRes()
 }

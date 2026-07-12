@@ -10,6 +10,7 @@ const (
 	CreateBillingPortalOperation          OperationName = "CreateBillingPortal"
 	CreateInvitationOperation             OperationName = "CreateInvitation"
 	CreateLinearSettingsOperation         OperationName = "CreateLinearSettings"
+	CreateOrganizationOperation           OperationName = "CreateOrganization"
 	DeleteLinearSettingsOperation         OperationName = "DeleteLinearSettings"
 	DeleteOrganizationAvatarOperation     OperationName = "DeleteOrganizationAvatar"
 	DisconnectIntegrationOperation        OperationName = "DisconnectIntegration"
