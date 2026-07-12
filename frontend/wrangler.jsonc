@@ -1,0 +1,19 @@
+{
+	// The dashboard SPA ships as a Cloudflare Worker with static assets, same
+	// as the landing site. `wrangler deploy` (dashboard-deploy.yml) creates or
+	// updates the Worker and uploads build/ in one step; infra
+	// (infra) attaches the dashboard.notifbuddy.com custom domain.
+	//
+	// Assets-only — no worker script. The app talks to api.notifbuddy.com
+	// directly (credentialed CORS; the backend allows exactly that origin), so
+	// nothing needs proxying here.
+	"name": "notifbuddy-dashboard",
+	"account_id": "${CF_ACCOUNT_ID}",
+	"compatibility_date": "2026-07-01",
+	"assets": {
+		"directory": "./build",
+		// True SPA: any unmatched path serves build/index.html with a 200 and
+		// the client-side router takes over (including its own error page).
+		"not_found_handling": "single-page-application"
+	}
+}

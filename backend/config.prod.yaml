@@ -18,7 +18,7 @@ logging:
   level: "info"
 
 cors:
-  allow_origin: "https://app.notifbuddy.com" # TODO: exact prod SPA origin (credentialed CORS: no "*")
+  allow_origin: "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")
 
 workos:
   client_id: "${WORKOS_CLIENT_ID}"
@@ -29,7 +29,7 @@ workos:
   webhook_secret: "${WORKOS_WEBHOOK_SECRET}" # SECRET — verifies WorkOS-Signature (membership events → seat sync)
 
 app:
-  post_login_url: "https://app.notifbuddy.com" # TODO: prod frontend URL the browser lands on after login/logout
+  post_login_url: "https://dashboard.notifbuddy.com" # prod dashboard URL the browser lands on after login/logout
   insecure_cookies: false # keep false in prod (HTTPS only)
 
 database:
