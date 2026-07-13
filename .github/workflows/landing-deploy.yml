@@ -3,15 +3,15 @@ name: Landing build & deploy
 # Builds the marketing/waitlist site (landing/) and deploys it as a Cloudflare
 # Worker with static assets (`wrangler deploy` — creates the Worker on first
 # run, updates it after). Manual trigger only (Actions tab → Run workflow).
-# infra (infra) owns the custom domain + www redirect around
-# the Worker; the Worker's own config lives in landing/wrangler.jsonc.
+# The custom domain + www redirect around the Worker are managed out of band;
+# the Worker's own config lives in landing/wrangler.jsonc.
 #
-# First-time order: run THIS once before `infra → apply`, because the custom
-# domain can only attach to an existing Worker.
+# First-time order: run THIS once before the domain is attached, because the
+# custom domain can only attach to an existing Worker.
 #
 # Secrets: CLOUDFLARE_API_KEY must hold a scoped API token with
-# "Workers Scripts: Edit" (the same token infra uses also needs Zone DNS
-# Edit + Zone Read + Workers Routes Edit for the domain/redirect resources).
+# "Workers Scripts: Edit" (plus Zone DNS Edit + Zone Read + Workers Routes Edit
+# for the domain/redirect resources).
 #
 # PUBLIC_WAITLIST_URL is the site's own origin: the form posts same-origin to
 # /waitlist and the Worker (landing/worker/index.js) proxies it to the Cloud
@@ -34,7 +34,6 @@ jobs:
 
       - name: Load deploy config
         run: |
-          # yq is preinstalled on ubuntu-latest runners.
           echo "PUBLIC_WAITLIST_URL=https://notifbuddy.com" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
