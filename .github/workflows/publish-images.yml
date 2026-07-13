@@ -5,12 +5,14 @@ name: Publish images → iac PR
 # new digests (and syncs the pubsub manifest). Merging that PR runs terraform
 # apply and rolls Cloud Run to the digests. This repo BUILDS; iac DEPLOYS.
 #
-# Prereqs (one-time):
-#   - GCP: notifbuddy-image-pusher SA with roles/artifactregistry.writer, and
-#     WIF provider condition allowing this repo (both already provisioned).
-#   - Secrets IAC_PR_APP_ID + IAC_PR_APP_PRIVATE_KEY: a GitHub App installed on
-#     notifbuddy/iac with Contents:write + Pull requests:write (cross-repo PRs;
-#     the default GITHUB_TOKEN cannot open PRs on another repo).
+# Prereqs (one-time, all provisioned):
+#   - GCP: notifbuddy-image-pusher SA (roles/artifactregistry.writer); WIF
+#     provider condition allows this repo.
+#   - Infisical: notifbuddy-app-ci machine identity, OIDC-bound to this repo,
+#     reads the GitHub App creds from /ci (prod). No App secrets in GitHub.
+#   - A GitHub App installed on notifbuddy/iac with Contents:write +
+#     Pull requests:write (its id/key live in Infisical /ci) — the default
+#     GITHUB_TOKEN cannot open PRs on another repo.
 
 on:
   push:
@@ -64,12 +66,26 @@ jobs:
           push: true
           tags: ${{ env.AR }}/waitlist-backend:src-${{ github.sha }}
 
+      # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub OIDC —
+      # no App id/key stored as GitHub Actions secrets. Exports NOTIFBUDDY_CI_APP_ID
+      # + NOTIFBUDDY_CI_PRIVATE_KEY to the env. Default OIDC audience is the repo
+      # owner URL (https://github.com/notifbuddy), which the identity is bound to.
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: "oidc"
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: "/ci"
+          export-type: "env"
+
       - name: Mint cross-repo App token for notifbuddy/iac
         id: apptoken
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.IAC_PR_APP_ID }}
-          private-key: ${{ secrets.IAC_PR_APP_PRIVATE_KEY }}
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
           owner: notifbuddy
           repositories: iac
 
