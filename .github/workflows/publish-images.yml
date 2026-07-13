@@ -2,8 +2,9 @@ name: Publish images → iac PR
 
 # Builds the backend + waitlist images, pushes them to Artifact Registry, then
 # opens/updates a bot PR on notifbuddy/iac that bumps deploy.auto.tfvars to the
-# new digests (and syncs the pubsub manifest). Merging that PR runs terraform
-# apply and rolls Cloud Run to the digests. This repo BUILDS; iac DEPLOYS.
+# new digests + the source commit (app_revision). iac fetches the eventing
+# manifest from THIS repo at that commit — this repo stays the single source of
+# truth. Merging the PR runs terraform apply. This repo BUILDS; iac DEPLOYS.
 #
 # Prereqs (one-time, all provisioned):
 #   - GCP: notifbuddy-image-pusher SA (roles/artifactregistry.writer); WIF
@@ -100,20 +101,24 @@ jobs:
           cd iac
           git checkout -B bot/image-bump
 
+          # Only the digests + the source commit. The manifest is NOT copied —
+          # iac fetches it from this repo at app_revision, keeping this repo the
+          # single source of truth for the eventing topology.
           cat > deploy.auto.tfvars <<EOF
           # Managed by the app repo publish-images workflow — do not hand-edit.
           backend_image  = "${AR}/backend@${BACKEND_DIGEST}"
           waitlist_image = "${AR}/waitlist-backend@${WAITLIST_DIGEST}"
+          app_revision   = "${GITHUB_SHA}"
           EOF
-          cp ../backend/internal/pubsub/manifest.yaml manifest.yaml
 
-          if git diff --quiet; then
-            echo "digests + manifest unchanged — nothing to open"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "digests unchanged — nothing to open"
             exit 0
           fi
 
           git -c user.name=notifbuddy-bot -c user.email=bot@users.noreply.github.com \
-            commit -am "deploy: bump images to ${GITHUB_SHA:0:12}"
+            commit -m "deploy: bump images to ${GITHUB_SHA:0:12}"
           git push -f origin bot/image-bump
 
           gh pr create --repo notifbuddy/iac --head bot/image-bump --base main \
