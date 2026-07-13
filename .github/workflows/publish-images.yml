@@ -111,13 +111,14 @@ jobs:
           app_revision   = "${GITHUB_SHA}"
           EOF
 
-          if git diff --quiet; then
+          git add -A
+          if git diff --cached --quiet; then
             echo "digests unchanged — nothing to open"
             exit 0
           fi
 
           git -c user.name=notifbuddy-bot -c user.email=bot@users.noreply.github.com \
-            commit -am "deploy: bump images to ${GITHUB_SHA:0:12}"
+            commit -m "deploy: bump images to ${GITHUB_SHA:0:12}"
           git push -f origin bot/image-bump
 
           gh pr create --repo notifbuddy/iac --head bot/image-bump --base main \
