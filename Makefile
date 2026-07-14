@@ -1,4 +1,4 @@
-.PHONY: help generate gen-go gen-ts dev dev-backend dev-waitlist dev-frontend dev-landing dev-docs build build-backend build-waitlist build-frontend build-landing install test-e2e clean
+.PHONY: help generate gen-go gen-ts dev dev-backend dev-waitlist dev-frontend dev-landing dev-docs build build-backend build-waitlist build-frontend build-landing install test-e2e test-e2e-ui clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -60,6 +60,9 @@ build-landing: ## Build the marketing/waitlist site to landing/build
 
 test-e2e: ## Run the backend black-box e2e suite in docker compose
 	cd backend/e2e && ./run.sh
+
+test-e2e-ui: ## Run the dashboard (Playwright) e2e suite in docker compose
+	cd backend/e2e && ./run-ui.sh
 
 ## ---- Misc ----
 

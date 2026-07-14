@@ -1,0 +1,32 @@
+# Dashboard (SvelteKit SPA) Playwright suite for the e2e stack.
+#
+# Build context is the REPO ROOT: the SPA build needs both frontend/ and the
+# repo-root shared/ directory (aliased as $shared, plus the shared error
+# template). The container builds the SPA against http://localhost:8080 and runs
+# Playwright; the compose "ui" service shares the backend's network namespace, so
+# that localhost is the real backend.
+FROM node:22-bookworm-slim
+
+# The SPA calls the API at this origin from the browser. In the compose ui
+# container (network_mode: service:backend) the backend is on localhost:8080.
+ENV PUBLIC_API_BASE_URL=http://localhost:8080
+
+WORKDIR /app/frontend
+
+# Install deps first (better layer caching). The repo-root shared/ is needed at
+# build time, so copy it before building.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# Playwright browser + its OS dependencies (Chromium only).
+RUN npx playwright install --with-deps chromium
+
+# App sources.
+COPY shared /app/shared
+COPY frontend ./
+
+# Build the static SPA (adapter-static → frontend/build).
+RUN npm run build
+
+# Runs Playwright; playwright.config.ts serves build/ on :5173 via e2e/serve.mjs.
+CMD ["npx", "playwright", "test"]

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"xolo/backend/e2e/fakeapis/respond"
+	"xolo/backend/e2e/fakeapis/session"
 )
 
 // Host is the API hostname this fake answers for.
@@ -17,12 +18,46 @@ func Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	// GET /user_management/organization_memberships — /me lists the caller's
-	// orgs. Empty is a valid answer (a fresh user in no WorkOS org); it also
-	// keeps the response instant instead of the SDK retrying a dead host.
+	// orgs. Return the one shared e2e org (see the session package) so /me
+	// resolves an active organization and the SPA renders the signed-in shell
+	// with the org switcher populated. list_metadata.after is nil so the SDK's
+	// iterator stops after this single page.
 	mux.HandleFunc("GET /user_management/organization_memberships", func(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, http.StatusOK, map[string]any{
-			"data":          []any{},
+			"data": []any{
+				map[string]any{
+					"object":            "organization_membership",
+					"id":                "om_e2e",
+					"user_id":           session.UserID,
+					"organization_id":   session.OrgID,
+					"organization_name": session.OrgName,
+					"status":            "active",
+					"role":              map[string]any{"slug": session.Role},
+				},
+			},
 			"list_metadata": map[string]any{"before": nil, "after": nil},
+		})
+	})
+
+	// GET /organizations/{id} — /me's active-org profile lookup and the org
+	// settings page. Echo the shared e2e org so the profile resolves.
+	mux.HandleFunc("GET /organizations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		respond.JSON(w, http.StatusOK, map[string]any{
+			"object": "organization",
+			"id":     r.PathValue("id"),
+			"name":   session.OrgName,
+		})
+	})
+
+	// GET /user_management/users/{id} — member-list hydration joins each
+	// membership to the underlying user identity.
+	mux.HandleFunc("GET /user_management/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		respond.JSON(w, http.StatusOK, map[string]any{
+			"object":     "user",
+			"id":         r.PathValue("id"),
+			"email":      session.Email,
+			"first_name": session.FirstName,
+			"last_name":  session.LastName,
 		})
 	})
 

@@ -38,3 +38,13 @@ jobs:
       - name: Run e2e suite
         run: ./run.sh
         working-directory: backend/e2e
+
+  ui-e2e:
+    name: dashboard e2e (playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run dashboard e2e suite
+        run: ./run-ui.sh
+        working-directory: backend/e2e

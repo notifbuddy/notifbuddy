@@ -12,4 +12,4 @@ COMPOSE="docker compose -f docker-compose.e2e.yml"
 cleanup() { $COMPOSE down -v --remove-orphans >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-$COMPOSE up --build --abort-on-container-exit --exit-code-from tests "$@"
+$COMPOSE --profile backend up --build --abort-on-container-exit --exit-code-from tests "$@"
