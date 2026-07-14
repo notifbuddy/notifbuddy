@@ -59,6 +59,11 @@ type Store interface {
 	LinearWebhookPayload(ctx context.Context, deliveryID string) (json.RawMessage, error)
 	SlackWebhookPayload(ctx context.Context, eventID string) (json.RawMessage, error)
 
+	// LockIssue serializes concurrent processing of the same issue so the
+	// check-then-create-channel path can't run twice under at-least-once,
+	// concurrent Pub/Sub delivery. The returned func releases the lock.
+	LockIssue(ctx context.Context, orgID, issueID string) (func(), error)
+
 	UpsertIssueChannel(ctx context.Context, in store.IssueChannel) error
 	ChannelForIssue(ctx context.Context, orgID, linearIssueID string) (string, error)
 	IssueForChannel(ctx context.Context, orgID, slackChannelID string) (string, error)

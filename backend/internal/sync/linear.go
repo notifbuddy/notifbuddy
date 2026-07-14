@@ -143,11 +143,22 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
 	stateName := p.Linear.Data.State.Name
 
+	// Serialize concurrent deliveries of this same issue: Pub/Sub push is
+	// at-least-once and concurrent, so without this two deliveries could both
+	// see "no channel" and both create a Slack channel. The lock is scoped to
+	// (org, issue), so different issues still process in parallel.
+	unlock, err := e.store.LockIssue(ctx, orgID, issueID)
+	if err != nil {
+		return fmt.Errorf("onLinearIssue: lock: %w", err) // transient; nack and retry
+	}
+	defer unlock()
+
 	// Idempotency: one channel per issue. An existing channel is never
 	// re-created; it can only be archived by the archive trigger. The trigger
 	// rules live in integrations.{Create,Archive}Triggered, shared with the
 	// settings test panel so "Run test" and the engine can never disagree.
-	if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err == nil {
+	switch _, err := e.store.ChannelForIssue(ctx, orgID, issueID); {
+	case err == nil:
 		archive, err := integrations.ArchiveTriggered(e.tmpl, settings, stateName, evt)
 		if err != nil {
 			slog.WarnContext(ctx, "sync: archive trigger eval failed", "org_id", orgID, "issue_id", issueID, "error", err)
@@ -157,6 +168,12 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 			return e.closeChannel(ctx, orgID, issueID)
 		}
 		return nil
+	case errors.Is(err, store.ErrNotFound):
+		// No channel yet — fall through to the creation path below.
+	default:
+		// A transient lookup error must NOT be treated as "no channel", or a
+		// hiccup would create a duplicate for an issue that already has one.
+		return fmt.Errorf("onLinearIssue: channel lookup: %w", err)
 	}
 
 	create, err := integrations.CreateTriggered(e.tmpl, settings, stateName, evt)
@@ -252,6 +269,15 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 	}
 	if err != nil {
 		return fmt.Errorf("linear comment: channel lookup: %w", err)
+	}
+
+	// Idempotency: if this comment was already mirrored (Pub/Sub redelivers a
+	// slow-but-successful message after the ack deadline), don't post it again.
+	// The link is keyed on the comment's own id, so this is exact.
+	if _, err := e.store.LinkByLinearComment(ctx, orgID, d.ID); err == nil {
+		return nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return fmt.Errorf("linear comment: mirror lookup: %w", err)
 	}
 
 	token, err := e.intg.SlackBotToken(ctx, orgID)
