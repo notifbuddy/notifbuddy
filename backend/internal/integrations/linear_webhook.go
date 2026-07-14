@@ -51,13 +51,20 @@ func (s *Service) HandleLinearWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1a. Verify signature. If a webhook secret is configured, it must match.
-	if secret := s.cfg.Linear.WebhookSecret; secret != "" {
-		if !validLinearSignature(secret, body, r.Header.Get("Linear-Signature")) {
-			slog.WarnContext(r.Context(), "integrations: linear webhook signature mismatch")
-			http.Error(w, "invalid signature", http.StatusUnauthorized)
-			return
-		}
+	// 1a. Verify signature. Fail closed: with no webhook secret we cannot
+	// authenticate the request, so refuse it rather than accepting an unsigned
+	// (forgeable) webhook that could be attributed to any workspace. Mirrors the
+	// Stripe/WorkOS webhook handlers.
+	secret := s.cfg.Linear.WebhookSecret
+	if secret == "" {
+		slog.ErrorContext(r.Context(), "integrations: linear webhook secret not configured; refusing webhook")
+		http.Error(w, "webhook not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if !validLinearSignature(secret, body, r.Header.Get("Linear-Signature")) {
+		slog.WarnContext(r.Context(), "integrations: linear webhook signature mismatch")
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
 	}
 
 	// Pull the fields Linear includes in every webhook payload. webhookTimestamp

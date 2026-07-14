@@ -85,7 +85,7 @@ linear:
     - read
     - write
   callback_url: "http://localhost:8080/integrations/linear/callback"
-  webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SECRET — verifies Linear-Signature HMAC; empty disables verification
+  webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SECRET — verifies Linear-Signature HMAC; required when Linear is configured (webhook fails closed without it)
 
 cloudflare:
   # Workers AI powers NotifBuddy's @mention intent parsing (create-channel /

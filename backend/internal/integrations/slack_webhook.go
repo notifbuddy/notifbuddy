@@ -61,15 +61,22 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the signature before doing anything else with the body. If a signing
-	// secret is configured, it must match (and the timestamp must be fresh).
-	if secret := s.cfg.Slack.SigningSecret; secret != "" {
-		if !validSlackSignature(secret, body, r.Header.Get("X-Slack-Request-Timestamp"),
-			r.Header.Get("X-Slack-Signature"), time.Now()) {
-			slog.WarnContext(r.Context(), "integrations: slack webhook signature mismatch")
-			http.Error(w, "invalid signature", http.StatusUnauthorized)
-			return
-		}
+	// Verify the signature before doing anything else with the body. Fail closed:
+	// with no signing secret we cannot authenticate the request, so refuse it
+	// rather than accepting an unsigned (forgeable) webhook — an unset secret
+	// would otherwise let anyone POST events attributed to any workspace. This
+	// mirrors the Stripe/WorkOS webhook handlers.
+	secret := s.cfg.Slack.SigningSecret
+	if secret == "" {
+		slog.ErrorContext(r.Context(), "integrations: slack signing secret not configured; refusing webhook")
+		http.Error(w, "webhook not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if !validSlackSignature(secret, body, r.Header.Get("X-Slack-Request-Timestamp"),
+		r.Header.Get("X-Slack-Signature"), time.Now()) {
+		slog.WarnContext(r.Context(), "integrations: slack webhook signature mismatch")
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
 	}
 
 	// Peek at the envelope: type distinguishes url_verification from
