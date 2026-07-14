@@ -68,3 +68,41 @@ func TestPollIntervalDuration_Default(t *testing.T) {
 		t.Fatalf("default poll interval = %s, want 1s", d)
 	}
 }
+func TestValidate_WebhookSecretsRequiredWhenConfigured(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr string // substring; "" = valid
+	}{
+		{"slack unconfigured is fine", func(c *Config) {}, ""},
+		{"slack configured with signing secret", func(c *Config) {
+			c.Slack.ClientSecret = "s"
+			c.Slack.SigningSecret = "sig"
+		}, ""},
+		{"slack configured without signing secret", func(c *Config) {
+			c.Slack.ClientSecret = "s"
+		}, "slack.signing_secret is required"},
+		{"linear configured with webhook secret", func(c *Config) {
+			c.Linear.ClientSecret = "s"
+			c.Linear.WebhookSecret = "wh"
+		}, ""},
+		{"linear configured without webhook secret", func(c *Config) {
+			c.Linear.ClientSecret = "s"
+		}, "linear.webhook_secret is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validCfg()
+			tc.mutate(&cfg)
+			err := cfg.validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validate() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validate() = %v, want error containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}

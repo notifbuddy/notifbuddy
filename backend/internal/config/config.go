@@ -319,6 +319,17 @@ func (c *Config) validate() error {
 	if len(c.WorkOS.CookiePassword) < 32 {
 		return fmt.Errorf("workos.cookie_password must be at least 32 characters (got %d)", len(c.WorkOS.CookiePassword))
 	}
+	// When an integration's OAuth app is configured (its client secret is set),
+	// its inbound webhook secret is mandatory. The webhook handlers fail closed
+	// without it (refusing every event); catch the misconfiguration at boot
+	// rather than silently dropping — or, before this was fail-closed, silently
+	// accepting forged — provider webhooks.
+	if c.Slack.ClientSecret != "" && c.Slack.SigningSecret == "" {
+		return fmt.Errorf("slack.signing_secret is required when Slack is configured (e.g. set it to $SLACK_SIGNING_SECRET)")
+	}
+	if c.Linear.ClientSecret != "" && c.Linear.WebhookSecret == "" {
+		return fmt.Errorf("linear.webhook_secret is required when Linear is configured (e.g. set it to $LINEAR_WEBHOOK_SECRET)")
+	}
 	switch c.Logging.Format {
 	case "", "text", "json":
 	default:
