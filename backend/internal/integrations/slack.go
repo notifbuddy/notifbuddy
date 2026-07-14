@@ -34,12 +34,16 @@ func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("level") == string(store.LevelUser) {
 		level = store.LevelUser
 	}
-	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: newNonce()})
+	nonce := newNonce()
+	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: nonce})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: seal slack state", "error", err)
 		http.Error(w, "failed to start slack connect", http.StatusInternalServerError)
 		return
 	}
+	// Bind this flow to the initiating browser; the callback requires the cookie
+	// to match the sealed state's nonce.
+	s.setStateCookie(w, "slack", nonce)
 	q := url.Values{}
 	q.Set("client_id", s.cfg.Slack.ClientID)
 	q.Set("redirect_uri", s.cfg.Slack.CallbackURL)
@@ -69,6 +73,15 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
+	// Bind to the initiating browser: reject a callback whose state nonce does
+	// not match the cookie set at connect (OAuth account-linking CSRF), or whose
+	// state has expired.
+	if err := s.verifyState(r, "slack", st); err != nil {
+		slog.WarnContext(r.Context(), "integrations: slack oauth state binding failed", "error", err)
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
+	s.clearStateCookie(w, "slack")
 	code := q.Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)

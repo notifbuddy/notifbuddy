@@ -38,12 +38,16 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("level") == string(store.LevelUser) {
 		level = store.LevelUser
 	}
-	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: newNonce()})
+	nonce := newNonce()
+	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: nonce})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: seal linear state", "error", err)
 		http.Error(w, "failed to start linear connect", http.StatusInternalServerError)
 		return
 	}
+	// Bind this flow to the initiating browser; the callback requires the cookie
+	// to match the sealed state's nonce.
+	s.setStateCookie(w, "linear", nonce)
 	q := url.Values{}
 	q.Set("client_id", s.cfg.Linear.ClientID)
 	q.Set("redirect_uri", s.cfg.Linear.CallbackURL)
@@ -74,6 +78,15 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
+	// Bind to the initiating browser: reject a callback whose state nonce does
+	// not match the cookie set at connect (OAuth account-linking CSRF), or whose
+	// state has expired.
+	if err := s.verifyState(r, "linear", st); err != nil {
+		slog.WarnContext(r.Context(), "integrations: linear oauth state binding failed", "error", err)
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
+	s.clearStateCookie(w, "linear")
 	code := q.Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
