@@ -239,7 +239,10 @@ func (h Handler) UpdateMemberRole(ctx context.Context, req *api.UpdateMemberRole
 
 // CreateInvitation implements `createInvitation`: POST /invitations.
 // Invites an email to the caller's active organization. Any signed-in member of
-// an organization may invite (demo-simple authorization).
+// an organization may invite (demo-simple authorization), but only admins may
+// grant the admin role — otherwise a non-admin could escalate by inviting a
+// second account they control as admin, bypassing the admin-only role gate on
+// updateMemberRole.
 func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitationRequest) (api.CreateInvitationRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
@@ -254,6 +257,9 @@ func (h Handler) CreateInvitation(ctx context.Context, req *api.CreateInvitation
 	role := ""
 	if r, ok := req.Role.Get(); ok {
 		role = string(r)
+	}
+	if role == auth.RoleAdmin && user.Role != auth.RoleAdmin {
+		return &api.CreateInvitationForbidden{Message: "only admins can invite admins"}, nil
 	}
 	inv, err := h.auth.SendInvitation(ctx, req.Email, user.OrgID, role, user.ID)
 	if err != nil {
