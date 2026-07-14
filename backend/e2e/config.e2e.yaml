@@ -1,0 +1,89 @@
+# Backend configuration for the black-box e2e suite (backend/e2e).
+#
+# Runs the real server against a throwaway Postgres inside docker compose with
+# external dependencies either stubbed or intercepted:
+#   - Outbound SDK calls (WorkOS today) go through the fakeapis MITM proxy
+#     (HTTPS_PROXY -> fakeapis, SSL_CERT_FILE -> its CA) and are served by
+#     in-process fakes — the server keeps using the real SDK against the real
+#     hostname. Inbound sessions are still forged offline by the test harness
+#     (sealed cookie + unsigned JWT payload), which is all AuthenticateSession
+#     validates.
+#   - Slack / Linear / Cloudflare / Stripe secrets are empty => "not configured".
+#   - Linear webhook secret IS set so we can test HMAC verification (401 on a bad
+#     signature, 202 on a good one).
+#   - billing.mode = beta => nothing locks.
+#
+# Secrets come from the environment (docker-compose.e2e.yml sets them). An unset
+# ${VAR} expands to "" (feature disabled) — only the WorkOS essentials are
+# required by config.validate().
+
+server:
+  addr: ":8080"
+
+logging:
+  format: "text"
+  level: "info"
+
+cors:
+  allow_origin: "http://localhost:5173" # exercised by the CORS preflight test
+
+workos:
+  client_id: "client_e2e" # literal; only presence is validated
+  api_key: "${WORKOS_API_KEY}" # any non-empty value; calls are intercepted by fakeapis
+  cookie_password: "${WORKOS_COOKIE_PASSWORD}" # >=32 chars; seals/opens the session cookie
+  redirect_uri: "http://localhost:8080/auth/callback"
+  login_provider: "" # show the selector; unused in e2e
+  webhook_secret: "" # WorkOS webhook endpoint disabled
+
+app:
+  post_login_url: "http://localhost:5173"
+  insecure_cookies: true # plain-HTTP container traffic; keeps Set-Cookie usable
+
+database:
+  url: "${DATABASE_URL}" # throwaway compose Postgres
+  migrate: true # build the schema on boot
+
+encryption:
+  provider: "local"
+  local_key: "${INTEGRATION_ENC_KEY}" # base64 32-byte key (stable across restarts)
+  kms_key_id: ""
+
+pubsub:
+  provider: "postgres" # watermill over the app DB; no GCP needed
+  postgres:
+    poll_interval: "200ms"
+    log_events: false
+
+slack:
+  client_id: "e2e.slack"
+  client_secret: "${SLACK_CLIENT_SECRET}" # set => connect endpoint starts the OAuth flow
+  scopes:
+    - chat:write
+  user_scopes:
+    - chat:write
+  callback_url: "http://localhost:8080/integrations/slack/callback"
+  # Set: with client_secret configured, validate() (on main) requires this too.
+  # Enables Slack webhook HMAC verification — no Slack webhook test depends on it.
+  signing_secret: "${SLACK_SIGNING_SECRET}"
+
+linear:
+  client_id: "e2e-linear"
+  client_secret: "" # OAuth disabled
+  scopes:
+    - read
+    - write
+  callback_url: "http://localhost:8080/integrations/linear/callback"
+  webhook_secret: "${LINEAR_WEBHOOK_SECRET}" # SET — enables HMAC verification tests
+
+cloudflare:
+  account_id: "" # Workers AI disabled => intent resolves to no-action
+  api_token: ""
+  model: "@cf/meta/llama-3.1-8b-instruct"
+
+billing:
+  mode: "beta" # nothing locks
+
+stripe:
+  api_key: ""
+  webhook_secret: ""
+  price_id: ""
