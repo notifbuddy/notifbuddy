@@ -82,7 +82,7 @@ slack:
   signing_secret: "${SLACK_SIGNING_SECRET}" # SECRET
 
 linear:
-  client_id: "c7a330b6ba19f5ba1489ef509fa10516" # TODO: prod Linear OAuth app client id
+  client_id: "${LINEAR_CLIENT_ID}" # TODO: prod Linear OAuth app client id
   client_secret: "${LINEAR_CLIENT_SECRET}" # SECRET
   scopes:
     - read
