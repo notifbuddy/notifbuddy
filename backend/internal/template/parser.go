@@ -29,14 +29,43 @@ type callNode struct { // fn(args...)
 	args []node
 }
 
+// Bounds that keep a hostile expression from exhausting resources. The parser
+// is recursive-descent, so nesting depth maps directly to Go stack frames; an
+// unbounded chain of '(', '[' or '!' would overflow the goroutine stack, which
+// is a fatal runtime error (not a recoverable panic) and would crash the whole
+// process. maxParseDepth caps nesting well below that; maxExprLen caps the
+// input a single parse ever sees. Real name templates and conditionals are a
+// handful of tokens, so both limits are far above any legitimate use.
+const (
+	maxParseDepth = 256
+	maxExprLen    = 8192
+)
+
 // parser is a recursive-descent parser over the token slice.
 type parser struct {
-	toks []token
-	pos  int
+	toks  []token
+	pos   int
+	depth int
 }
+
+// enter/leave bound recursion depth. Every recursive re-entry (parenthesised or
+// indexed sub-expression, call argument, and unary '!') calls enter; exceeding
+// maxParseDepth returns an error instead of recursing toward a stack overflow.
+func (p *parser) enter() error {
+	p.depth++
+	if p.depth > maxParseDepth {
+		return fmt.Errorf("template: expression nested too deeply (max %d)", maxParseDepth)
+	}
+	return nil
+}
+
+func (p *parser) leave() { p.depth-- }
 
 // parse turns an expression string into an AST.
 func parse(expr string) (node, error) {
+	if len(expr) > maxExprLen {
+		return nil, fmt.Errorf("template: expression too long (%d bytes, max %d)", len(expr), maxExprLen)
+	}
 	toks, err := lex(expr)
 	if err != nil {
 		return nil, err
@@ -64,7 +93,13 @@ func (p *parser) accept(k tokenKind) bool {
 
 // Precedence (low → high): || , && , ==/!= , </<=/>/>= , unary ! , postfix .[]() ,
 // primary. parseExpr is the lowest precedence (||).
-func (p *parser) parseExpr() (node, error) { return p.parseOr() }
+func (p *parser) parseExpr() (node, error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+	return p.parseOr()
+}
 
 func (p *parser) parseOr() (node, error) {
 	left, err := p.parseAnd()
@@ -132,6 +167,12 @@ func (p *parser) parseComparison() (node, error) {
 
 func (p *parser) parseUnary() (node, error) {
 	if p.peek().kind == tNot {
+		// '!' recurses into parseUnary without passing through parseExpr, so
+		// guard depth here too or a '!!!!…' chain would recurse unbounded.
+		if err := p.enter(); err != nil {
+			return nil, err
+		}
+		defer p.leave()
 		p.next()
 		x, err := p.parseUnary()
 		if err != nil {
