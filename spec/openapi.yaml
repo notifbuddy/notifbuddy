@@ -199,6 +199,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: The caller may not grant the requested role (e.g. a non-admin inviting an admin).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /invitations/{invitationId}:
     delete:
       operationId: revokeInvitation

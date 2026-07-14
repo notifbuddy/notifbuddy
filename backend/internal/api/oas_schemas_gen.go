@@ -367,6 +367,10 @@ type CreateInvitationBadRequest Error
 
 func (*CreateInvitationBadRequest) createInvitationRes() {}
 
+type CreateInvitationForbidden Error
+
+func (*CreateInvitationForbidden) createInvitationRes() {}
+
 type CreateInvitationPaymentRequired Error
 
 func (*CreateInvitationPaymentRequired) createInvitationRes() {}
