@@ -1,0 +1,16 @@
+# The e2e egress interceptor: TLS-terminating forward proxy + in-process fakes
+# for third-party APIs (WorkOS today; Linear/GitHub as wired). Build context is
+# the backend/ dir so it shares the backend Go module.
+FROM golang:1.25.8-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/fakeapis ./e2e/fakeapis
+
+FROM alpine:3.20
+# busybox wget powers the compose healthcheck; no other runtime deps.
+WORKDIR /app
+COPY --from=build /out/fakeapis /app/fakeapis
+EXPOSE 8888
+ENTRYPOINT ["/app/fakeapis"]

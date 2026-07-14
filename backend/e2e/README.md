@@ -17,13 +17,14 @@ or from the repo root:
 make test-e2e
 ```
 
-`run.sh` builds three containers with docker compose, runs the suite once, and
+`run.sh` builds four containers with docker compose, runs the suite once, and
 exits with the runner's status code (`0` = all green). It tears the stack down
 (`down -v`) on exit.
 
 ```
 postgres  throwaway DB (tmpfs — wiped every run)
-backend   the real server, CONFIG_FILE=config.e2e.yaml
+fakeapis  TLS-terminating egress proxy + in-process third-party API fakes
+backend   the real server, CONFIG_FILE=config.e2e.yaml, HTTPS_PROXY -> fakeapis
 tests     the e2e-tagged Go suite, run once against backend:8080
 ```
 
@@ -42,17 +43,36 @@ go test -tags e2e -count=1 -v ./e2e/...
 With `E2E_BASE_URL` unset the package skips itself, so a normal
 `go test ./...` never runs it.
 
-## How auth works without WorkOS
+## Intercepting third-party APIs (`fakeapis`)
 
-A WorkOS session cookie is a symmetric-sealed blob wrapping an **unsigned** JWT
-whose signature `AuthenticateSession` never verifies (it only base64-decodes the
-payload). So the harness forges any session offline by sealing a hand-built JWT
-with the same cookie password the server uses (`sealSession` in
-`harness_test.go`). No live WorkOS is required.
+The backend keeps calling the **real** third-party SDKs against their real
+hostnames — nothing test-specific leaks into production code. Interception
+happens at the network:
 
-WorkOS network calls that a few endpoints make best-effort (e.g. `/me` listing a
-user's orgs) are null-routed at the container (`api.workos.com -> 127.0.0.1`) so
-they fail instantly and the suite stays hermetic.
+- `fakeapis/` is a single Go program: a TLS-terminating forward proxy plus
+  in-process fakes. On start it mints a throwaway CA and writes its cert to a
+  shared volume.
+- The backend gets `HTTPS_PROXY=http://fakeapis:8888` and `SSL_CERT_FILE=<the
+  CA>`. Go's default SDK transport (`ProxyFromEnvironment`) tunnels every
+  outbound HTTPS call through the proxy, which MITMs the `CONNECT` with a leaf
+  cert minted on the fly and dispatches by `Host` to a fake.
+- Every captured request is logged (`fakeapis: capture GET api.workos.com/...`).
+
+**Expand it** by adding a `Host` route in `fakeapis/upstreams.go` — no new
+certs, DNS, or app changes. `api.linear.app` and `api.github.com` are already
+registered as loud `501` scaffolds; fill in their handlers when a flow needs
+them.
+
+Today the only intercepted call is the WorkOS organization-membership list that
+`/me` fans out to, answered with an empty list.
+
+### Inbound auth (forged sessions)
+
+Separately, a WorkOS **session cookie** is a symmetric-sealed blob wrapping an
+**unsigned** JWT whose signature `AuthenticateSession` never verifies (it only
+base64-decodes the payload). So the harness forges any session offline by
+sealing a hand-built JWT with the same cookie password the server uses
+(`sealSession` in `harness_test.go`). No live WorkOS is required.
 
 ## Coverage
 

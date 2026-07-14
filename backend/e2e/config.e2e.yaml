@@ -1,12 +1,13 @@
 # Backend configuration for the black-box e2e suite (backend/e2e).
 #
 # Runs the real server against a throwaway Postgres inside docker compose with
-# every external dependency disabled or stubbed:
-#   - WorkOS network calls are best-effort in the paths we exercise and are
-#     null-routed at the container level (extra_hosts: api.workos.com -> 127.0.0.1)
-#     so they fail instantly instead of reaching the internet. Sessions are
-#     forged offline by the test harness (sealed cookie + unsigned JWT payload),
-#     which is all AuthenticateSession validates.
+# external dependencies either stubbed or intercepted:
+#   - Outbound SDK calls (WorkOS today) go through the fakeapis MITM proxy
+#     (HTTPS_PROXY -> fakeapis, SSL_CERT_FILE -> its CA) and are served by
+#     in-process fakes — the server keeps using the real SDK against the real
+#     hostname. Inbound sessions are still forged offline by the test harness
+#     (sealed cookie + unsigned JWT payload), which is all AuthenticateSession
+#     validates.
 #   - Slack / Linear / Cloudflare / Stripe secrets are empty => "not configured".
 #   - Linear webhook secret IS set so we can test HMAC verification (401 on a bad
 #     signature, 202 on a good one).
@@ -28,7 +29,7 @@ cors:
 
 workos:
   client_id: "client_e2e" # literal; only presence is validated
-  api_key: "${WORKOS_API_KEY}" # any non-empty value; network calls are null-routed
+  api_key: "${WORKOS_API_KEY}" # any non-empty value; calls are intercepted by fakeapis
   cookie_password: "${WORKOS_COOKIE_PASSWORD}" # >=32 chars; seals/opens the session cookie
   redirect_uri: "http://localhost:8080/auth/callback"
   login_provider: "" # show the selector; unused in e2e

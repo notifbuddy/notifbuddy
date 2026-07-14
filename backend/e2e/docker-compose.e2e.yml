@@ -3,10 +3,15 @@
 #   ./run.sh                # build + run the suite, exit with the tests' code
 #   docker compose -f docker-compose.e2e.yml down -v   # tear down
 #
-# Three containers on one network:
+# Four containers on one network:
 #   postgres  — throwaway DB (tmpfs; wiped every run)
-#   backend   — the real server, config.e2e.yaml, external SaaS disabled/stubbed
+#   fakeapis  — TLS-terminating egress proxy + in-process third-party API fakes
+#   backend   — the real server; HTTPS_PROXY -> fakeapis, trusts its CA
 #   tests     — the e2e-tagged Go suite, run once against backend:8080
+#
+# Outbound SDK traffic (WorkOS today; Linear/GitHub as wired) is captured by
+# fakeapis instead of reaching the internet — the backend keeps using the real
+# SDKs against the real hostnames, we just intercept at the network.
 #
 # The forged-session cookie password MUST be identical for backend and tests;
 # both read the same COOKIE_PW anchor below.
@@ -30,6 +35,22 @@ services:
       timeout: 3s
       retries: 30
 
+  fakeapis:
+    build:
+      context: .. # backend/ — shares the backend Go module
+      dockerfile: e2e/Dockerfile.fakeapis
+    environment:
+      FAKEAPIS_ADDR: ":8888"
+      FAKEAPIS_CA_OUT: /certs/ca.pem # backend mounts + trusts this
+    volumes:
+      - certs:/certs # share the minted CA with the backend
+    healthcheck:
+      # Healthy once the proxy is up — which is after the CA has been written.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8888/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   backend:
     build:
       context: .. # the backend/ dir — matches backend/Dockerfile's assumptions
@@ -37,6 +58,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      fakeapis:
+        condition: service_healthy # CA present before the first outbound call
     environment:
       CONFIG_FILE: /app/config.e2e.yaml
       WORKOS_API_KEY: e2e-fake-workos-key
@@ -46,12 +69,15 @@ services:
       LINEAR_WEBHOOK_SECRET: *linear_secret
       SLACK_CLIENT_SECRET: e2e-slack-client-secret # only presence matters (enables connect)
       SLACK_SIGNING_SECRET: e2e-slack-signing-secret # required by validate() once client_secret is set
+      # Route all outbound SDK HTTPS through the fakeapis MITM proxy and trust
+      # only its CA. NO_PROXY keeps intra-network + loopback traffic direct.
+      HTTPS_PROXY: http://fakeapis:8888
+      HTTP_PROXY: http://fakeapis:8888
+      NO_PROXY: postgres,fakeapis,backend,localhost,127.0.0.1
+      SSL_CERT_FILE: /certs/ca.pem
     volumes:
       - ./config.e2e.yaml:/app/config.e2e.yaml:ro
-    extra_hosts:
-      # Null-route WorkOS so the best-effort org-list calls fail instantly
-      # instead of reaching the internet — keeps the suite hermetic.
-      - "api.workos.com:127.0.0.1"
+      - certs:/certs:ro # read the CA minted by fakeapis
 
   tests:
     build:
@@ -64,3 +90,6 @@ services:
       E2E_BASE_URL: http://backend:8080
       WORKOS_COOKIE_PASSWORD: *cookie_pw
       LINEAR_WEBHOOK_SECRET: *linear_secret
+
+volumes:
+  certs: # holds the fakeapis-minted CA, shared backend <- fakeapis
