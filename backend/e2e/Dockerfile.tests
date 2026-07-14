@@ -1,5 +1,5 @@
 # Runner image for the black-box e2e suite. Build context is the backend/ dir
-# (so it shares the xolo/backend module); it compiles and runs the e2e-tagged
+# (so it shares the backend Go module); it compiles and runs the e2e-tagged
 # tests against the server named by E2E_BASE_URL.
 FROM golang:1.25.8-alpine
 

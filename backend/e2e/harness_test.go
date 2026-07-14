@@ -1,6 +1,6 @@
 //go:build e2e
 
-// Package e2e is a black-box end-to-end suite for the Xolo backend. It talks to
+// Package e2e is a black-box end-to-end suite for the NotifBuddy backend. It talks to
 // a fully wired server (real Postgres, real pub/sub, real HTTP stack) over the
 // network exactly like the SPA would — no in-process handlers, no mocks of our
 // own code. External SaaS is disabled or stubbed by config.e2e.yaml.

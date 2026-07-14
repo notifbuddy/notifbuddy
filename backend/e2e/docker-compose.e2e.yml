@@ -1,4 +1,4 @@
-# End-to-end test stack for the Xolo backend.
+# End-to-end test stack for the NotifBuddy backend.
 #
 #   ./run.sh                # build + run the suite, exit with the tests' code
 #   docker compose -f docker-compose.e2e.yml down -v   # tear down
@@ -10,7 +10,7 @@
 #
 # The forged-session cookie password MUST be identical for backend and tests;
 # both read the same COOKIE_PW anchor below.
-name: xolo-e2e
+name: notifbuddy-e2e
 
 x-cookie-pw: &cookie_pw "e2e-cookie-password-0123456789-abcdefgh"
 x-linear-secret: &linear_secret "e2e-linear-webhook-secret"
@@ -19,13 +19,13 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: xolo
-      POSTGRES_PASSWORD: xolo
-      POSTGRES_DB: xolo
+      POSTGRES_USER: notifbuddy
+      POSTGRES_PASSWORD: notifbuddy
+      POSTGRES_DB: notifbuddy
     tmpfs:
       - /var/lib/postgresql/data # ephemeral: fast + clean per run
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xolo -d xolo"]
+      test: ["CMD-SHELL", "pg_isready -U notifbuddy -d notifbuddy"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -41,7 +41,7 @@ services:
       CONFIG_FILE: /app/config.e2e.yaml
       WORKOS_API_KEY: e2e-fake-workos-key
       WORKOS_COOKIE_PASSWORD: *cookie_pw
-      DATABASE_URL: postgres://xolo:xolo@postgres:5432/xolo?sslmode=disable
+      DATABASE_URL: postgres://notifbuddy:notifbuddy@postgres:5432/notifbuddy?sslmode=disable
       INTEGRATION_ENC_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= # base64 of a fixed 32-byte key
       LINEAR_WEBHOOK_SECRET: *linear_secret
       SLACK_CLIENT_SECRET: e2e-slack-client-secret # only presence matters (enables connect)
@@ -55,7 +55,7 @@ services:
 
   tests:
     build:
-      context: .. # backend/ — shares the xolo/backend module
+      context: .. # backend/ — shares the backend Go module
       dockerfile: e2e/Dockerfile.tests
     depends_on:
       backend:

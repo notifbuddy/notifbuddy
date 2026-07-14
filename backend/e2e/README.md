@@ -1,6 +1,6 @@
 # Backend e2e tests
 
-Black-box end-to-end tests for the Xolo backend. They talk to a **fully wired
+Black-box end-to-end tests for the NotifBuddy backend. They talk to a **fully wired
 server** (real Postgres, real pub/sub, real HTTP stack) over the network exactly
 like the SPA does — no in-process handlers, no mocks of our own code. Every
 external SaaS dependency is disabled or stubbed by `config.e2e.yaml`.
