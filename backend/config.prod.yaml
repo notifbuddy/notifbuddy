@@ -54,7 +54,7 @@ pubsub:
     push_service_account: "${PUBSUB_PUSH_SA}" # see infra
 
 slack:
-  client_id: "11457434980017.11440212651047" # TODO: prod Slack app client id
+  client_id: "${SLACK_CLIENT_ID}" # TODO: prod Slack app client id
   client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
   scopes:
     - app_mentions:read
