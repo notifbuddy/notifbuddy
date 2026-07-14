@@ -25,6 +25,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"xolo/backend/e2e/fakeapis/session"
 )
 
 func main() {
@@ -41,6 +43,17 @@ func main() {
 		log.Fatalf("fakeapis: write CA to %s: %v", caOut, err)
 	}
 	log.Printf("fakeapis: CA written to %s", caOut)
+
+	// Forge the shared signed-in session and publish it onto the same volume, so
+	// the Playwright UI suite can authenticate its browser without a live WorkOS
+	// login. Skipped when no cookie password is provided (backend-only runs).
+	if pw := os.Getenv("WORKOS_COOKIE_PASSWORD"); pw != "" {
+		sessOut := envOr("FAKEAPIS_SESSION_OUT", "/certs/session.json")
+		if err := session.Write(sessOut, pw); err != nil {
+			log.Fatalf("fakeapis: write session to %s: %v", sessOut, err)
+		}
+		log.Printf("fakeapis: session written to %s", sessOut)
+	}
 
 	mux := newDispatch()
 

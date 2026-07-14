@@ -1,31 +1,41 @@
-# Backend e2e tests
+# e2e tests
 
-Black-box end-to-end tests for the NotifBuddy backend. They talk to a **fully wired
-server** (real Postgres, real pub/sub, real HTTP stack) over the network exactly
-like the SPA does — no in-process handlers, no mocks of our own code. Every
-external SaaS dependency is disabled or stubbed by `config.e2e.yaml`.
+Black-box end-to-end tests for NotifBuddy. They talk to a **fully wired server**
+(real Postgres, real pub/sub, real HTTP stack) over the network exactly like the
+SPA does — no in-process handlers, no mocks of our own code. Every external SaaS
+dependency is disabled or stubbed by `config.e2e.yaml`.
+
+Two suites share one docker-compose stack, split by compose **profile**:
+
+- **backend** (`./run.sh`) — the e2e-tagged **Go** suite that drives the API directly.
+- **ui** (`./run-ui.sh`) — the SvelteKit **dashboard** driven in a real browser
+  (Playwright) against the same backend.
 
 ## Run
 
 ```sh
-cd backend/e2e && ./run.sh
+cd backend/e2e && ./run.sh       # backend Go suite
+cd backend/e2e && ./run-ui.sh    # dashboard Playwright suite
 ```
 
 or from the repo root:
 
 ```sh
-make test-e2e
+make test-e2e        # backend Go suite
+make test-e2e-ui     # dashboard Playwright suite
 ```
 
-`run.sh` builds four containers with docker compose, runs the suite once, and
-exits with the runner's status code (`0` = all green). It tears the stack down
+Each script builds the stack with docker compose, runs its suite once, and exits
+with the runner's status code (`0` = all green). It tears the stack down
 (`down -v`) on exit.
 
 ```
 postgres  throwaway DB (tmpfs — wiped every run)
-fakeapis  TLS-terminating egress proxy + in-process third-party API fakes
+fakeapis  TLS-terminating egress proxy + third-party API fakes; also mints the
+          forged session cookie the UI suite authenticates with
 backend   the real server, CONFIG_FILE=config.e2e.yaml, HTTPS_PROXY -> fakeapis
-tests     the e2e-tagged Go suite, run once against backend:8080
+tests     (profile: backend) the e2e-tagged Go suite, against backend:8080
+ui        (profile: ui) the dashboard Playwright suite, against localhost:8080
 ```
 
 ## Against an already-running server
@@ -58,21 +68,37 @@ happens at the network:
   cert minted on the fly and dispatches by `Host` to a fake.
 - Every captured request is logged (`fakeapis: capture GET api.workos.com/...`).
 
-**Expand it** by adding a `Host` route in `fakeapis/upstreams.go` — no new
-certs, DNS, or app changes. `api.linear.app` and `api.github.com` are already
+**Expand it** by registering a `Host` in `fakeapis/dispatch.go` and adding a
+per-host package (`fakeapis/workos`, `fakeapis/linear`, `fakeapis/github`) — no
+new certs, DNS, or app changes. `api.linear.app` and `api.github.com` are already
 registered as loud `501` scaffolds; fill in their handlers when a flow needs
 them.
 
-Today the only intercepted call is the WorkOS organization-membership list that
-`/me` fans out to, answered with an empty list.
+The WorkOS fake answers the calls `/me` and the settings pages fan out to: the
+organization-membership list, `GET /organizations/{id}`, and `GET
+/user_management/users/{id}` — all describing one shared e2e org/user (see
+`fakeapis/session`), so `/me` resolves a complete, org-scoped identity.
 
 ### Inbound auth (forged sessions)
 
 Separately, a WorkOS **session cookie** is a symmetric-sealed blob wrapping an
 **unsigned** JWT whose signature `AuthenticateSession` never verifies (it only
-base64-decodes the payload). So the harness forges any session offline by
-sealing a hand-built JWT with the same cookie password the server uses
-(`sealSession` in `harness_test.go`). No live WorkOS is required.
+base64-decodes the payload). So we forge any session offline by sealing a
+hand-built JWT with the same cookie password the server uses. The **Go** suite
+does this per-test (`sealSession` in `harness_test.go`); the **UI** suite reuses
+one identity — `fakeapis` seals it on start into `session.json` on the shared
+volume, and the browser is seeded with that cookie (`frontend/e2e/fixtures.ts`).
+No live WorkOS is required.
+
+### Dashboard suite (Playwright)
+
+The `ui` container builds the SPA with `PUBLIC_API_BASE_URL=http://localhost:8080`
+and serves it on `:5173`. It runs with `network_mode: service:backend`, so from
+the browser's view the SPA is `localhost:5173` and the API is `localhost:8080` —
+exactly the origins `config.e2e.yaml` already allows (`cors.allow_origin` /
+`app.post_login_url`). That makes the SPA→API call cross-origin (CORS is
+exercised) but same-site (host `localhost`), so the forged `wos_session` cookie
+is sent on every credentialed fetch. Specs live in `frontend/e2e/`.
 
 ## Coverage
 
@@ -87,6 +113,17 @@ sealing a hand-built JWT with the same cookie password the server uses
 | Template engine | settings-test renders a sample event's identifier; bad event JSON → 400 |
 | Linear webhook | HMAC verification — bad/missing signature 401, valid 202, typeless 400 |
 | Slack OAuth connect | authed+org-scoped starts the flow with a sealed state; org-less/anonymous cannot |
+
+### Dashboard (Playwright, `frontend/e2e/`)
+
+| Area | Tests |
+|------|-------|
+| Auth entry | signed-in cookie redirects into `/dashboard/linear` and shows the active org; signed-out shows the login card; deep-links bounce to login |
+| Dashboard | Linear tab renders the connect-first empty state; top-nav → Integrations |
+| Org switcher | dropdown lists the active organization from `/me` |
+| Profile menu | routes to `/settings/billing` |
+| Integrations | workspace page lists Slack/Linear providers + Workspace/User tabs; not connected in a fresh org |
+| Billing | billing page renders plan options; reachable from the profile menu |
 
 ## Notes
 

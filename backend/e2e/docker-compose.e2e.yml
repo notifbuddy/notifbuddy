@@ -1,13 +1,19 @@
-# End-to-end test stack for the NotifBuddy backend.
+# End-to-end test stack for NotifBuddy.
 #
-#   ./run.sh                # build + run the suite, exit with the tests' code
+#   ./run.sh                # backend Go suite, exit with its code
+#   ./run-ui.sh             # dashboard Playwright suite, exit with its code
 #   docker compose -f docker-compose.e2e.yml down -v   # tear down
 #
-# Four containers on one network:
+# Shared services on one network:
 #   postgres  — throwaway DB (tmpfs; wiped every run)
-#   fakeapis  — TLS-terminating egress proxy + in-process third-party API fakes
+#   fakeapis  — TLS-terminating egress proxy + third-party API fakes; also mints
+#               the forged session cookie the UI suite authenticates with
 #   backend   — the real server; HTTPS_PROXY -> fakeapis, trusts its CA
-#   tests     — the e2e-tagged Go suite, run once against backend:8080
+#
+# Two test runners, one per profile (so each run.sh spins up only its own):
+#   tests (profile: backend) — the e2e-tagged Go suite, run against backend:8080
+#   ui    (profile: ui)      — the SvelteKit dashboard Playwright suite, run in a
+#                              browser against the real backend on localhost:8080
 #
 # Outbound SDK traffic (WorkOS today; Linear/GitHub as wired) is captured by
 # fakeapis instead of reaching the internet — the backend keeps using the real
@@ -42,8 +48,10 @@ services:
     environment:
       FAKEAPIS_ADDR: ":8888"
       FAKEAPIS_CA_OUT: /certs/ca.pem # backend mounts + trusts this
+      FAKEAPIS_SESSION_OUT: /certs/session.json # forged cookie for the UI suite
+      WORKOS_COOKIE_PASSWORD: *cookie_pw # seal the session with the backend's password
     volumes:
-      - certs:/certs # share the minted CA with the backend
+      - certs:/certs # share the minted CA + session cookie with the others
     healthcheck:
       # Healthy once the proxy is up — which is after the CA has been written.
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8888/healthz"]
@@ -79,7 +87,10 @@ services:
       - ./config.e2e.yaml:/app/config.e2e.yaml:ro
       - certs:/certs:ro # read the CA minted by fakeapis
 
+  # Backend Go e2e suite. Behind the "backend" profile so a UI-only run
+  # (run-ui.sh) doesn't also spin it up.
   tests:
+    profiles: ["backend"]
     build:
       context: .. # backend/ — shares the backend Go module
       dockerfile: e2e/Dockerfile.tests
@@ -91,5 +102,31 @@ services:
       WORKOS_COOKIE_PASSWORD: *cookie_pw
       LINEAR_WEBHOOK_SECRET: *linear_secret
 
+  # Dashboard (SvelteKit SPA) Playwright suite. Behind the "ui" profile.
+  #
+  # It shares the backend container's network namespace (network_mode:
+  # service:backend), so from the browser's point of view the SPA is served at
+  # http://localhost:5173 and the API is http://localhost:8080 — exactly the
+  # origins config.e2e.yaml already allows (cors.allow_origin / post_login_url).
+  # That makes the SPA→API call cross-origin (CORS handled) but same-site (host
+  # "localhost"), so the forged wos_session cookie is sent. The cookie itself is
+  # read from /certs/session.json, minted by fakeapis with the same password the
+  # backend uses.
+  ui:
+    profiles: ["ui"]
+    build:
+      context: ../.. # repo root — the SPA needs frontend/ and shared/
+      dockerfile: backend/e2e/Dockerfile.ui
+    network_mode: "service:backend" # SPA=localhost:5173, API=localhost:8080
+    depends_on:
+      backend:
+        condition: service_started
+      fakeapis:
+        condition: service_healthy # session.json present before the browser starts
+    environment:
+      E2E_SESSION_FILE: /certs/session.json
+    volumes:
+      - certs:/certs:ro # read the forged session cookie
+
 volumes:
-  certs: # holds the fakeapis-minted CA, shared backend <- fakeapis
+  certs: # holds the fakeapis-minted CA + forged session, shared across services
