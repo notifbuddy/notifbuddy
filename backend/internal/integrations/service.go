@@ -12,10 +12,12 @@ package integrations
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
@@ -168,15 +170,77 @@ func accountLabel(in store.Integration) string {
 // The connect endpoints put an org id + random nonce into the OAuth `state`
 // parameter, sealed with the Encryptor so it can't be forged or read, and verify
 // it on the callback (CSRF protection + carrying the org through the redirect).
+//
+// Sealing alone is not enough: a sealed state is a bearer value the initiator
+// can hand to anyone, so an attacker could start a connect for their own org
+// and phish a victim into completing it, binding the victim's workspace token
+// under the attacker's org. To prevent that, the connect endpoint also drops the
+// nonce into an HttpOnly cookie on the initiating browser, and the callback
+// requires the sealed state's nonce to match that cookie — so a callback
+// completed by any browser other than the one that started the flow is rejected.
+// IssuedAt additionally bounds the state's lifetime.
+
+const oauthStateTTL = 10 * time.Minute
 
 type oauthState struct {
-	OrgID  string `json:"org"`
-	UserID string `json:"uid"`
-	Level  string `json:"lvl,omitempty"` // "" or "workspace" = workspace; "user" = per-user
-	Nonce  string `json:"n"`
+	OrgID    string `json:"org"`
+	UserID   string `json:"uid"`
+	Level    string `json:"lvl,omitempty"` // "" or "workspace" = workspace; "user" = per-user
+	Nonce    string `json:"n"`
+	IssuedAt int64  `json:"iat"` // unix seconds; bounds the state's lifetime
+}
+
+// stateCookieName is the per-provider cookie that binds an OAuth flow to the
+// browser that started it.
+func stateCookieName(provider string) string { return "oauth_state_" + provider }
+
+// setStateCookie records the flow's nonce on the initiating browser so the
+// callback can prove it is the same browser. SameSite=Lax so it survives the
+// provider's top-level redirect back to the callback.
+func (s *Service) setStateCookie(w http.ResponseWriter, provider, nonce string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     stateCookieName(provider),
+		Value:    nonce,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   !s.cfg.App.InsecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oauthStateTTL / time.Second),
+	})
+}
+
+func (s *Service) clearStateCookie(w http.ResponseWriter, provider string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     stateCookieName(provider),
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   !s.cfg.App.InsecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+// verifyState confirms the callback is completed by the browser that started
+// the flow (nonce cookie matches the sealed state) and that the state is fresh.
+func (s *Service) verifyState(r *http.Request, provider string, st oauthState) error {
+	c, err := r.Cookie(stateCookieName(provider))
+	if err != nil || c.Value == "" {
+		return fmt.Errorf("missing oauth state cookie")
+	}
+	if subtle.ConstantTimeCompare([]byte(c.Value), []byte(st.Nonce)) != 1 {
+		return fmt.Errorf("oauth state nonce mismatch")
+	}
+	if st.IssuedAt == 0 || time.Since(time.Unix(st.IssuedAt, 0)) > oauthStateTTL {
+		return fmt.Errorf("oauth state expired")
+	}
+	return nil
 }
 
 func (s *Service) sealState(st oauthState) (string, error) {
+	if st.IssuedAt == 0 {
+		st.IssuedAt = time.Now().Unix()
+	}
 	raw, err := json.Marshal(st)
 	if err != nil {
 		return "", err
