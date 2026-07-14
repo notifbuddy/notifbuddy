@@ -1,14 +1,5 @@
 name: Backend CI
 
-# Vets + unit-tests the Go backend, then runs the black-box e2e suite against a
-# fully wired server in docker compose (postgres + backend + test runner).
-# GitHub-hosted ubuntu runners ship Docker + compose, so backend/e2e/run.sh
-# works unchanged; it exits with the test runner's status (non-zero fails CI).
-#
-# Runs on every branch push and PR. The e2e stack is hermetic — WorkOS is
-# null-routed and every other external SaaS is disabled by config.e2e.yaml — so
-# no secrets are needed.
-
 on:
   push:
     branches: ["**"]
