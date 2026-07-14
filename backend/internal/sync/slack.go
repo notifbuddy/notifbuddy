@@ -95,6 +95,17 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		return fmt.Errorf("slack event %s: issue lookup: %w", ref.EventID, err)
 	}
 
+	// Idempotency: if this Slack message was already mirrored (Pub/Sub redelivers
+	// a slow-but-successful message after the ack deadline), don't create a
+	// second Linear comment. Each redelivery would otherwise mint a fresh comment
+	// id, so the mirror link's unique key can't dedup after the fact — the check
+	// must happen before the create.
+	if _, err := e.store.LinkBySlackTS(ctx, ref.OrgID, ev.Channel, ev.TS); err == nil {
+		return nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return fmt.Errorf("slack event %s: mirror lookup: %w", ref.EventID, err)
+	}
+
 	// Resolve a thread parent: a reply (thread_ts != ts) maps to the Linear
 	// comment that mirrors the thread root, so the Linear comment is a reply too.
 	parentComment := ""

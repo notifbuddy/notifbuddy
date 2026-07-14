@@ -58,6 +58,9 @@ func (f *fakeStore) SlackWebhookPayload(_ context.Context, id string) (json.RawM
 	}
 	return nil, store.ErrNotFound
 }
+func (f *fakeStore) LockIssue(_ context.Context, _, _ string) (func(), error) {
+	return func() {}, nil
+}
 func (f *fakeStore) UpsertIssueChannel(_ context.Context, in store.IssueChannel) error {
 	f.issueToChannel[in.OrgID+"|"+in.LinearIssueID] = in.SlackChannelID
 	f.channelToIssue[in.OrgID+"|"+in.SlackChannelID] = in.LinearIssueID
@@ -769,5 +772,50 @@ func TestOnSlackEvent_UnsyncedChannelIgnored(t *testing.T) {
 	e.OnSlackEvent(context.Background(), slackRef("e4", "org1"))
 	if len(ig.createdComments) != 0 {
 		t.Errorf("unsynced channel must be ignored; created %d comments", len(ig.createdComments))
+	}
+}
+
+// Pub/Sub push is at-least-once: a slow-but-successful handler is redelivered
+// after the ack deadline. Mirroring must be idempotent — a redelivered comment
+// must post to Slack only once (finding #6, Linear->Slack).
+func TestOnLinearEvent_RedeliveredCommentMirrorsOnce(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d2"] = linearCommentPayload("create", "c2", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+	sl := &fakeSlack{nextTS: "1700000000.000009"}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d2", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d2", "org1")) // redelivery
+
+	if len(sl.posted) != 1 {
+		t.Fatalf("redelivery must mirror once; got %d Slack posts", len(sl.posted))
+	}
+	if len(st.recorded) != 1 {
+		t.Fatalf("want 1 mirror link, got %d", len(st.recorded))
+	}
+}
+
+// Idempotency for the Slack->Linear direction: a redelivered Slack message must
+// create only one Linear comment. Each create would mint a fresh comment id, so
+// the after-the-fact unique key can't dedup — the pre-write check must (finding #6).
+func TestOnSlackEvent_RedeliveredMessageMirrorsOnce(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e1"] = slackMessagePayload("U_HUMAN", "", "", "hello from slack", "C1", "TS1", "")
+	sl := &fakeSlack{botUserID: "U_BOT"}
+	ig := &fakeIntg{nextCommentID: "cmt_1"}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnSlackEvent(context.Background(), slackRef("e1", "org1"))
+	e.OnSlackEvent(context.Background(), slackRef("e1", "org1")) // redelivery
+
+	if len(ig.createdComments) != 1 {
+		t.Fatalf("redelivery must mirror once; got %d Linear comments", len(ig.createdComments))
+	}
+	if len(st.recorded) != 1 {
+		t.Fatalf("want 1 mirror link, got %d", len(st.recorded))
 	}
 }

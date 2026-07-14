@@ -4,9 +4,41 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// LockIssue takes a session-level Postgres advisory lock scoped to (org, issue)
+// so concurrent deliveries of the same issue serialize. The sync engine's
+// check-then-create-channel path must not run twice — Pub/Sub push is
+// at-least-once and concurrent, so two deliveries of one issue event could both
+// see "no channel" and both create a Slack channel. It holds a pooled
+// connection until the returned release runs, so scope it tightly and always
+// call release. Different issues hash to different keys and do not block.
+func (s *Store) LockIssue(ctx context.Context, orgID, issueID string) (func(), error) {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: lock issue acquire: %w", err)
+	}
+	k1, k2 := int32(fnvHash(orgID)), int32(fnvHash(issueID))
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1, $2)`, k1, k2); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("store: lock issue: %w", err)
+	}
+	return func() {
+		// Release on a fresh context so a cancelled request still frees the lock,
+		// then return the connection to the pool.
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1, $2)`, k1, k2)
+		conn.Release()
+	}, nil
+}
+
+func fnvHash(s string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(s))
+	return h.Sum32()
+}
 
 // IssueChannel is the one Slack channel mapped to a Linear issue for an org.
 type IssueChannel struct {
