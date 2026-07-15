@@ -7,8 +7,10 @@
 	// Assets-only — no worker script. The app talks to api.notifbuddy.com
 	// directly (credentialed CORS; the backend allows exactly that origin), so
 	// nothing needs proxying here.
+	// No account_id here: wrangler does NOT interpolate ${VAR} in config (a
+	// literal "${CF_ACCOUNT_ID}" reaches the API and 7003s). The deploy
+	// workflow passes it via the CLOUDFLARE_ACCOUNT_ID env var instead.
 	"name": "notifbuddy-dashboard",
-	"account_id": "${CF_ACCOUNT_ID}",
 	"compatibility_date": "2026-07-01",
 	"assets": {
 		"directory": "./build",
