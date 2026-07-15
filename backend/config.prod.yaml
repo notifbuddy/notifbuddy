@@ -95,6 +95,9 @@ cloudflare:
   api_token: "${CF_API_TOKEN}" # SECRET
   model: "@cf/meta/llama-3.1-8b-instruct"
 
+billing:
+  mode: "beta" # nothing locks
+
 stripe:
   api_key: "${STRIPE_API_KEY}" # SECRET — live restricted key (rk_live_...)
   webhook_secret: "${STRIPE_WEBHOOK_SECRET}" # SECRET — from the dashboard webhook endpoint
