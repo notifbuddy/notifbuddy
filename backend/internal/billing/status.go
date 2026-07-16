@@ -6,12 +6,14 @@ import (
 	"xolo/backend/internal/store"
 )
 
-// Plan names as stored in org_billing.plan.
+// Plan names as stored in org_billing.plan. PlanBeta is never stored — it is
+// the synthetic plan every org reports while billing.mode is "beta".
 const (
 	PlanTrial      = "trial"
 	PlanPro        = "pro"
 	PlanOSSFree    = "oss_free"
 	PlanEnterprise = "enterprise"
+	PlanBeta       = "beta"
 )
 
 // PriceCentsPerSeat is the Pro price: $9.99 per member per month.

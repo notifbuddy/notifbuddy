@@ -1,9 +1,11 @@
 package billing
 
 import (
+	"errors"
 	"testing"
 	"time"
 
+	"xolo/backend/internal/config"
 	"xolo/backend/internal/store"
 )
 
@@ -87,5 +89,30 @@ func TestDerive(t *testing.T) {
 				t.Errorf("Subscribed = %v, want %v", got.Subscribed, tt.wantSubscribed)
 			}
 		})
+	}
+}
+
+// Beta mode short-circuits before any store access: a nil-store service (which
+// otherwise reports ErrNotConfigured) still answers with the free beta plan,
+// and checkout/portal/OSS applications are refused with ErrDisabled.
+func TestBetaMode(t *testing.T) {
+	s := New(nil, config.Config{Billing: config.BillingConfig{Mode: "beta"}}, nil)
+
+	st, err := s.StatusForOrg(t.Context(), "org_x")
+	if err != nil {
+		t.Fatalf("StatusForOrg: %v", err)
+	}
+	if st.Plan != PlanBeta || st.Locked {
+		t.Fatalf("got plan=%q locked=%v, want plan=beta unlocked", st.Plan, st.Locked)
+	}
+
+	if _, err := s.CreateCheckout(t.Context(), "org_x", "a@b.c"); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("CreateCheckout err = %v, want ErrDisabled", err)
+	}
+	if _, err := s.CreatePortal(t.Context(), "org_x"); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("CreatePortal err = %v, want ErrDisabled", err)
+	}
+	if _, err := s.SubmitOSSApplication(t.Context(), "org_x", "https://x", ""); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("SubmitOSSApplication err = %v, want ErrDisabled", err)
 	}
 }

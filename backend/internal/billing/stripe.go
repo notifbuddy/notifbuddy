@@ -38,6 +38,9 @@ func (s *Service) billingSettingsURL() string {
 // Pro plan at the org's current member count and returns its URL. The Stripe
 // customer is created here on first use — trials never touch Stripe.
 func (s *Service) CreateCheckout(ctx context.Context, orgID, email string) (string, error) {
+	if s.beta() {
+		return "", ErrDisabled
+	}
 	sc := s.stripeClient()
 	if s.st == nil || sc == nil || s.cfg.Stripe.PriceID == "" {
 		return "", ErrNotConfigured
@@ -98,6 +101,9 @@ func (s *Service) CreateCheckout(ctx context.Context, orgID, email string) (stri
 // CreatePortal creates a Stripe Billing Portal session (card updates,
 // cancellation, invoices) for the org's customer and returns its URL.
 func (s *Service) CreatePortal(ctx context.Context, orgID string) (string, error) {
+	if s.beta() {
+		return "", ErrDisabled
+	}
 	sc := s.stripeClient()
 	if s.st == nil || sc == nil {
 		return "", ErrNotConfigured
@@ -138,6 +144,9 @@ func (s *Service) seatCount(ctx context.Context, orgID string) (int, error) {
 // membership webhook, invoice.upcoming, and GET /billing — recount-then-set
 // keeps all three paths idempotent and order-independent.
 func (s *Service) ReconcileSeats(ctx context.Context, orgID string) {
+	if s.beta() {
+		return // nothing to true up — no subscriptions exist in beta
+	}
 	sc := s.stripeClient()
 	if s.st == nil || sc == nil {
 		return
@@ -180,6 +189,9 @@ func (s *Service) ReconcileSeats(ctx context.Context, orgID string) {
 // ErrAlreadySubscribed when the org is already approved or has a live
 // subscription — those orgs have nothing to apply for.
 func (s *Service) SubmitOSSApplication(ctx context.Context, orgID, sponsorURL, note string) (Status, error) {
+	if s.beta() {
+		return Status{}, ErrDisabled
+	}
 	if s.st == nil {
 		return Status{}, ErrNotConfigured
 	}

@@ -96,7 +96,10 @@ cloudflare:
   model: "@cf/meta/llama-3.1-8b-instruct"
 
 billing:
-  mode: "beta" # nothing locks
+  # "beta": billing is disabled — every org reports the free "beta" plan,
+  # nothing locks, checkout/portal are off. Flip to "live" (or remove) to
+  # re-enable trials + Stripe.
+  mode: "beta"
 
 stripe:
   api_key: "${STRIPE_API_KEY}" # SECRET — live restricted key (rk_live_...)

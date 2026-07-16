@@ -73,6 +73,8 @@ func (s BillingStatusResponsePlan) Validate() error {
 		return nil
 	case "enterprise":
 		return nil
+	case "beta":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}
@@ -110,6 +112,8 @@ func (s BillingSummaryPlan) Validate() error {
 	case "oss_free":
 		return nil
 	case "enterprise":
+		return nil
+	case "beta":
 		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)

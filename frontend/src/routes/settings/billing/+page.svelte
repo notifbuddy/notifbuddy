@@ -166,8 +166,12 @@
 				{/if}
 			</Card.Title>
 			<Card.Description>
-				Pro is {billing ? formatPrice(billing.priceCentsPerSeat) : '$9.99'} per member per month.
-				Every new organization starts with a 21-day free trial — no card needed.
+				{#if billing?.plan === 'beta'}
+					NotifBuddy is free while it's in beta — every feature, no card, no clock.
+				{:else}
+					Pro is {billing ? formatPrice(billing.priceCentsPerSeat) : '$9.99'} per member per month.
+					Every new organization starts with a 21-day free trial — no card needed.
+				{/if}
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
@@ -225,6 +229,11 @@
 						Card, invoices, and cancellation are handled in the Stripe portal. Seats adjust
 						automatically as members join or leave.
 					</p>
+				{:else if billing.plan === 'beta'}
+					<p class="text-muted-foreground text-sm">
+						You're on the free beta plan. Paid plans arrive after the beta — with plenty of
+						notice before anything changes.
+					</p>
 				{:else if billing.plan === 'oss_free'}
 					<p class="text-muted-foreground text-sm">
 						This organization is on the free open-source tier. Thanks for building in the open ♥
@@ -273,7 +282,7 @@
 	</Card.Root>
 
 	<!-- Open-source free tier -->
-	{#if billing && !billing.subscribed && billing.plan !== 'oss_free' && billing.plan !== 'enterprise'}
+	{#if billing && !billing.subscribed && billing.plan !== 'oss_free' && billing.plan !== 'enterprise' && billing.plan !== 'beta'}
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="flex items-center gap-2 text-base">

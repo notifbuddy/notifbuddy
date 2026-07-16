@@ -639,11 +639,13 @@ export interface components {
          */
         BillingSummary: {
             /**
-             * @description The organization's plan.
+             * @description The organization's plan. "beta" is reported for every organization
+             *     while billing is disabled during the beta (nothing locks, nothing
+             *     is charged).
              * @example trial
              * @enum {string}
              */
-            plan: "trial" | "pro" | "oss_free" | "enterprise";
+            plan: "trial" | "pro" | "oss_free" | "enterprise" | "beta";
             /** @description Whether features are locked (trial expired, no subscription). */
             locked: boolean;
             /**
@@ -656,11 +658,13 @@ export interface components {
         /** @description The active organization's full billing status. */
         BillingStatusResponse: {
             /**
-             * @description The organization's plan.
+             * @description The organization's plan. "beta" is reported for every organization
+             *     while billing is disabled during the beta (nothing locks, nothing
+             *     is charged).
              * @example trial
              * @enum {string}
              */
-            plan: "trial" | "pro" | "oss_free" | "enterprise";
+            plan: "trial" | "pro" | "oss_free" | "enterprise" | "beta";
             /** @description Whether features are locked (trial expired, no subscription). */
             locked: boolean;
             /**
@@ -1390,6 +1394,15 @@ export interface operations {
             };
             /** @description Billing locked — the trial has expired and there is no subscription. */
             402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller may not grant the requested role (e.g. a non-admin inviting an admin). */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

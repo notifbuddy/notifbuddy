@@ -31,7 +31,8 @@ func (*BillingRedirectResponse) createBillingPortalRes()   {}
 // The active organization's full billing status.
 // Ref: #/components/schemas/BillingStatusResponse
 type BillingStatusResponse struct {
-	// The organization's plan.
+	// The organization's plan. "beta" is reported for every organization while billing is disabled during
+	// the beta (nothing locks, nothing is charged).
 	Plan BillingStatusResponsePlan `json:"plan"`
 	// Whether features are locked (trial expired, no subscription).
 	Locked bool `json:"locked"`
@@ -181,7 +182,8 @@ func (s *BillingStatusResponseOssApplicationStatus) UnmarshalText(data []byte) e
 	}
 }
 
-// The organization's plan.
+// The organization's plan. "beta" is reported for every organization while billing is disabled during
+// the beta (nothing locks, nothing is charged).
 type BillingStatusResponsePlan string
 
 const (
@@ -189,6 +191,7 @@ const (
 	BillingStatusResponsePlanPro        BillingStatusResponsePlan = "pro"
 	BillingStatusResponsePlanOssFree    BillingStatusResponsePlan = "oss_free"
 	BillingStatusResponsePlanEnterprise BillingStatusResponsePlan = "enterprise"
+	BillingStatusResponsePlanBeta       BillingStatusResponsePlan = "beta"
 )
 
 // AllValues returns all BillingStatusResponsePlan values.
@@ -198,6 +201,7 @@ func (BillingStatusResponsePlan) AllValues() []BillingStatusResponsePlan {
 		BillingStatusResponsePlanPro,
 		BillingStatusResponsePlanOssFree,
 		BillingStatusResponsePlanEnterprise,
+		BillingStatusResponsePlanBeta,
 	}
 }
 
@@ -211,6 +215,8 @@ func (s BillingStatusResponsePlan) MarshalText() ([]byte, error) {
 	case BillingStatusResponsePlanOssFree:
 		return []byte(s), nil
 	case BillingStatusResponsePlanEnterprise:
+		return []byte(s), nil
+	case BillingStatusResponsePlanBeta:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -232,6 +238,9 @@ func (s *BillingStatusResponsePlan) UnmarshalText(data []byte) error {
 	case BillingStatusResponsePlanEnterprise:
 		*s = BillingStatusResponsePlanEnterprise
 		return nil
+	case BillingStatusResponsePlanBeta:
+		*s = BillingStatusResponsePlanBeta
+		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
@@ -241,7 +250,8 @@ func (s *BillingStatusResponsePlan) UnmarshalText(data []byte) error {
 // screen without an extra request.
 // Ref: #/components/schemas/BillingSummary
 type BillingSummary struct {
-	// The organization's plan.
+	// The organization's plan. "beta" is reported for every organization while billing is disabled during
+	// the beta (nothing locks, nothing is charged).
 	Plan BillingSummaryPlan `json:"plan"`
 	// Whether features are locked (trial expired, no subscription).
 	Locked bool `json:"locked"`
@@ -279,7 +289,8 @@ func (s *BillingSummary) SetTrialEndsAt(val time.Time) {
 	s.TrialEndsAt = val
 }
 
-// The organization's plan.
+// The organization's plan. "beta" is reported for every organization while billing is disabled during
+// the beta (nothing locks, nothing is charged).
 type BillingSummaryPlan string
 
 const (
@@ -287,6 +298,7 @@ const (
 	BillingSummaryPlanPro        BillingSummaryPlan = "pro"
 	BillingSummaryPlanOssFree    BillingSummaryPlan = "oss_free"
 	BillingSummaryPlanEnterprise BillingSummaryPlan = "enterprise"
+	BillingSummaryPlanBeta       BillingSummaryPlan = "beta"
 )
 
 // AllValues returns all BillingSummaryPlan values.
@@ -296,6 +308,7 @@ func (BillingSummaryPlan) AllValues() []BillingSummaryPlan {
 		BillingSummaryPlanPro,
 		BillingSummaryPlanOssFree,
 		BillingSummaryPlanEnterprise,
+		BillingSummaryPlanBeta,
 	}
 }
 
@@ -309,6 +322,8 @@ func (s BillingSummaryPlan) MarshalText() ([]byte, error) {
 	case BillingSummaryPlanOssFree:
 		return []byte(s), nil
 	case BillingSummaryPlanEnterprise:
+		return []byte(s), nil
+	case BillingSummaryPlanBeta:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -329,6 +344,9 @@ func (s *BillingSummaryPlan) UnmarshalText(data []byte) error {
 		return nil
 	case BillingSummaryPlanEnterprise:
 		*s = BillingSummaryPlanEnterprise
+		return nil
+	case BillingSummaryPlanBeta:
+		*s = BillingSummaryPlanBeta
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
