@@ -89,6 +89,20 @@ func TestValidate_WebhookSecretsRequiredWhenConfigured(t *testing.T) {
 		{"linear configured without webhook secret", func(c *Config) {
 			c.Linear.ClientSecret = "s"
 		}, "linear.webhook_secret is required"},
+		{"axiom disabled ignores token fields", func(c *Config) {}, ""},
+		{"axiom enabled with token and dataset", func(c *Config) {
+			c.Logging.AxiomEnabled = true
+			c.Logging.AxiomToken = "xapt-test"
+			c.Logging.AxiomDataset = "backend"
+		}, ""},
+		{"axiom enabled without token fails", func(c *Config) {
+			c.Logging.AxiomEnabled = true
+			c.Logging.AxiomDataset = "backend"
+		}, "logging.axiom_enabled is true but"},
+		{"axiom enabled without dataset fails", func(c *Config) {
+			c.Logging.AxiomEnabled = true
+			c.Logging.AxiomToken = "xapt-test"
+		}, "logging.axiom_enabled is true but"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := validCfg()
