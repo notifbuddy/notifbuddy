@@ -45,7 +45,7 @@ pubsub:
     log_events: true # extra consumer group printing every message (dev visibility)
 
 slack:
-  client_id: "11457434980017.11440212651047" # Slack app client id
+  client_id: "11589880917329.11617102178177" # Slack app client id
   client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
   # Bot scopes (modeled on Axolo's channel-per-PR app). Trim here + in the README manifest to match what you use.
   scopes:
@@ -78,7 +78,7 @@ slack:
   signing_secret: "${SLACK_SIGNING_SECRET}"
 
 linear:
-  client_id: "c7a330b6ba19f5ba1489ef509fa10516" # Linear OAuth application client id (public; may be inlined)
+  client_id: "b5683cef288cd75de08c9c19bed8805a" # Linear OAuth application client id (public; may be inlined)
   client_secret: "${LINEAR_CLIENT_SECRET}" # SECRET
   # OAuth scopes. read+write lets the app view and create/update issues/comments.
   scopes:

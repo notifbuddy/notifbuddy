@@ -133,7 +133,7 @@ func (s *fakeSlack) ArchiveChannel(_ context.Context, _, channelID string) error
 	s.archivedChannel = channelID
 	return nil
 }
-func (s *fakeSlack) DeleteChannel(_ context.Context, _, _ string) error  { return nil }
+func (s *fakeSlack) DeleteChannel(_ context.Context, _, _ string) error { return nil }
 func (s *fakeSlack) InviteUsers(_ context.Context, _, _ string, ids []string) error {
 	s.invited = append(s.invited, ids...)
 	return nil
@@ -227,13 +227,10 @@ func linearCommentPayload(action, commentID, body, issueID, parentID, actorName,
 		data["botActor"] = map[string]any{"id": "app_1", "name": "NotifBuddy"}
 	}
 	env := map[string]any{
-		"event_type": "linear",
-		"linear": map[string]any{
-			"action": action,
-			"type":   "Comment",
-			"actor":  map[string]any{"name": actorName, "email": actorEmail, "type": "user"},
-			"data":   data,
-		},
+		"action": action,
+		"type":   "Comment",
+		"actor":  map[string]any{"name": actorName, "email": actorEmail, "type": "user"},
+		"data":   data,
 	}
 	b, _ := json.Marshal(env)
 	return b
@@ -359,12 +356,9 @@ func TestOnLinearEvent_ReplyGoesToThread(t *testing.T) {
 func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{
-		"event_type": "linear",
-		"linear": map[string]any{
-			"action": "update", "type": "Issue",
-			"actor": map[string]any{"name": "Ada"},
-			"data":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
-		},
+		"action": "update", "type": "Issue",
+		"actor": map[string]any{"name": "Ada"},
+		"data":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 	}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d4"] = b
@@ -398,10 +392,10 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 // Wrong status must not create a channel.
 func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
-	}}
+	}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d5"] = b
 	sl := &fakeSlack{}
@@ -417,10 +411,10 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 // regardless of the issue's status.
 func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Done"}},
-	}}
+	}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["dc1"] = b
 	sl := &fakeSlack{nextChannel: "C_COND"}
@@ -445,10 +439,10 @@ func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 // Condition mode must not create a channel when the condition is false.
 func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
-	}}
+	}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["dc2"] = b
 	sl := &fakeSlack{}
@@ -466,10 +460,10 @@ func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 
 // linearIssuePayload builds an Issue event envelope for the archive tests.
 func linearIssuePayload(issueID, identifier, teamID, stateName string) json.RawMessage {
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
 		"data": map[string]any{"id": issueID, "identifier": identifier, "teamId": teamID, "state": map[string]any{"name": stateName}},
-	}}
+	}
 	b, _ := json.Marshal(env)
 	return b
 }
@@ -619,10 +613,10 @@ func TestOnLinearEvent_ArchiveTriggerWithoutChannelDoesNothing(t *testing.T) {
 // status would otherwise trigger creation.
 func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "teamB", "state": map[string]any{"name": "In Progress"}},
-	}}
+	}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d6"] = b
 	sl := &fakeSlack{}
@@ -643,13 +637,13 @@ func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 // remove deletes it. This keeps the status dropdown fresh between full syncs.
 func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
 	workflowStatePayload := func(action, id, name string) json.RawMessage {
-		env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		env := map[string]any{
 			"action": action, "type": "WorkflowState", "actor": map[string]any{},
 			"data": map[string]any{
 				"id": id, "name": name, "type": "started", "color": "#5e6ad2", "position": 1.5,
 				"team": map[string]any{"id": "teamX"},
 			},
-		}}
+		}
 		b, _ := json.Marshal(env)
 		return b
 	}

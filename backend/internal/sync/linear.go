@@ -69,14 +69,18 @@ type linearData struct {
 	} `json:"parent"`
 }
 
-// linearPayload is the stored webhook body ({event_type, linear:{...}}).
+// linearPayload wraps the stored webhook body. The writer persists Linear's
+// raw webhook JSON as-is ({action, type, actor, data, ...} at the top level —
+// see integrations.WriteLinearWebhook), so the raw bytes unmarshal into the
+// inner Linear struct directly; the wrapper only exists so template envelopes
+// keep their `linear.` prefix.
 type linearPayload struct {
 	Linear struct {
 		Action string      `json:"action"`
 		Type   string      `json:"type"`
 		Actor  linearActor `json:"actor"`
 		Data   linearData  `json:"data"`
-	} `json:"linear"`
+	} `json:"-"`
 }
 
 // OnLinearEvent is the subscriber for integrations.linear.webhook_event. A
@@ -104,9 +108,17 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	if err != nil {
 		return fmt.Errorf("linear event %s: load payload: %w", ref.DeliveryID, err)
 	}
+	// The stored payload is Linear's raw webhook body (top-level action/type/
+	// data), so it unmarshals into the inner struct — not the wrapper.
 	var p linearPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err := json.Unmarshal(raw, &p.Linear); err != nil {
 		slog.WarnContext(ctx, "sync: linear event: parse payload failed", "delivery_id", ref.DeliveryID, "error", err)
+		return nil
+	}
+	if p.Linear.Type == "" {
+		// A payload that parses but carries no type would previously fall
+		// through every case silently — make the skip loud.
+		slog.WarnContext(ctx, "sync: linear event: payload has no type", "delivery_id", ref.DeliveryID)
 		return nil
 	}
 
