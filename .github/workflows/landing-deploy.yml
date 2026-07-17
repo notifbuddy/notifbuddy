@@ -1,43 +1,59 @@
-name: Landing build & deploy
+name: Landing deploy trigger
 
-# Builds the marketing site (landing/) and deploys it as a Cloudflare
-# Worker with static assets (`wrangler deploy` — creates the Worker on first
-# run, updates it after). Manual trigger only (Actions tab → Run workflow).
-# The custom domain + www redirect around the Worker are managed out of band;
-# the Worker's own config lives in landing/wrangler.jsonc.
+# The landing site deploys from notifbuddy/iac (deploys are iac's job — the
+# build/deploy logic lives in iac's landing-deploy.yml, same split as the
+# dashboard). This workflow just fires that one on every merge to main that
+# touches landing/, passing the merge commit as app_ref so iac builds exactly
+# what was merged.
 #
-# First-time order: run THIS once before the domain is attached, because the
-# custom domain can only attach to an existing Worker.
-#
-# Secrets: CLOUDFLARE_API_KEY must hold a scoped API token with
-# "Workers Scripts: Edit" (plus Zone DNS Edit + Zone Read + Workers Routes Edit
-# for the domain/redirect resources).
+# Cross-repo dispatch needs a token with Actions:write on iac — the default
+# GITHUB_TOKEN can't do it. Reuses the publish-images pattern: Infisical OIDC
+# → notifbuddy-ci GitHub App token minted for notifbuddy/iac.
 
 on:
-  workflow_dispatch: # manual only — trigger from the Actions tab
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/landing-deploy.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write # GitHub OIDC → Infisical machine identity
+
+concurrency: landing-deploy-trigger
 
 jobs:
-  deploy:
+  dispatch:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: landing
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub
+      # OIDC — no App id/key stored as GitHub Actions secrets. Exports
+      # NOTIFBUDDY_CI_APP_ID + NOTIFBUDDY_CI_PRIVATE_KEY to the env.
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.7
         with:
-          node-version: 22
+          method: "oidc"
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: "/ci"
+          export-type: "env"
 
-      - name: Build
-        run: |
-          npm ci
-          npm run build
+      - name: Mint cross-repo App token for notifbuddy/iac
+        id: apptoken
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
+          owner: notifbuddy
+          repositories: iac
 
-      - name: Deploy Worker + static assets
+      - name: Dispatch iac landing-deploy with this ref
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
-        run: npx wrangler@4 deploy
+          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
+        run: |
+          gh workflow run landing-deploy.yml \
+            --repo notifbuddy/iac \
+            --field app_ref="${GITHUB_SHA}"
