@@ -14,8 +14,7 @@ export default defineConfig({
 
 			// Marketing site: everything is prerendered to plain HTML (no
 			// fallback SPA shell) so crawlers and link unfurlers get real
-			// content. The only runtime call is the waitlist form's POST to the
-			// standalone waitlist service.
+			// content.
 			adapter: adapter(),
 
 			// Components shared with the dashboard app (repo-root shared/): the

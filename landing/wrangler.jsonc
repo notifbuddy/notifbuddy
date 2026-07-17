@@ -14,11 +14,5 @@
 		// Unmatched paths get the prerendered src/routes/404 page (built to
 		// build/404.html) with a real 404 status.
 		"not_found_handling": "404-page"
-	},
-	"vars": {
-		// The Cloud Run waitlist service. Stable once created — matches
-		// `infra output -raw waitlist_url`. The worker proxies /waitlist
-		// here so the browser only ever talks to this domain (no CORS).
-		"WAITLIST_ORIGIN": "https://notifbuddy-waitlist-k75lx54hpa-uk.a.run.app"
 	}
 }

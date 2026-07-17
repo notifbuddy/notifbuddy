@@ -1,15 +1,10 @@
 name: Publish images → iac PR
 
-# Builds the backend + waitlist images, pushes them to Artifact Registry, then
+# Builds the backend image, pushes it to Artifact Registry, then
 # opens/updates a bot PR on notifbuddy/iac that bumps deploy.auto.tfvars to the
-# new digests + the source commit (app_revision). iac fetches the eventing
+# new digest + the source commit (app_revision). iac fetches the eventing
 # manifest from THIS repo at that commit — this repo stays the single source of
 # truth. Merging the PR runs terraform apply. This repo BUILDS; iac DEPLOYS.
-#
-# Backend and waitlist build as independent parallel jobs, each gated on its
-# own paths — a backend-only change skips the waitlist build (and vice versa).
-# The PR job runs when at least one image was rebuilt and carries the other
-# image's value forward from the existing deploy.auto.tfvars.
 #
 # Prereqs (one-time, all provisioned):
 #   - GCP: notifbuddy-image-pusher SA (roles/artifactregistry.writer); WIF
@@ -25,7 +20,6 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
-      - 'waitlist-backend/**'
       - '.github/workflows/publish-images.yml'
   workflow_dispatch:
 
@@ -45,9 +39,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      # workflow_dispatch has no diff to filter on — rebuild both.
+      # workflow_dispatch has no diff to filter on — rebuild unconditionally.
       backend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.backend == 'true' }}
-      waitlist: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.waitlist == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -56,9 +49,6 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
-              - '.github/workflows/publish-images.yml'
-            waitlist:
-              - 'waitlist-backend/**'
               - '.github/workflows/publish-images.yml'
 
   backend:
@@ -85,39 +75,9 @@ jobs:
           push: true
           tags: ${{ env.AR }}/backend:src-${{ github.sha }}
 
-  waitlist:
-    needs: changes
-    if: needs.changes.outputs.waitlist == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/41636012349/locations/global/workloadIdentityPools/github/providers/github
-          service_account: notifbuddy-image-pusher@notifbuddy.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-      - uses: docker/setup-buildx-action@v3
-      - name: Build + push waitlist
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: waitlist-backend
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.AR }}/waitlist-backend:src-${{ github.sha }}
-
   open-pr:
-    needs: [backend, waitlist]
-    # Run when at least one image was rebuilt; skipped builds are fine,
-    # failed or cancelled ones are not.
-    if: >-
-      !cancelled() &&
-      needs.backend.result != 'failure' &&
-      needs.waitlist.result != 'failure' &&
-      (needs.backend.result == 'success' || needs.waitlist.result == 'success')
+    needs: [backend]
+    if: needs.backend.result == 'success'
     runs-on: ubuntu-latest
     steps:
       # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub OIDC —
@@ -147,47 +107,28 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.apptoken.outputs.token }}
           BACKEND_DIGEST: ${{ needs.backend.outputs.digest }}
-          WAITLIST_DIGEST: ${{ needs.waitlist.outputs.digest }}
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/notifbuddy/iac" iac
           cd iac
 
-          # Base the bot branch on its previous tip when one exists so a
-          # pending, unmerged bump of the other image isn't silently dropped
-          # by a run that only rebuilt one of them.
+          # Base the bot branch on its previous tip when one exists so an
+          # unmerged pending bump keeps a single open PR.
           if git fetch --depth 1 origin bot/image-bump; then
             git checkout -B bot/image-bump FETCH_HEAD
           else
             git checkout -B bot/image-bump
           fi
 
-          # A skipped build job yields an empty digest — carry that image's
-          # current value forward from deploy.auto.tfvars instead.
-          current_value() {
-            sed -n "s/^${1} *= *\"\(.*\)\"/\1/p" deploy.auto.tfvars 2>/dev/null || true
-          }
-          if [ -n "${BACKEND_DIGEST}" ]; then
-            backend_image="${AR}/backend@${BACKEND_DIGEST}"
-          else
-            backend_image="$(current_value backend_image)"
-            [ -n "${backend_image}" ] || { echo "backend not rebuilt and no existing backend_image in deploy.auto.tfvars"; exit 1; }
-          fi
-          if [ -n "${WAITLIST_DIGEST}" ]; then
-            waitlist_image="${AR}/waitlist-backend@${WAITLIST_DIGEST}"
-          else
-            waitlist_image="$(current_value waitlist_image)"
-            [ -n "${waitlist_image}" ] || { echo "waitlist not rebuilt and no existing waitlist_image in deploy.auto.tfvars"; exit 1; }
-          fi
+          backend_image="${AR}/backend@${BACKEND_DIGEST}"
 
-          # Only the digests + the source commit. The manifest is NOT copied —
+          # Only the digest + the source commit. The manifest is NOT copied —
           # iac fetches it from this repo at app_revision, keeping this repo the
           # single source of truth for the eventing topology.
           cat > deploy.auto.tfvars <<EOF
           # Managed by the app repo publish-images workflow — do not hand-edit.
-          backend_image  = "${backend_image}"
-          waitlist_image = "${waitlist_image}"
-          app_revision   = "${GITHUB_SHA}"
+          backend_image = "${backend_image}"
+          app_revision  = "${GITHUB_SHA}"
           EOF
 
           git add -A
