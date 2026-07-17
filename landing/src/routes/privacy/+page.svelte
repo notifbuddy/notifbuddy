@@ -9,6 +9,15 @@
 		content="What this site collects (nothing personal), how analytics work, and how to reach us."
 	/>
 	<link rel="canonical" href="https://notifbuddy.com/privacy" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="notifbuddy" />
+	<meta property="og:url" content="https://notifbuddy.com/privacy" />
+	<meta property="og:title" content="Privacy — notifbuddy" />
+	<meta
+		property="og:description"
+		content="What this site collects (nothing personal), how analytics work, and how to reach us."
+	/>
+	<meta property="og:image" content="https://notifbuddy.com/og-card.png" />
 </svelte:head>
 
 <div class="flex min-h-svh flex-col">

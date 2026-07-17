@@ -18,7 +18,10 @@
 	--foreground: oklch(0.2101 0.0318 264.6645);
 	--card: oklch(1 0 0);
 	--primary: oklch(0.6716 0.1368 48.513);
-	--primary-foreground: oklch(1 0 0);
+	/* Dark ink on the orange, not white — white lands ~3:1 against the brand
+	   orange (fails WCAG AA 4.5:1 for button-size text); this matches the dark
+	   theme's dark-on-orange treatment at ~5:1. */
+	--primary-foreground: oklch(0.1797 0.0043 308.1928);
 	--muted-foreground: oklch(0.551 0.0234 264.3637);
 	--destructive: oklch(0.6368 0.2078 25.3313);
 	--border: oklch(0.9276 0.0058 264.5313);

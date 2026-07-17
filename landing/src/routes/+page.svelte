@@ -59,6 +59,16 @@
 				'@type': 'WebSite',
 				name: 'notifbuddy',
 				url: 'https://notifbuddy.com/'
+			},
+			{
+				'@type': 'SoftwareApplication',
+				name: 'notifbuddy',
+				url: 'https://dashboard.notifbuddy.com',
+				applicationCategory: 'BusinessApplication',
+				operatingSystem: 'Web',
+				description:
+					'Two-way notification sync between Linear, GitHub, Plain and Slack.',
+				offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
 			}
 		]
 	})}</scr` + `ipt>`}
@@ -271,6 +281,12 @@
 	.clip-chrome {
 		border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
 		background: color-mix(in oklab, var(--card) 92%, transparent);
+	}
+	/* The 11px mono labels ride text-muted-foreground, which lands under the
+	   4.5:1 WCAG floor on the light chrome bar — pull them toward foreground
+	   (solid mix, no alpha, so contrast holds in both themes). */
+	.clip-chrome p {
+		color: color-mix(in oklab, var(--foreground) 80%, var(--card));
 	}
 	.clip-canvas {
 		aspect-ratio: 16 / 9;
