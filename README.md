@@ -8,19 +8,25 @@ You can check out our deployed version which is in beta at https://dashboard.not
 
 ## What's working
 
-| Feature | Status |
-| --- | --- |
-| Login/Sign ups | ✅ Working |
-| Logouts | ✅ Working |
-| Theme selection | ✅ Working |
-| Channel rules CRUD | ✅ Working |
-| Linear workspace integration | ✅ Working |
-| Slack workspace integration | ✅ Working |
-| Linear user integration | ✅ Working |
-| Slack user integration | ✅ Working |
-| Organization profile update | ✅ Working |
-| Create organization during signup | ✅ Working |
-| Sync between Linear and Slack after connection | ✅ Working |
-| Slack channel creation from Linear issue status | ✅ Working¹ |
+| Feature                                                           | Status                  |
+| ----------------------------------------------------------------- | ----------------------- |
+| Login/Sign ups                                                    | ✅ Working              |
+| Logouts                                                           | ✅ Working              |
+| Theme selection                                                   | ✅ Working              |
+| Channel rules CRUD                                                | ✅ Working              |
+| Linear workspace integration                                      | ✅ Working              |
+| Slack workspace integration                                       | ✅ Working              |
+| Linear user integration                                           | ✅ Working              |
+| Slack user integration                                            | ✅ Working              |
+| Organization profile update                                       | ✅ Working              |
+| Create organization during signup                                 | ✅ Working              |
+| Sync between Linear and Slack after connection                    | ✅ Working              |
+| Slack channel creation from Linear issue status                   | ✅ Working <sup>1</sup> |
+| Thread response from slack thread to linear thead with attachment | Not working             |
+| Response from slack to linear direct with attachment              | Not working             |
+| Thread response from linear thread to slack thead with attachment | Working <sup>2</sup>    |
 
-¹ The channel is created by the bot; issue creators aren't added to it automatically yet — find it via Slack's channel browser.
+¹ The channel is created by the bot; issue creators aren't added to it automatically yet — find it via Slack's
+channel browser.
+<sup>2</sup> It adds an image link instead of embedding the image completely, other attachments need to be
+expolored
