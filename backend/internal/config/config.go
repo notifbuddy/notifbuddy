@@ -54,9 +54,13 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 	// Level is the minimum level emitted: "debug", "info", "warn", "error".
 	Level string `yaml:"level"`
-	// AxiomToken, when set together with AxiomDataset, additionally ships
-	// every record to Axiom (stdout keeps working either way). SECRET — set to
-	// an env ref. Empty disables the Axiom handler.
+	// AxiomEnabled turns the Axiom handler on or off (default on). Axiom is
+	// optional — self-hosted deployments set this false (or just leave the
+	// token unset) and logs go to stdout only.
+	AxiomEnabled bool `yaml:"axiom_enabled"`
+	// AxiomToken, when set together with AxiomDataset (and AxiomEnabled),
+	// additionally ships every record to Axiom (stdout keeps working either
+	// way). SECRET — set to an env ref. Empty disables the Axiom handler.
 	AxiomToken string `yaml:"axiom_token"`
 	// AxiomDataset is the Axiom dataset records are ingested into.
 	AxiomDataset string `yaml:"axiom_dataset"`
@@ -215,7 +219,7 @@ type StripeConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:     ServerConfig{Addr: ":8080"},
-		Logging:    LoggingConfig{Format: "text", Level: "info"},
+		Logging:    LoggingConfig{Format: "text", Level: "info", AxiomEnabled: true},
 		CORS:       CORSConfig{AllowOrigin: "http://localhost:5173"},
 		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},

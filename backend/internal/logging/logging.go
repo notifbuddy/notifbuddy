@@ -61,7 +61,7 @@ func New(cfg config.LoggingConfig) (*slog.Logger, func()) {
 	}
 
 	closeFn := func() {}
-	if cfg.AxiomToken != "" {
+	if cfg.AxiomEnabled && cfg.AxiomToken != "" {
 		ax, err := adapter.New(
 			adapter.SetDataset(cfg.AxiomDataset),
 			adapter.SetClientOptions(axiom.SetToken(cfg.AxiomToken)),
