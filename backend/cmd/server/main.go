@@ -43,9 +43,12 @@ func main() {
 	}
 
 	// Structured logging (log/slog): JSON in prod (Datadog-parseable), text in
-	// dev. Installed as the slog default; the stdlib log package routes through
-	// it too, so third-party log output also comes out structured.
-	logging.Setup(cfg.Logging.Format, cfg.Logging.Level)
+	// dev, shipped to Axiom too when configured. Installed as the slog default;
+	// the stdlib log package routes through it too, so third-party log output
+	// also comes out structured. closeLogs flushes Axiom's buffer on the way
+	// out.
+	_, closeLogs := logging.Setup(cfg.Logging)
+	defer closeLogs()
 
 	// Root context: canceled on SIGINT/SIGTERM, which drives the graceful
 	// shutdown of both the HTTP server and the pub/sub router.

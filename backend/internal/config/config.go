@@ -54,6 +54,18 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 	// Level is the minimum level emitted: "debug", "info", "warn", "error".
 	Level string `yaml:"level"`
+	// AxiomEnabled turns the Axiom handler on (default off — Axiom is
+	// optional; self-hosted deployments leave it disabled and log to stdout
+	// only). This flag is the single switch: when true, token and dataset are
+	// REQUIRED and validate() fails without them — a missing secret is a
+	// configuration error, never a silent disable.
+	AxiomEnabled bool `yaml:"axiom_enabled"`
+	// AxiomToken, when set together with AxiomDataset (and AxiomEnabled),
+	// additionally ships every record to Axiom (stdout keeps working either
+	// way). SECRET — set to an env ref. Empty disables the Axiom handler.
+	AxiomToken string `yaml:"axiom_token"`
+	// AxiomDataset is the Axiom dataset records are ingested into.
+	AxiomDataset string `yaml:"axiom_dataset"`
 }
 
 type CORSConfig struct {
@@ -348,6 +360,9 @@ func (c *Config) validate() error {
 	case "", "debug", "info", "warn", "error":
 	default:
 		return fmt.Errorf("unknown logging.level %q (want debug, info, warn, or error)", c.Logging.Level)
+	}
+	if c.Logging.AxiomEnabled && (c.Logging.AxiomToken == "" || c.Logging.AxiomDataset == "") {
+		return fmt.Errorf("logging.axiom_enabled is true but logging.axiom_token/logging.axiom_dataset are not both set (e.g. $AXIOM_TOKEN / $AXIOM_DATASET); set them or set logging.axiom_enabled: false")
 	}
 	switch c.PubSub.Provider {
 	case "", "postgres":

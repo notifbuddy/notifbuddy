@@ -9,9 +9,9 @@ require (
 	cloud.google.com/go/pubsub/v2 v2.6.1
 	github.com/ThreeDotsLabs/watermill v1.5.2
 	github.com/ThreeDotsLabs/watermill-sql/v4 v4.1.5
+	github.com/axiomhq/axiom-go v0.32.0
 	github.com/go-faster/errors v0.7.1
 	github.com/go-faster/jx v1.2.0
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/ogen-go/ogen v1.22.0
@@ -32,6 +32,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.11.0 // indirect
 	cloud.google.com/go/longrunning v0.9.0 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
@@ -49,6 +50,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

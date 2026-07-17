@@ -16,6 +16,13 @@ server:
 logging:
   format: "json" # one JSON object per line on stdout — Datadog parses level/msg/timestamp
   level: "info"
+  # Axiom log shipping is optional; axiom_enabled is the ONE switch. Set it
+  # false to run stdout-only (e.g. self-hosting). When true, both values
+  # below are required — startup fails with a config error if either secret
+  # is missing, rather than silently skipping Axiom.
+  axiom_enabled: true
+  axiom_token: "${AXIOM_TOKEN}" # SECRET — Axiom ingest token (Infisical prod root)
+  axiom_dataset: "backend" # not a secret — the Axiom dataset for this service
 
 cors:
   allow_origin: "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")
