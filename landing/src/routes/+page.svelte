@@ -4,7 +4,6 @@
 	import GithubIcon from '$lib/icons/github.svelte';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import PlainIcon from '$lib/icons/plain.svelte';
-	import { waitlistApi } from '$lib/api/waitlist';
 	import { userPrefersMode, setMode } from 'mode-watcher';
 
 	// Theme switcher: one quiet icon button cycling system → light → dark.
@@ -19,31 +18,6 @@
 		setMode(themeNext);
 	}
 
-	// Waitlist form state: idle → joining → joined, with an inline error on
-	// failure. The endpoint is idempotent, so re-submitting is always safe.
-	let email = $state('');
-	let joined = $state(false);
-	let joining = $state(false);
-	let joinError = $state<string | null>(null);
-
-	async function joinWaitlist(e: SubmitEvent) {
-		e.preventDefault();
-		if (email.trim() === '' || joining) return;
-		joining = true;
-		joinError = null;
-		const { data, error: reqError } = await waitlistApi.POST('/waitlist', {
-			body: { email: email.trim() }
-		});
-		joining = false;
-		if (reqError || !data) {
-			joinError =
-				(reqError as { message?: string } | undefined)?.message ??
-				'Something went wrong — try again in a moment.';
-			return;
-		}
-		joined = true;
-	}
-
 	// The demo clip is authored at 1920×1080 (a HyperFrames composition in
 	// static/demo/sync.html); scale it to whatever width the panel gets.
 	let clipWidth = $state(0);
@@ -55,7 +29,7 @@
 	<title>Two-way Slack sync for Linear, GitHub & Plain — notifbuddy</title>
 	<meta
 		name="description"
-		content="notifbuddy moves notifications both ways between Linear, GitHub, Plain and Slack. Join the waitlist for early access."
+		content="notifbuddy moves notifications both ways between Linear, GitHub, Plain and Slack. Now in open beta — free to use."
 	/>
 	<link rel="canonical" href="https://notifbuddy.com/" />
 	<meta property="og:type" content="website" />
@@ -64,7 +38,7 @@
 	<meta property="og:title" content="notifbuddy — all the noise, one signal" />
 	<meta
 		property="og:description"
-		content="Two-way notification sync between Linear, GitHub, Plain and Slack. Join the waitlist."
+		content="Two-way notification sync between Linear, GitHub, Plain and Slack. Now in open beta."
 	/>
 	<meta property="og:image" content="https://notifbuddy.com/og-card.png" />
 	<meta property="og:image:width" content="1200" />
@@ -93,34 +67,50 @@
 <div class="landing flex min-h-svh flex-col">
 	<header class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
 		<Logo size={30} />
-		<button
-			type="button"
-			class="theme-btn text-muted-foreground hover:text-foreground relative inline-flex size-9 items-center justify-center rounded-md transition-colors"
-			aria-label="{themeLabel[userPrefersMode.current]} — switch to {themeLabel[
-				themeNext
-			].toLowerCase()}"
-			data-tooltip="{themeLabel[userPrefersMode.current]} · click for {themeNext}"
-			onclick={cycleTheme}
-		>
-			{#if userPrefersMode.current === 'light'}
-				<!-- sun -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<circle cx="12" cy="12" r="4" />
-					<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-				</svg>
-			{:else if userPrefersMode.current === 'dark'}
-				<!-- moon -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-				</svg>
-			{:else}
-				<!-- monitor (system) -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<rect width="20" height="14" x="2" y="3" rx="2" />
-					<path d="M8 21h8M12 17v4" />
-				</svg>
-			{/if}
-		</button>
+		<div class="flex items-center gap-1.5">
+			<a
+				href="https://github.com/notifbuddy/notifbuddy"
+				class="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-9 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				aria-label="notifbuddy on GitHub"
+				rel="noopener"
+			>
+				<GithubIcon size={17} />
+			</a>
+			<button
+				type="button"
+				class="theme-btn text-muted-foreground hover:text-foreground relative inline-flex size-9 items-center justify-center rounded-md transition-colors"
+				aria-label="{themeLabel[userPrefersMode.current]} — switch to {themeLabel[
+					themeNext
+				].toLowerCase()}"
+				data-tooltip="{themeLabel[userPrefersMode.current]} · click for {themeNext}"
+				onclick={cycleTheme}
+			>
+				{#if userPrefersMode.current === 'light'}
+					<!-- sun -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="4" />
+						<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+					</svg>
+				{:else if userPrefersMode.current === 'dark'}
+					<!-- moon -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+					</svg>
+				{:else}
+					<!-- monitor (system) -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect width="20" height="14" x="2" y="3" rx="2" />
+						<path d="M8 21h8M12 17v4" />
+					</svg>
+				{/if}
+			</button>
+			<a
+				href="https://dashboard.notifbuddy.com"
+				class="border-input text-foreground hover:bg-foreground/5 focus-visible:ring-ring ml-1 inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+			>
+				Log in
+			</a>
+		</div>
 	</header>
 
 	<main
@@ -130,7 +120,7 @@
 		<section class="flex max-w-lg flex-col gap-6">
 			<p class="eyebrow font-mono text-xs tracking-[0.18em] uppercase">
 				<span class="eyebrow-pip" aria-hidden="true"></span>
-				early access
+				open beta
 			</p>
 			<h1 class="text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl">
 				All the noise.<br />One signal<span class="text-primary">.</span>
@@ -141,46 +131,17 @@
 				pings twice.
 			</p>
 
-			{#if joined}
-				<div class="joined rounded-lg border px-4 py-3">
-					<p class="text-sm font-medium">You're on the list.</p>
-					<p class="text-muted-foreground text-sm">
-						We'll send one email to {email.trim()} when the doors open.
-					</p>
-				</div>
-			{:else}
-				<form class="flex w-full flex-col gap-2 sm:flex-row" onsubmit={joinWaitlist}>
-					<input
-						class="border-input bg-background/60 focus-visible:ring-ring h-10 flex-1 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none"
-						type="email"
-						autocomplete="email"
-						placeholder="you@company.com"
-						aria-label="Work email"
-						bind:value={email}
-						disabled={joining}
-						required
-					/>
-					<button
-						type="submit"
-						class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
-						disabled={joining}
-					>
-						{#if joining}
-							<span class="spinner" aria-hidden="true"></span>
-							Joining…
-						{:else}
-							Join the waitlist
-						{/if}
-					</button>
-				</form>
-				{#if joinError}
-					<p class="text-destructive -mt-3 text-xs">{joinError}</p>
-				{:else}
-					<p class="text-muted-foreground/80 -mt-3 text-xs">
-						No spam — one email when we launch.
-					</p>
-				{/if}
-			{/if}
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+				<a
+					href="https://dashboard.notifbuddy.com"
+					class="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				>
+					Start syncing
+				</a>
+			</div>
+			<p class="text-muted-foreground/80 -mt-3 text-xs">
+				Free while in beta — no credit card, no waitlist.
+			</p>
 		</section>
 
 		<!-- Right: the demo clip. A HyperFrames composition (static/demo/sync.html)
@@ -272,21 +233,6 @@
 		}
 	}
 
-	/* Inline submit spinner (no icon dependency on this site). */
-	.spinner {
-		width: 14px;
-		height: 14px;
-		border-radius: 999px;
-		border: 2px solid color-mix(in oklab, var(--primary-foreground) 35%, transparent);
-		border-top-color: var(--primary-foreground);
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	/* Hand-rolled tooltip for the theme button (this site carries no UI-kit
 	   dependency): a small themed chip below the button on hover/focus. */
 	.theme-btn::after {
@@ -317,11 +263,6 @@
 		translate: 0 0;
 	}
 
-	.joined {
-		border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
-		background: color-mix(in oklab, var(--primary) 8%, transparent);
-	}
-
 	.clip {
 		border-color: color-mix(in oklab, var(--foreground) 12%, transparent);
 		background: #201f1c; /* the clip's own ink canvas */
@@ -346,8 +287,7 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.eyebrow-pip,
-		.live-dot,
-		.spinner {
+		.live-dot {
 			animation: none;
 		}
 	}
