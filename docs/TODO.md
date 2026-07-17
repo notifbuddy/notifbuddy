@@ -78,6 +78,10 @@ Phase 2 after launch
 
 Post launch
 
+- Global events page: an org-scoped activity feed (channel created, mirror posted app-level, invite failed, skips/drops with reasons) so event-driven flows stop being invisible. One activity_events table + explicit records at each decision point, /events page in the dashboard.
+- Move the apps to notifbuddy accounts
+- Add a verification request for slack's bot
+
 - Explore plain integration
 - Explore clearfeed for email <-> slack syncing
 
@@ -89,4 +93,3 @@ Design
 - Using 5 different app to communicate with your team? Use notifybuddy and unleash slack's full
   potential
 - CTA: Unleash Slack's full potential
-- Global events page: an org-scoped activity feed (channel created, mirror posted app-level, invite failed, skips/drops with reasons) so event-driven flows stop being invisible. One activity_events table + explicit records at each decision point, /events page in the dashboard.
