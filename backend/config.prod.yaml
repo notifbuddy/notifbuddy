@@ -16,6 +16,8 @@ server:
 logging:
   format: "json" # one JSON object per line on stdout — Datadog parses level/msg/timestamp
   level: "info"
+  axiom_token: "${AXIOM_TOKEN}" # SECRET — Axiom ingest token (Infisical prod root)
+  axiom_dataset: "${AXIOM_DATASET}" # e.g. "backend"
 
 cors:
   allow_origin: "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")

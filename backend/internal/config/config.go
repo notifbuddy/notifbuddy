@@ -54,6 +54,12 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 	// Level is the minimum level emitted: "debug", "info", "warn", "error".
 	Level string `yaml:"level"`
+	// AxiomToken, when set together with AxiomDataset, additionally ships
+	// every record to Axiom (stdout keeps working either way). SECRET — set to
+	// an env ref. Empty disables the Axiom handler.
+	AxiomToken string `yaml:"axiom_token"`
+	// AxiomDataset is the Axiom dataset records are ingested into.
+	AxiomDataset string `yaml:"axiom_dataset"`
 }
 
 type CORSConfig struct {
@@ -348,6 +354,9 @@ func (c *Config) validate() error {
 	case "", "debug", "info", "warn", "error":
 	default:
 		return fmt.Errorf("unknown logging.level %q (want debug, info, warn, or error)", c.Logging.Level)
+	}
+	if (c.Logging.AxiomToken == "") != (c.Logging.AxiomDataset == "") {
+		return fmt.Errorf("logging.axiom_token and logging.axiom_dataset must be set together")
 	}
 	switch c.PubSub.Provider {
 	case "", "postgres":
