@@ -70,12 +70,6 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		return nil
 	}
 	ev := p.Slack.Event
-	if ev.Type == "" {
-		// A payload with no slack.event.type (e.g. a pre-envelope row stored as
-		// the raw provider body) would be skipped silently — make it loud.
-		slog.WarnContext(ctx, "sync: slack event: payload has no slack.event.type", "event_id", ref.EventID, "event_source", p.EventSource)
-		return nil
-	}
 
 	// Only real user messages mirror.
 	if ev.Type != "message" {

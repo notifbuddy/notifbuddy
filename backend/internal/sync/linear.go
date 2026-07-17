@@ -114,13 +114,6 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 		slog.WarnContext(ctx, "sync: linear event: parse payload failed", "delivery_id", ref.DeliveryID, "error", err)
 		return nil
 	}
-	if p.Linear.Type == "" {
-		// A payload that parses but carries no linear.type (e.g. a pre-envelope
-		// row stored as the raw provider body) would fall through every case
-		// silently — make the skip loud.
-		slog.WarnContext(ctx, "sync: linear event: payload has no linear.type", "delivery_id", ref.DeliveryID, "event_source", p.EventSource)
-		return nil
-	}
 
 	// Defense 1: drop events our own Linear app caused. When we create a comment
 	// with actor=app, the resulting webhook carries a botActor — dropping it
