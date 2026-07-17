@@ -6,7 +6,7 @@
 	<title>Privacy — notifbuddy</title>
 	<meta
 		name="description"
-		content="What notifbuddy's waitlist collects (one email address), why, and how to be removed."
+		content="What this site collects (nothing personal), how analytics work, and how to reach us."
 	/>
 	<link rel="canonical" href="https://notifbuddy.com/privacy" />
 </svelte:head>
@@ -20,13 +20,16 @@
 		<h1 class="text-2xl font-semibold tracking-tight">Privacy</h1>
 		<div class="text-muted-foreground mt-6 flex flex-col gap-4 text-sm leading-relaxed">
 			<p>
-				This page collects exactly one thing: the email address you type into the waitlist form.
-				We use it for exactly one thing — sending you a single email when notifbuddy opens its
-				doors.
+				This site collects nothing personal. There is no form here anymore — the app itself lives
+				at <a
+					class="text-foreground underline underline-offset-2"
+					href="https://dashboard.notifbuddy.com">dashboard.notifbuddy.com</a
+				>, and what it collects is covered when you sign up there.
 			</p>
 			<p>
-				The address is stored in our own database. It is never sold, shared, or used for anything
-				beyond that launch email.
+				If you joined the waitlist while we had one, that email address is still in our database.
+				It is never sold or shared, and we'll only use it to send one launch email — or delete it
+				on request.
 			</p>
 			<p>
 				For traffic and performance measurement we use Cloudflare Web Analytics, which is
@@ -35,7 +38,7 @@
 				browser storage this site uses is your theme preference, kept on your device.
 			</p>
 			<p>
-				To be removed from the list, reply to any email we send you, or write to
+				To be removed from the old waitlist, or for anything else, write to
 				<a class="text-foreground underline underline-offset-2" href="mailto:support@notifbuddy.com"
 					>support@notifbuddy.com</a
 				> and we'll delete your address.

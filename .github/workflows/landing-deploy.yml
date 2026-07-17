@@ -1,6 +1,6 @@
 name: Landing build & deploy
 
-# Builds the marketing/waitlist site (landing/) and deploys it as a Cloudflare
+# Builds the marketing site (landing/) and deploys it as a Cloudflare
 # Worker with static assets (`wrangler deploy` — creates the Worker on first
 # run, updates it after). Manual trigger only (Actions tab → Run workflow).
 # The custom domain + www redirect around the Worker are managed out of band;
@@ -12,10 +12,6 @@ name: Landing build & deploy
 # Secrets: CLOUDFLARE_API_KEY must hold a scoped API token with
 # "Workers Scripts: Edit" (plus Zone DNS Edit + Zone Read + Workers Routes Edit
 # for the domain/redirect resources).
-#
-# PUBLIC_WAITLIST_URL is the site's own origin: the form posts same-origin to
-# /waitlist and the Worker (landing/worker/index.js) proxies it to the Cloud
-# Run waitlist service.
 
 on:
   workflow_dispatch: # manual only — trigger from the Actions tab
@@ -31,10 +27,6 @@ jobs:
         working-directory: landing
     steps:
       - uses: actions/checkout@v4
-
-      - name: Load deploy config
-        run: |
-          echo "PUBLIC_WAITLIST_URL=https://notifbuddy.com" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
