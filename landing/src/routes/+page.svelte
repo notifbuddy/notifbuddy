@@ -67,34 +67,50 @@
 <div class="landing flex min-h-svh flex-col">
 	<header class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
 		<Logo size={30} />
-		<button
-			type="button"
-			class="theme-btn text-muted-foreground hover:text-foreground relative inline-flex size-9 items-center justify-center rounded-md transition-colors"
-			aria-label="{themeLabel[userPrefersMode.current]} — switch to {themeLabel[
-				themeNext
-			].toLowerCase()}"
-			data-tooltip="{themeLabel[userPrefersMode.current]} · click for {themeNext}"
-			onclick={cycleTheme}
-		>
-			{#if userPrefersMode.current === 'light'}
-				<!-- sun -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<circle cx="12" cy="12" r="4" />
-					<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-				</svg>
-			{:else if userPrefersMode.current === 'dark'}
-				<!-- moon -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-				</svg>
-			{:else}
-				<!-- monitor (system) -->
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<rect width="20" height="14" x="2" y="3" rx="2" />
-					<path d="M8 21h8M12 17v4" />
-				</svg>
-			{/if}
-		</button>
+		<div class="flex items-center gap-1.5">
+			<a
+				href="https://github.com/notifbuddy/notifbuddy"
+				class="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-9 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				aria-label="notifbuddy on GitHub"
+				rel="noopener"
+			>
+				<GithubIcon size={17} />
+			</a>
+			<button
+				type="button"
+				class="theme-btn text-muted-foreground hover:text-foreground relative inline-flex size-9 items-center justify-center rounded-md transition-colors"
+				aria-label="{themeLabel[userPrefersMode.current]} — switch to {themeLabel[
+					themeNext
+				].toLowerCase()}"
+				data-tooltip="{themeLabel[userPrefersMode.current]} · click for {themeNext}"
+				onclick={cycleTheme}
+			>
+				{#if userPrefersMode.current === 'light'}
+					<!-- sun -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="4" />
+						<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+					</svg>
+				{:else if userPrefersMode.current === 'dark'}
+					<!-- moon -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+					</svg>
+				{:else}
+					<!-- monitor (system) -->
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect width="20" height="14" x="2" y="3" rx="2" />
+						<path d="M8 21h8M12 17v4" />
+					</svg>
+				{/if}
+			</button>
+			<a
+				href="https://dashboard.notifbuddy.com"
+				class="border-input text-foreground hover:bg-foreground/5 focus-visible:ring-ring ml-1 inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+			>
+				Log in
+			</a>
+		</div>
 	</header>
 
 	<main
@@ -120,7 +136,7 @@
 					href="https://dashboard.notifbuddy.com"
 					class="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
 				>
-					Open the dashboard
+					Start syncing
 				</a>
 			</div>
 			<p class="text-muted-foreground/80 -mt-3 text-xs">
