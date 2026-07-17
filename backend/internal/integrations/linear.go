@@ -251,6 +251,9 @@ type LinearCreateCommentInput struct {
 	Body          string
 	ParentID      string
 	SlackAuthorID string
+	// AuthorDisplayName is the author's Slack display name, used only for the
+	// plain-text provenance byline on app-level posts (unlinked identity).
+	AuthorDisplayName string
 }
 
 // LinearCreateComment posts a comment via the commentCreate GraphQL mutation.
@@ -277,6 +280,13 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 		if token == "" {
 			slog.InfoContext(ctx, "integrations: slack author has no linked linear identity; posting app-level",
 				"org_id", orgID, "slack_user_id", in.SlackAuthorID)
+			// Plain-text provenance so readers still know who spoke — this is
+			// a byline on an app-authored comment, not impersonation.
+			if in.AuthorDisplayName != "" {
+				in.Body += "\n\n— " + in.AuthorDisplayName + " on Slack"
+			} else {
+				in.Body += "\n\n— posted from Slack"
+			}
 		}
 	}
 	if token == "" {

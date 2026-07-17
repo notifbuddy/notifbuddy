@@ -34,6 +34,7 @@ type SlackActions interface {
 	InviteUsers(ctx context.Context, token, channelID string, userIDs []string) error
 	PostMessage(ctx context.Context, token string, opts slackapi.PostOptions) (string, error)
 	LookupUserByEmail(ctx context.Context, token, email string) (slackapi.User, error)
+	UserByID(ctx context.Context, token, userID string) (slackapi.User, error)
 	AuthTestUserID(ctx context.Context, token string) (string, error)
 }
 

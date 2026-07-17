@@ -131,12 +131,18 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 
 	// Authorship: the service posts with the author's own linked Linear token,
 	// or app-level when their identity isn't connected — never with another
-	// user's credentials.
+	// user's credentials. The display name is best-effort provenance for the
+	// app-level byline; empty just means a generic byline.
+	var authorName string
+	if u, err := e.slack.UserByID(ctx, token, ev.User); err == nil {
+		authorName = u.Name
+	}
 	comment, err := e.intg.LinearCreateComment(ctx, ref.OrgID, integrations.LinearCreateCommentInput{
-		IssueID:       issueID,
-		Body:          ev.Text,
-		ParentID:      parentComment,
-		SlackAuthorID: ev.User,
+		IssueID:           issueID,
+		Body:              ev.Text,
+		ParentID:          parentComment,
+		SlackAuthorID:     ev.User,
+		AuthorDisplayName: authorName,
 	})
 	if err != nil {
 		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)
