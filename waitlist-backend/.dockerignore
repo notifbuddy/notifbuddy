@@ -1,3 +1,0 @@
-# Local secrets must never enter the build context (the runtime stage only
-# copies the binary + configs, but keep it out of the daemon upload too).
-.env
