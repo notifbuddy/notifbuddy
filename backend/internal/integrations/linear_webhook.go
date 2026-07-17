@@ -136,13 +136,26 @@ func (s *Service) WriteLinearWebhook(ctx context.Context, msg pubsub.Message) er
 		}
 	}
 
+	// Transform the raw webhook into the stored envelope: the provider body
+	// moves under `linear` with a top-level `event_source` tag. Everything
+	// downstream (the sync engine, template evaluation) acts on this shape, and
+	// future sources or notifbuddy-side metadata get their own top-level keys
+	// without touching the provider payload.
+	stored, err := json.Marshal(struct {
+		EventSource string          `json:"event_source"`
+		Linear      json.RawMessage `json:"linear"`
+	}{EventSource: "linear", Linear: json.RawMessage(msg.Payload)})
+	if err != nil {
+		return fmt.Errorf("wrap linear webhook %s: %w", evt.DeliveryID, err)
+	}
+
 	inserted, published, err := s.store.InsertLinearWebhookEvent(ctx, store.LinearWebhookEvent{
 		DeliveryID:  evt.DeliveryID,
 		EventType:   evt.EventType,
 		WorkspaceID: evt.WorkspaceID,
 		OrgID:       evt.OrgID,
 		Action:      evt.Action,
-		Payload:     json.RawMessage(msg.Payload),
+		Payload:     json.RawMessage(stored),
 	})
 	if err != nil {
 		return fmt.Errorf("store linear webhook %s: %w", evt.DeliveryID, err)

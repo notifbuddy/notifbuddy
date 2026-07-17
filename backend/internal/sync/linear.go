@@ -69,18 +69,19 @@ type linearData struct {
 	} `json:"parent"`
 }
 
-// linearPayload wraps the stored webhook body. The writer persists Linear's
-// raw webhook JSON as-is ({action, type, actor, data, ...} at the top level —
-// see integrations.WriteLinearWebhook), so the raw bytes unmarshal into the
-// inner Linear struct directly; the wrapper only exists so template envelopes
-// keep their `linear.` prefix.
+// linearPayload is the stored event envelope: the writer
+// (integrations.WriteLinearWebhook) wraps Linear's raw webhook body under
+// `linear` with a top-level `event_source`, so future sources and
+// notifbuddy-side metadata can ride at the top level without touching the
+// provider payload.
 type linearPayload struct {
-	Linear struct {
+	EventSource string `json:"event_source"`
+	Linear      struct {
 		Action string      `json:"action"`
 		Type   string      `json:"type"`
 		Actor  linearActor `json:"actor"`
 		Data   linearData  `json:"data"`
-	} `json:"-"`
+	} `json:"linear"`
 }
 
 // OnLinearEvent is the subscriber for integrations.linear.webhook_event. A
@@ -108,17 +109,16 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	if err != nil {
 		return fmt.Errorf("linear event %s: load payload: %w", ref.DeliveryID, err)
 	}
-	// The stored payload is Linear's raw webhook body (top-level action/type/
-	// data), so it unmarshals into the inner struct — not the wrapper.
 	var p linearPayload
-	if err := json.Unmarshal(raw, &p.Linear); err != nil {
+	if err := json.Unmarshal(raw, &p); err != nil {
 		slog.WarnContext(ctx, "sync: linear event: parse payload failed", "delivery_id", ref.DeliveryID, "error", err)
 		return nil
 	}
 	if p.Linear.Type == "" {
-		// A payload that parses but carries no type would previously fall
-		// through every case silently — make the skip loud.
-		slog.WarnContext(ctx, "sync: linear event: payload has no type", "delivery_id", ref.DeliveryID)
+		// A payload that parses but carries no linear.type (e.g. a pre-envelope
+		// row stored as the raw provider body) would fall through every case
+		// silently — make the skip loud.
+		slog.WarnContext(ctx, "sync: linear event: payload has no linear.type", "delivery_id", ref.DeliveryID, "event_source", p.EventSource)
 		return nil
 	}
 
