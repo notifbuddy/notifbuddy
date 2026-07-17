@@ -60,8 +60,10 @@ func New(cfg config.LoggingConfig) (*slog.Logger, func()) {
 		h = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseLevel(cfg.Level)})
 	}
 
+	// AxiomEnabled is the single switch; validate() has already guaranteed
+	// token+dataset are present when it is true.
 	closeFn := func() {}
-	if cfg.AxiomEnabled && cfg.AxiomToken != "" {
+	if cfg.AxiomEnabled {
 		ax, err := adapter.New(
 			adapter.SetDataset(cfg.AxiomDataset),
 			adapter.SetClientOptions(axiom.SetToken(cfg.AxiomToken)),

@@ -54,9 +54,11 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 	// Level is the minimum level emitted: "debug", "info", "warn", "error".
 	Level string `yaml:"level"`
-	// AxiomEnabled turns the Axiom handler on or off (default on). Axiom is
-	// optional — self-hosted deployments set this false (or just leave the
-	// token unset) and logs go to stdout only.
+	// AxiomEnabled turns the Axiom handler on (default off — Axiom is
+	// optional; self-hosted deployments leave it disabled and log to stdout
+	// only). This flag is the single switch: when true, token and dataset are
+	// REQUIRED and validate() fails without them — a missing secret is a
+	// configuration error, never a silent disable.
 	AxiomEnabled bool `yaml:"axiom_enabled"`
 	// AxiomToken, when set together with AxiomDataset (and AxiomEnabled),
 	// additionally ships every record to Axiom (stdout keeps working either
@@ -219,7 +221,7 @@ type StripeConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:     ServerConfig{Addr: ":8080"},
-		Logging:    LoggingConfig{Format: "text", Level: "info", AxiomEnabled: true},
+		Logging:    LoggingConfig{Format: "text", Level: "info"},
 		CORS:       CORSConfig{AllowOrigin: "http://localhost:5173"},
 		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
@@ -359,8 +361,8 @@ func (c *Config) validate() error {
 	default:
 		return fmt.Errorf("unknown logging.level %q (want debug, info, warn, or error)", c.Logging.Level)
 	}
-	if (c.Logging.AxiomToken == "") != (c.Logging.AxiomDataset == "") {
-		return fmt.Errorf("logging.axiom_token and logging.axiom_dataset must be set together")
+	if c.Logging.AxiomEnabled && (c.Logging.AxiomToken == "" || c.Logging.AxiomDataset == "") {
+		return fmt.Errorf("logging.axiom_enabled is true but logging.axiom_token/logging.axiom_dataset are not both set (e.g. $AXIOM_TOKEN / $AXIOM_DATASET); set them or set logging.axiom_enabled: false")
 	}
 	switch c.PubSub.Provider {
 	case "", "postgres":

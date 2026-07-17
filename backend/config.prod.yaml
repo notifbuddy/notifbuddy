@@ -16,9 +16,10 @@ server:
 logging:
   format: "json" # one JSON object per line on stdout — Datadog parses level/msg/timestamp
   level: "info"
-  # Axiom log shipping is optional: set axiom_enabled false — or just leave
-  # AXIOM_TOKEN unset (unset env refs expand to empty, which also disables
-  # it) — to run stdout-only, e.g. when self-hosting.
+  # Axiom log shipping is optional; axiom_enabled is the ONE switch. Set it
+  # false to run stdout-only (e.g. self-hosting). When true, both values
+  # below are required — startup fails with a config error if either secret
+  # is missing, rather than silently skipping Axiom.
   axiom_enabled: true
   axiom_token: "${AXIOM_TOKEN}" # SECRET — Axiom ingest token (Infisical prod root)
   axiom_dataset: "${AXIOM_DATASET}" # e.g. "backend"
