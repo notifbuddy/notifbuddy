@@ -20,18 +20,24 @@ type slackEventRef struct {
 	ChannelID string `json:"channel_id"`
 }
 
-// slackPayload is the subset of the stored Slack event_callback body we read.
+// slackPayload is the stored event envelope: the writer
+// (integrations.WriteSlackWebhook) wraps Slack's raw event_callback body under
+// `slack` with a top-level `event_source`, mirroring the Linear envelope. We
+// read the subset of the inner body we act on.
 type slackPayload struct {
-	Event struct {
-		Type     string `json:"type"`
-		Subtype  string `json:"subtype"`
-		User     string `json:"user"`
-		BotID    string `json:"bot_id"`
-		Text     string `json:"text"`
-		Channel  string `json:"channel"`
-		TS       string `json:"ts"`
-		ThreadTS string `json:"thread_ts"`
-	} `json:"event"`
+	EventSource string `json:"event_source"`
+	Slack       struct {
+		Event struct {
+			Type     string `json:"type"`
+			Subtype  string `json:"subtype"`
+			User     string `json:"user"`
+			BotID    string `json:"bot_id"`
+			Text     string `json:"text"`
+			Channel  string `json:"channel"`
+			TS       string `json:"ts"`
+			ThreadTS string `json:"thread_ts"`
+		} `json:"event"`
+	} `json:"slack"`
 }
 
 // OnSlackEvent is the subscriber for integrations.slack.webhook_event. It
@@ -63,7 +69,13 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		slog.WarnContext(ctx, "sync: slack event: parse payload failed", "event_id", ref.EventID, "error", err)
 		return nil
 	}
-	ev := p.Event
+	ev := p.Slack.Event
+	if ev.Type == "" {
+		// A payload with no slack.event.type (e.g. a pre-envelope row stored as
+		// the raw provider body) would be skipped silently — make it loud.
+		slog.WarnContext(ctx, "sync: slack event: payload has no slack.event.type", "event_id", ref.EventID, "event_source", p.EventSource)
+		return nil
+	}
 
 	// Only real user messages mirror.
 	if ev.Type != "message" {

@@ -250,7 +250,10 @@ func slackMessagePayload(user, botID, subtype, text, channel, ts, threadTS strin
 	if threadTS != "" {
 		ev["thread_ts"] = threadTS
 	}
-	b, _ := json.Marshal(map[string]any{"event": ev})
+	b, _ := json.Marshal(map[string]any{
+		"event_source": "slack",
+		"slack":        map[string]any{"event": ev},
+	})
 	return b
 }
 
