@@ -20,4 +20,7 @@ You can check out our deployed version which is in beta at https://dashboard.not
 | Slack user integration | ✅ Working |
 | Organization profile update | ✅ Working |
 | Create organization during signup | ✅ Working |
-| Sync between Linear and Slack after connection | ❌ Not working |
+| Sync between Linear and Slack after connection | ✅ Working |
+| Slack channel creation from Linear issue status | ✅ Working¹ |
+
+¹ The channel is created by the bot; issue creators aren't added to it automatically yet — find it via Slack's channel browser.

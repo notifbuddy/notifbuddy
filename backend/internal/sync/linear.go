@@ -69,9 +69,14 @@ type linearData struct {
 	} `json:"parent"`
 }
 
-// linearPayload is the stored webhook body ({event_type, linear:{...}}).
+// linearPayload is the stored event envelope: the writer
+// (integrations.WriteLinearWebhook) wraps Linear's raw webhook body under
+// `linear` with a top-level `event_source`, so future sources and
+// notifbuddy-side metadata can ride at the top level without touching the
+// provider payload.
 type linearPayload struct {
-	Linear struct {
+	EventSource string `json:"event_source"`
+	Linear      struct {
 		Action string      `json:"action"`
 		Type   string      `json:"type"`
 		Actor  linearActor `json:"actor"`

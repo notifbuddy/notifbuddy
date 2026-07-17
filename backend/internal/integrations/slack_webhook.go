@@ -152,13 +152,23 @@ func (s *Service) WriteSlackWebhook(ctx context.Context, msg pubsub.Message) err
 		}
 	}
 
+	// Transform the raw event_callback body into the stored envelope, mirroring
+	// the Linear writer: provider body under `slack`, top-level `event_source`.
+	stored, err := json.Marshal(struct {
+		EventSource string          `json:"event_source"`
+		Slack       json.RawMessage `json:"slack"`
+	}{EventSource: "slack", Slack: json.RawMessage(msg.Payload)})
+	if err != nil {
+		return fmt.Errorf("wrap slack webhook %s: %w", evt.EventID, err)
+	}
+
 	inserted, published, err := s.store.InsertSlackWebhookEvent(ctx, store.SlackWebhookEvent{
 		EventID:   evt.EventID,
 		EventType: evt.EventType,
 		TeamID:    evt.TeamID,
 		OrgID:     evt.OrgID,
 		ChannelID: evt.ChannelID,
-		Payload:   json.RawMessage(msg.Payload),
+		Payload:   json.RawMessage(stored),
 	})
 	if err != nil {
 		return fmt.Errorf("store slack webhook %s: %w", evt.EventID, err)

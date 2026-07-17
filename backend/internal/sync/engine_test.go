@@ -227,7 +227,7 @@ func linearCommentPayload(action, commentID, body, issueID, parentID, actorName,
 		data["botActor"] = map[string]any{"id": "app_1", "name": "NotifBuddy"}
 	}
 	env := map[string]any{
-		"event_type": "linear",
+		"event_source": "linear",
 		"linear": map[string]any{
 			"action": action,
 			"type":   "Comment",
@@ -250,7 +250,10 @@ func slackMessagePayload(user, botID, subtype, text, channel, ts, threadTS strin
 	if threadTS != "" {
 		ev["thread_ts"] = threadTS
 	}
-	b, _ := json.Marshal(map[string]any{"event": ev})
+	b, _ := json.Marshal(map[string]any{
+		"event_source": "slack",
+		"slack":        map[string]any{"event": ev},
+	})
 	return b
 }
 
@@ -359,7 +362,7 @@ func TestOnLinearEvent_ReplyGoesToThread(t *testing.T) {
 func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{
-		"event_type": "linear",
+		"event_source": "linear",
 		"linear": map[string]any{
 			"action": "update", "type": "Issue",
 			"actor": map[string]any{"name": "Ada"},
@@ -398,7 +401,7 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 // Wrong status must not create a channel.
 func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
 	}}
@@ -417,7 +420,7 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 // regardless of the issue's status.
 func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Done"}},
 	}}
@@ -445,7 +448,7 @@ func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 // Condition mode must not create a channel when the condition is false.
 func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
 	}}
@@ -466,7 +469,7 @@ func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 
 // linearIssuePayload builds an Issue event envelope for the archive tests.
 func linearIssuePayload(issueID, identifier, teamID, stateName string) json.RawMessage {
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
 		"data": map[string]any{"id": issueID, "identifier": identifier, "teamId": teamID, "state": map[string]any{"name": stateName}},
 	}}
@@ -619,7 +622,7 @@ func TestOnLinearEvent_ArchiveTriggerWithoutChannelDoesNothing(t *testing.T) {
 // status would otherwise trigger creation.
 func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 	st := newFakeStore()
-	env := map[string]any{"event_type": "linear", "linear": map[string]any{
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": "update", "type": "Issue", "actor": map[string]any{},
 		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "teamB", "state": map[string]any{"name": "In Progress"}},
 	}}
@@ -643,7 +646,7 @@ func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 // remove deletes it. This keeps the status dropdown fresh between full syncs.
 func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
 	workflowStatePayload := func(action, id, name string) json.RawMessage {
-		env := map[string]any{"event_type": "linear", "linear": map[string]any{
+		env := map[string]any{"event_source": "linear", "linear": map[string]any{
 			"action": action, "type": "WorkflowState", "actor": map[string]any{},
 			"data": map[string]any{
 				"id": id, "name": name, "type": "started", "color": "#5e6ad2", "position": 1.5,
@@ -688,17 +691,17 @@ func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
 	}
 }
 
-// Slack side: a human message in a synced channel mirrors to a Linear comment
-// with attribution; the created comment link is recorded.
+// Slack side: a human message in a synced channel mirrors to a Linear comment;
+// the author's Slack id rides along so the service picks the right credential
+// (the author's own linked token, or app-level — never someone else's), and
+// the created comment link is recorded.
 func TestOnSlackEvent_MirrorsHumanMessage(t *testing.T) {
 	st := newFakeStore()
 	st.channelToIssue["org1|C1"] = "issue1"
 	st.issueToChannel["org1|issue1"] = "C1"
 	st.slackPayloads["e1"] = slackMessagePayload("U_HUMAN", "", "", "hello from slack", "C1", "TS1", "")
 
-	sl := &fakeSlack{botUserID: "U_BOT", usersByID: map[string]slackapi.User{
-		"U_HUMAN": {ID: "U_HUMAN", Name: "Grace Hopper", IconURL: "https://x.io/grace.png"},
-	}}
+	sl := &fakeSlack{botUserID: "U_BOT"}
 	ig := &fakeIntg{nextCommentID: "cmt_1"}
 	pub := &spyPub{}
 	e := newEngine(st, sl, ig, pub)
@@ -712,8 +715,8 @@ func TestOnSlackEvent_MirrorsHumanMessage(t *testing.T) {
 	if c.IssueID != "issue1" || c.Body != "hello from slack" {
 		t.Errorf("comment routing wrong: %+v", c)
 	}
-	if c.CreateAsUser != "Grace Hopper" || c.DisplayIconURL != "https://x.io/grace.png" {
-		t.Errorf("attribution not applied: %+v", c)
+	if c.SlackAuthorID != "U_HUMAN" {
+		t.Errorf("author identity not forwarded: %+v", c)
 	}
 	if !pub.has(TopicLinearComment) {
 		t.Error("expected sync.linear.comment.posted")

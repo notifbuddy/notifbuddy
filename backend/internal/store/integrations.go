@@ -111,6 +111,28 @@ func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provi
 	return &in, nil
 }
 
+// UserIDBySlackUserID resolves the backend user whose user-level Slack
+// connection belongs to the given Slack user id (stored in the row's metadata
+// at connect time). ErrNotFound when nobody in the org has linked that Slack
+// account.
+func (s *Store) UserIDBySlackUserID(ctx context.Context, orgID, slackUserID string) (string, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT connected_user_id
+		FROM org_integrations
+		WHERE org_id = $1 AND provider = $2 AND level = $3
+		  AND metadata->>'slack_user_id' = $4
+		LIMIT 1
+	`, orgID, string(ProviderSlack), string(LevelUser), slackUserID)
+	var userID string
+	if err := row.Scan(&userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("store: user by slack user id: %w", err)
+	}
+	return userID, nil
+}
+
 // ListIntegrations returns an organization's workspace-level integrations.
 func (s *Store) ListIntegrations(ctx context.Context, orgID string) ([]Integration, error) {
 	return s.listIntegrations(ctx, orgID, LevelWorkspace, "")

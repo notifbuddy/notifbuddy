@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -240,26 +241,60 @@ type LinearComment struct {
 }
 
 // LinearCreateCommentInput describes a comment to create on a Linear issue.
-// CreateAsUser + DisplayIconURL render the comment as "<name> (via <app>)" —
-// native attribution available only to actor=app OAuth tokens (which is how the
-// workspace Linear integration is installed). ParentID, when set, makes this a
-// threaded reply under that comment.
+// SlackAuthorID, when set, is the Slack user id of the message author: the
+// comment is posted with that person's own linked Linear token when their
+// identity is connected, and app-level (the org's actor=app token, authored by
+// the app itself) when it is not. We never post as anyone who didn't authorize
+// it. ParentID, when set, makes this a threaded reply under that comment.
 type LinearCreateCommentInput struct {
-	IssueID        string
-	Body           string
-	ParentID       string
-	CreateAsUser   string
-	DisplayIconURL string
+	IssueID       string
+	Body          string
+	ParentID      string
+	SlackAuthorID string
+	// AuthorDisplayName is the author's Slack display name, used only for the
+	// plain-text provenance byline on app-level posts (unlinked identity).
+	AuthorDisplayName string
 }
 
-// LinearCreateComment posts a comment via the commentCreate GraphQL mutation
-// using the org's workspace token. The attribution fields (createAsUser,
-// displayIconUrl) only take effect for actor=app tokens; Linear ignores them
-// otherwise rather than erroring.
+// LinearCreateComment posts a comment via the commentCreate GraphQL mutation.
+// Token selection: the author's own user-level Linear token when
+// SlackAuthorID resolves to a connected identity, otherwise the org's
+// actor=app workspace token (the comment is then authored by the app —
+// explicitly app-level, never another user's credentials).
 func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in LinearCreateCommentInput) (LinearComment, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
-	if err != nil {
-		return LinearComment{}, err
+	var token string
+	if in.SlackAuthorID != "" {
+		uid, err := s.store.UserIDBySlackUserID(ctx, orgID, in.SlackAuthorID)
+		switch {
+		case err == nil:
+			t, terr := s.LinearUserToken(ctx, orgID, uid)
+			switch {
+			case terr == nil:
+				token = t
+			case !errors.Is(terr, store.ErrNotFound):
+				return LinearComment{}, terr // transient; caller retries
+			}
+		case !errors.Is(err, store.ErrNotFound):
+			return LinearComment{}, err // transient; caller retries
+		}
+		if token == "" {
+			slog.InfoContext(ctx, "integrations: slack author has no linked linear identity; posting app-level",
+				"org_id", orgID, "slack_user_id", in.SlackAuthorID)
+			// Plain-text provenance so readers still know who spoke — this is
+			// a byline on an app-authored comment, not impersonation.
+			if in.AuthorDisplayName != "" {
+				in.Body += "\n\n— " + in.AuthorDisplayName + " on Slack"
+			} else {
+				in.Body += "\n\n— posted from Slack"
+			}
+		}
+	}
+	if token == "" {
+		t, err := s.LinearAccessToken(ctx, orgID)
+		if err != nil {
+			return LinearComment{}, err
+		}
+		token = t
 	}
 	const mutation = `mutation($input: CommentCreateInput!) {
 		commentCreate(input: $input) { success comment { id } }
@@ -270,12 +305,6 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 	}
 	if in.ParentID != "" {
 		input["parentId"] = in.ParentID
-	}
-	if in.CreateAsUser != "" {
-		input["createAsUser"] = in.CreateAsUser
-	}
-	if in.DisplayIconURL != "" {
-		input["displayIconUrl"] = in.DisplayIconURL
 	}
 	var resp struct {
 		Data struct {

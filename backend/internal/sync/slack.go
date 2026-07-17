@@ -20,18 +20,24 @@ type slackEventRef struct {
 	ChannelID string `json:"channel_id"`
 }
 
-// slackPayload is the subset of the stored Slack event_callback body we read.
+// slackPayload is the stored event envelope: the writer
+// (integrations.WriteSlackWebhook) wraps Slack's raw event_callback body under
+// `slack` with a top-level `event_source`, mirroring the Linear envelope. We
+// read the subset of the inner body we act on.
 type slackPayload struct {
-	Event struct {
-		Type     string `json:"type"`
-		Subtype  string `json:"subtype"`
-		User     string `json:"user"`
-		BotID    string `json:"bot_id"`
-		Text     string `json:"text"`
-		Channel  string `json:"channel"`
-		TS       string `json:"ts"`
-		ThreadTS string `json:"thread_ts"`
-	} `json:"event"`
+	EventSource string `json:"event_source"`
+	Slack       struct {
+		Event struct {
+			Type     string `json:"type"`
+			Subtype  string `json:"subtype"`
+			User     string `json:"user"`
+			BotID    string `json:"bot_id"`
+			Text     string `json:"text"`
+			Channel  string `json:"channel"`
+			TS       string `json:"ts"`
+			ThreadTS string `json:"thread_ts"`
+		} `json:"event"`
+	} `json:"slack"`
 }
 
 // OnSlackEvent is the subscriber for integrations.slack.webhook_event. It
@@ -63,7 +69,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		slog.WarnContext(ctx, "sync: slack event: parse payload failed", "event_id", ref.EventID, "error", err)
 		return nil
 	}
-	ev := p.Event
+	ev := p.Slack.Event
 
 	// Only real user messages mirror.
 	if ev.Type != "message" {
@@ -117,15 +123,20 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		}
 	}
 
-	// Attribution: show the Slack author's name/avatar on the Linear comment.
-	username, iconURL := e.slackAuthor(ctx, token, ev.User)
-
+	// Authorship: the service posts with the author's own linked Linear token,
+	// or app-level when their identity isn't connected — never with another
+	// user's credentials. The display name is best-effort provenance for the
+	// app-level byline; empty just means a generic byline.
+	var authorName string
+	if u, err := e.slack.UserByID(ctx, token, ev.User); err == nil {
+		authorName = u.Name
+	}
 	comment, err := e.intg.LinearCreateComment(ctx, ref.OrgID, integrations.LinearCreateCommentInput{
-		IssueID:        issueID,
-		Body:           ev.Text,
-		ParentID:       parentComment,
-		CreateAsUser:   username,
-		DisplayIconURL: iconURL,
+		IssueID:           issueID,
+		Body:              ev.Text,
+		ParentID:          parentComment,
+		SlackAuthorID:     ev.User,
+		AuthorDisplayName: authorName,
 	})
 	if err != nil {
 		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)
@@ -153,16 +164,4 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		SlackTS:         ev.TS,
 	})
 	return nil
-}
-
-// slackAuthor resolves a Slack user id to a display name + avatar for
-// attribution on the Linear side. Best-effort: returns ("", "") on failure,
-// which Linear renders as the app itself.
-func (e *Engine) slackAuthor(ctx context.Context, token, userID string) (name, iconURL string) {
-	u, err := e.slack.UserByID(ctx, token, userID)
-	if err != nil {
-		slog.ErrorContext(ctx, "sync: slack author lookup failed", "user_id", userID, "error", err)
-		return "", ""
-	}
-	return u.Name, u.IconURL
 }
