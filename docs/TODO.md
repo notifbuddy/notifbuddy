@@ -1,8 +1,3 @@
-- ~~remove the reconnect buttons on integration page; they shouldn't be important.~~
-- ~~prefer icons over complete text, change disconnect, webhooks and connect buttons to icons on the integration page~~
-- ~~Add ai message parsing and event handling for @notifbuddy actions. This is a text based layer to do simple ops, we don't
-expect heavy ops to be done for this. Only have channel create/close for this. We'll extend if required I don't see the
-usecase for this though.~~
 - ~~Currently integrations are limited to workspace integration, we need user level integrations as well for the sync
   in github, slack and linear. This should be part of the onboarding flows as well.~~
 - Test ~~add sync from linear issues to slack, this will be driven via settings, so we need to~~
@@ -27,11 +22,12 @@ usecase for this though.~~
   with threads + native attribution, @notifbuddy create/close, one processing
   topic per action. See README "Bidirectional sync".
 - ~~Update the login page, it just says Sign in with WorkOS~~
-- ~can we sync the icons for the linear statues as well?~
-- ~can we add pics for members and bots as well~
+- ~~can we sync the icons for the linear statues as well?~~
+- ~~can we add pics for members and bots as well~~
+- Change 'Acme Inc.' placeholder to something better; this is lame
 - Add settings icon to take to linear, github, etc.'s settings page.
 - Remove github for now.
-- ~Invitation needs rework.~
+- ~~Invitation needs rework.~~
 - remove onboarding
 - Update favicon and header for notifbuddy UI.
 - Deploy for real login is gated to allowlist
@@ -55,7 +51,7 @@ Phase 2 after launch
 - Explore linear's multi team flows, understand how mutiple teams work are common workspace things, team
   specific things. How do we configure our system to allow multiple teams to integrate.
 - Auto archive for stale linear issues.
-- ~Add stripe account and create billing integration.~
+- ~~Add stripe account and create billing integration.~~
 - `mux.HandleFunc("GET /integrations/github/connect", gateBilling(intgSvc.HandleGitHubConnect))` -> remove gateBilling, connection should happen always but request processing needs to be handled seperately.
 - validate that work os webhook for membership addition and removal works.
 - validate that invoice is raised correctly on end
@@ -81,6 +77,7 @@ Phase 2 after launch
   then triggers a workspace connection on the next iteration
 
 Post launch
+
 - Explore plain integration
 - Explore clearfeed for email <-> slack syncing
 
@@ -92,3 +89,4 @@ Design
 - Using 5 different app to communicate with your team? Use notifybuddy and unleash slack's full
   potential
 - CTA: Unleash Slack's full potential
+- Global events page: an org-scoped activity feed (channel created, mirror posted app-level, invite failed, skips/drops with reasons) so event-driven flows stop being invisible. One activity_events table + explicit records at each decision point, /events page in the dashboard.

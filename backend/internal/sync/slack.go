@@ -129,15 +129,14 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		}
 	}
 
-	// Attribution: show the Slack author's name/avatar on the Linear comment.
-	username, iconURL := e.slackAuthor(ctx, token, ev.User)
-
+	// Authorship: the service posts with the author's own linked Linear token,
+	// or app-level when their identity isn't connected — never with another
+	// user's credentials.
 	comment, err := e.intg.LinearCreateComment(ctx, ref.OrgID, integrations.LinearCreateCommentInput{
-		IssueID:        issueID,
-		Body:           ev.Text,
-		ParentID:       parentComment,
-		CreateAsUser:   username,
-		DisplayIconURL: iconURL,
+		IssueID:       issueID,
+		Body:          ev.Text,
+		ParentID:      parentComment,
+		SlackAuthorID: ev.User,
 	})
 	if err != nil {
 		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)
@@ -165,16 +164,4 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		SlackTS:         ev.TS,
 	})
 	return nil
-}
-
-// slackAuthor resolves a Slack user id to a display name + avatar for
-// attribution on the Linear side. Best-effort: returns ("", "") on failure,
-// which Linear renders as the app itself.
-func (e *Engine) slackAuthor(ctx context.Context, token, userID string) (name, iconURL string) {
-	u, err := e.slack.UserByID(ctx, token, userID)
-	if err != nil {
-		slog.ErrorContext(ctx, "sync: slack author lookup failed", "user_id", userID, "error", err)
-		return "", ""
-	}
-	return u.Name, u.IconURL
 }
