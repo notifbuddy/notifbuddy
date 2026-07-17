@@ -27,9 +27,8 @@
 				>, and what it collects is covered when you sign up there.
 			</p>
 			<p>
-				If you joined the waitlist while we had one, that email address is still in our database.
-				It is never sold or shared, and we'll only use it to send one launch email — or delete it
-				on request.
+				If you joined the waitlist while we had one: that list, including every email address on
+				it, was permanently deleted on July 17, 2026. It was never sold, shared, or emailed.
 			</p>
 			<p>
 				For traffic and performance measurement we use Cloudflare Web Analytics, which is
@@ -38,10 +37,10 @@
 				browser storage this site uses is your theme preference, kept on your device.
 			</p>
 			<p>
-				To be removed from the old waitlist, or for anything else, write to
+				For anything privacy-related, write to
 				<a class="text-foreground underline underline-offset-2" href="mailto:support@notifbuddy.com"
 					>support@notifbuddy.com</a
-				> and we'll delete your address.
+				>.
 			</p>
 		</div>
 	</main>
