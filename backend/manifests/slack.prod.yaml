@@ -1,0 +1,53 @@
+# Slack app manifest — production app.
+# Paste into api.slack.com/apps → App Manifest for the notifbuddy app.
+# Bot scopes must stay in sync with slack.scopes in config.prod.yaml; adding a
+# scope here requires already-connected workspaces to reconnect Slack before
+# the new permissions take effect.
+display_information:
+  name: notifbuddy
+  description: Two-way Linear ⇄ Slack sync
+  background_color: "#2a2925"
+features:
+  bot_user:
+    display_name: notifbuddy
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://api.notifbuddy.com/integrations/slack/callback
+  scopes:
+    user:
+      - chat:write
+      - channels:write
+    bot:
+      - app_mentions:read
+      - channels:manage
+      - channels:history
+      - channels:read
+      - commands
+      - groups:history
+      - groups:write
+      - reactions:write
+      - chat:write
+      - chat:write.public
+      - chat:write.customize
+      - files:read # download a message's attachments to mirror into Linear
+      - files:write # share mirrored Linear attachments into the channel
+      - im:history
+      - im:read
+      - im:write
+      - users:read
+      - users:read.email
+      - reactions:read
+      - emoji:read
+  pkce_enabled: false
+settings:
+  event_subscriptions:
+    request_url: https://api.notifbuddy.com/integrations/slack/webhook
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_mcp_enabled: false

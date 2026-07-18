@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"xolo/backend/internal/integrations"
@@ -15,6 +16,10 @@ import (
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
 )
+
+// sourceLinear is the event_source value for Linear-originated objects, in
+// the same vocabulary as the webhook envelopes.
+const sourceLinear = "linear"
 
 // linearEventRef is the routing envelope published on the ingestion topic. The
 // engine re-reads the full stored payload for the event body.
@@ -244,14 +249,48 @@ func (e *Engine) onLinearWorkflowState(ctx context.Context, orgID string, p line
 	return nil
 }
 
+// linearUploadMD matches a markdown image or link whose target is Linear's
+// private upload host — the form Linear uses to embed comment attachments.
+// Captures: [1] link text (filename), [2] URL.
+var linearUploadMD = regexp.MustCompile(`!?\[([^\]]*)\]\((https://uploads\.linear\.app/[^)\s]+)\)`)
+
+// linearUpload is one private-upload embed found in a comment body.
+type linearUpload struct {
+	markdown string // the full markdown token, for stripping from the text
+	name     string
+	url      string
+	image    bool // ![...] image embed vs [...] file link
+}
+
+func parseLinearUploads(body string) []linearUpload {
+	var out []linearUpload
+	for _, m := range linearUploadMD.FindAllStringSubmatch(body, -1) {
+		name := m[1]
+		if name == "" {
+			name = "attachment"
+		}
+		out = append(out, linearUpload{
+			markdown: m[0], name: name, url: m[2],
+			image: strings.HasPrefix(m[0], "!"),
+		})
+	}
+	return out
+}
+
 // onLinearComment mirrors a human Linear comment into the issue's Slack channel,
 // or handles an @notifbuddy command in the comment body. Errors before the
 // Slack post are returned for retry; failures after it are only logged so a
 // redelivery can't double-post.
 func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, p linearPayload) error {
 	d := p.Linear.Data
+	if p.Linear.Action == "update" {
+		// Text edits are out of scope, but Linear attaches comment files
+		// asynchronously — the embed lands in an update seconds after create —
+		// so updates are scanned for not-yet-synced uploads.
+		return e.onLinearCommentUpdate(ctx, orgID, p)
+	}
 	if p.Linear.Action != "create" {
-		return nil // only new comments mirror (edits/removes are out of scope)
+		return nil // removes etc. are out of scope
 	}
 	issueID := d.IssueID
 	if issueID == "" {
@@ -318,16 +357,41 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 		}
 	}
 
+	// Attachments: Linear embeds uploads as markdown links on uploads.linear.app,
+	// which only serve with Linear auth — Slack can't render them. Re-host each
+	// on Slack: images are uploaded privately and rendered inside the message's
+	// own blocks (one entity — not a separate post), other files are shared into
+	// the thread after the message posts. A failed download leaves the markdown
+	// link in place (degraded but visible) rather than failing the mirror.
+	text, images, fileShares := e.pullLinearUploads(ctx, orgID, d.ID, d.Body, nil)
+	text = strings.TrimSpace(text)
+	if text == "" && (len(images) > 0 || len(fileShares) > 0) {
+		// chat.postMessage rejects empty text, and the message is still needed
+		// as the thread anchor + mirror-link row for an attachment-only comment.
+		text = "📎 shared from Linear"
+	}
+
 	ts, err := e.slack.PostMessage(ctx, token, slackapi.PostOptions{
 		ChannelID: channelID,
-		Text:      d.Body,
+		Text:      text,
 		Username:  username,
 		IconURL:   iconURL,
 		ThreadTS:  threadTS,
+		Blocks:    commentBlocks(text, images),
 	})
 	if err != nil {
 		return fmt.Errorf("linear comment: post to slack: %w", err)
 	}
+
+	// The message exists now; asset bookkeeping and thread shares are
+	// best-effort (a redelivery would double-post the text). Each synced asset
+	// is recorded so the follow-up comment update (Linear re-sends the body)
+	// doesn't sync the same file again.
+	for _, img := range images {
+		e.recordAsset(ctx, orgID, d.ID, img.asset)
+	}
+	fileThread := firstNonEmpty(threadTS, ts)
+	e.shareFiles(ctx, orgID, d.ID, token, channelID, fileThread, fileShares)
 
 	if rootSlackTS == "" {
 		rootSlackTS = ts // this is a thread root
@@ -351,6 +415,201 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 		SlackTS:         ts,
 	})
 	return nil
+}
+
+// onLinearCommentUpdate syncs attachments that Linear appended to an
+// already-mirrored comment. Linear uploads comment files asynchronously: the
+// create webhook carries only the text, and the ![...] embed arrives in a
+// Comment update seconds later. New images are grafted onto the mirrored
+// message itself (chat.update with rebuilt blocks) so text + image stay one
+// entity; other files share into the thread. Only uploads not yet in
+// mirrored_assets sync — text edits never re-post, redelivered updates no-op.
+func (e *Engine) onLinearCommentUpdate(ctx context.Context, orgID string, p linearPayload) error {
+	d := p.Linear.Data
+	uploads := parseLinearUploads(d.Body)
+	if len(uploads) == 0 {
+		return nil
+	}
+	link, err := e.store.LinkByLinearComment(ctx, orgID, d.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil // comment was never mirrored (unmapped issue, or predates sync)
+	}
+	if err != nil {
+		return fmt.Errorf("linear comment update: mirror lookup: %w", err)
+	}
+	synced, err := e.store.MirroredAssets(ctx, orgID, sourceLinear, d.ID)
+	if err != nil {
+		return fmt.Errorf("linear comment update: synced assets: %w", err)
+	}
+	syncedURL := map[string]bool{}
+	for _, a := range synced {
+		syncedURL[a.AssetURL] = true
+	}
+	anyFresh := false
+	for _, u := range uploads {
+		if !syncedURL[u.url] {
+			anyFresh = true
+			break
+		}
+	}
+	if !anyFresh {
+		return nil
+	}
+
+	token, err := e.intg.SlackBotToken(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("linear comment update: slack token: %w", err)
+	}
+
+	text, newImages, newFiles := e.pullLinearUploads(ctx, orgID, d.ID, d.Body, syncedURL)
+	if len(newImages) > 0 {
+		// Rebuild the mirrored message as one entity: the comment's current
+		// text plus every synced image (previously grafted ones included).
+		text = strings.TrimSpace(text)
+		if text == "" {
+			text = "📎 shared from Linear"
+		}
+		allImages := append(e.inlineImagesFor(ctx, orgID, synced), newImages...)
+		if err := e.slack.UpdateMessage(ctx, token, slackapi.UpdateOptions{
+			ChannelID: link.SlackChannelID,
+			TS:        link.SlackTS,
+			Text:      text,
+			Blocks:    commentBlocks(text, allImages),
+		}); err != nil {
+			// Not recorded → the image is lost for this delivery; loud log
+			// rather than a separate app post the user explicitly didn't want.
+			slog.ErrorContext(ctx, "sync: linear comment update: message update failed",
+				"org_id", orgID, "comment_id", d.ID, "error", err)
+		} else {
+			for _, img := range newImages {
+				e.recordAsset(ctx, orgID, d.ID, img.asset)
+			}
+		}
+	}
+	e.shareFiles(ctx, orgID, d.ID, token, link.SlackChannelID, firstNonEmpty(link.RootSlackTS, link.SlackTS), newFiles)
+	return nil
+}
+
+// inlineImage is an image embed rendered inside the mirrored message's blocks:
+// Slack fetches proxyURL (our signed backend proxy) to display it inline.
+type inlineImage struct {
+	asset    store.MirroredAsset
+	proxyURL string
+}
+
+// pulledFile is a non-image download pending a thread share.
+type pulledFile struct {
+	assetURL string
+	name     string
+	data     []byte
+}
+
+// pullLinearUploads resolves a body's private Linear uploads (except those in
+// skip, whose markdown is stripped without reprocessing). Images become proxy
+// URLs for block rendering — no bytes move. Non-image files are downloaded for
+// a thread share. It returns the body text with all handled embeds stripped,
+// plus both lists. Failures log and leave the markdown intact.
+func (e *Engine) pullLinearUploads(ctx context.Context, orgID, commentID, body string, skip map[string]bool) (string, []inlineImage, []pulledFile) {
+	text := body
+	var images []inlineImage
+	var files []pulledFile
+	for _, u := range parseLinearUploads(body) {
+		if skip[u.url] {
+			text = strings.Replace(text, u.markdown, "", 1)
+			continue
+		}
+		if u.image {
+			proxyURL, err := e.intg.LinearAssetProxyURL(orgID, u.url)
+			if err != nil {
+				slog.ErrorContext(ctx, "sync: linear comment: asset proxy url failed",
+					"org_id", orgID, "comment_id", commentID, "error", err)
+				continue
+			}
+			images = append(images, inlineImage{
+				asset:    store.MirroredAsset{AssetURL: u.url, Filename: u.name, Inline: true},
+				proxyURL: proxyURL,
+			})
+		} else {
+			data, _, err := e.intg.LinearFileDownload(ctx, orgID, u.url)
+			if err != nil {
+				slog.ErrorContext(ctx, "sync: linear comment: attachment download failed",
+					"org_id", orgID, "comment_id", commentID, "error", err)
+				continue
+			}
+			files = append(files, pulledFile{assetURL: u.url, name: u.name, data: data})
+		}
+		text = strings.Replace(text, u.markdown, "", 1)
+	}
+	return text, images, files
+}
+
+// inlineImagesFor rebuilds the block-image list for previously synced inline
+// assets — the proxy URL is re-derived from the asset URL.
+func (e *Engine) inlineImagesFor(ctx context.Context, orgID string, assets []store.MirroredAsset) []inlineImage {
+	var out []inlineImage
+	for _, a := range assets {
+		if !a.Inline {
+			continue
+		}
+		proxyURL, err := e.intg.LinearAssetProxyURL(orgID, a.AssetURL)
+		if err != nil {
+			slog.ErrorContext(ctx, "sync: linear comment: asset proxy url failed",
+				"org_id", orgID, "error", err)
+			continue
+		}
+		out = append(out, inlineImage{asset: a, proxyURL: proxyURL})
+	}
+	return out
+}
+
+// commentBlocks composes the one-entity layout: a text section followed by an
+// image block per synced image. nil when there are no images (plain text
+// message, no blocks needed).
+func commentBlocks(text string, images []inlineImage) []map[string]any {
+	if len(images) == 0 {
+		return nil
+	}
+	var blocks []map[string]any
+	if text != "" {
+		blocks = append(blocks, map[string]any{
+			"type": "section",
+			"text": map[string]any{"type": "mrkdwn", "text": text},
+		})
+	}
+	for _, img := range images {
+		alt := img.asset.Filename
+		if alt == "" {
+			alt = "attachment"
+		}
+		blocks = append(blocks, map[string]any{
+			"type":      "image",
+			"image_url": img.proxyURL,
+			"alt_text":  alt,
+		})
+	}
+	return blocks
+}
+
+func (e *Engine) recordAsset(ctx context.Context, orgID, commentID string, a store.MirroredAsset) {
+	if err := e.store.RecordMirroredAsset(ctx, orgID, sourceLinear, commentID, a); err != nil {
+		slog.ErrorContext(ctx, "sync: linear comment: record asset failed",
+			"org_id", orgID, "comment_id", commentID, "error", err)
+	}
+}
+
+// shareFiles shares non-image files into the given thread, recording each
+// success so later updates don't re-share them. Best-effort per file.
+func (e *Engine) shareFiles(ctx context.Context, orgID, commentID, token, channelID, threadTS string, files []pulledFile) {
+	for _, f := range files {
+		if err := e.slack.UploadFile(ctx, token, slackapi.UploadOptions{
+			ChannelID: channelID, ThreadTS: threadTS, Filename: f.name, Data: f.data,
+		}); err != nil {
+			slog.ErrorContext(ctx, "sync: linear comment: slack file upload failed",
+				"org_id", orgID, "comment_id", commentID, "filename", f.name, "error", err)
+			continue
+		}
+		e.recordAsset(ctx, orgID, commentID, store.MirroredAsset{AssetURL: f.assetURL, Filename: f.name})
+	}
 }
 
 // handleNotifBuddy classifies a comment body and, on a create/close command,

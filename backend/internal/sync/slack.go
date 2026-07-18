@@ -28,16 +28,28 @@ type slackPayload struct {
 	EventSource string `json:"event_source"`
 	Slack       struct {
 		Event struct {
-			Type     string `json:"type"`
-			Subtype  string `json:"subtype"`
-			User     string `json:"user"`
-			BotID    string `json:"bot_id"`
-			Text     string `json:"text"`
-			Channel  string `json:"channel"`
-			TS       string `json:"ts"`
-			ThreadTS string `json:"thread_ts"`
+			Type     string      `json:"type"`
+			Subtype  string      `json:"subtype"`
+			User     string      `json:"user"`
+			BotID    string      `json:"bot_id"`
+			Text     string      `json:"text"`
+			Channel  string      `json:"channel"`
+			TS       string      `json:"ts"`
+			ThreadTS string      `json:"thread_ts"`
+			Files    []slackFile `json:"files"`
 		} `json:"event"`
 	} `json:"slack"`
+}
+
+// slackFile is the subset of a Slack file object we mirror. URLPrivate (and
+// its download variant) only serve with the workspace bot token.
+type slackFile struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Mimetype           string `json:"mimetype"`
+	Size               int64  `json:"size"`
+	URLPrivate         string `json:"url_private"`
+	URLPrivateDownload string `json:"url_private_download"`
 }
 
 // OnSlackEvent is the subscriber for integrations.slack.webhook_event. It
@@ -78,7 +90,10 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	// Defense 1: drop the bot's own messages. Our mirrored posts are authored by
 	// the bot (bot_id set); message subtypes like bot_message / message_changed
 	// are also not human posts. This is what stops the Linear->Slack->Linear echo.
-	if ev.BotID != "" || ev.Subtype != "" || ev.User == "" {
+	// file_share is the one subtype a human post can carry (a message with an
+	// attachment), so it passes through — the bot-identity checks (bot_id here,
+	// AuthTestUserID below) still drop the bot's own file shares.
+	if ev.BotID != "" || (ev.Subtype != "" && ev.Subtype != "file_share") || ev.User == "" {
 		return nil
 	}
 
@@ -131,12 +146,39 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	if u, err := e.slack.UserByID(ctx, token, ev.User); err == nil {
 		authorName = u.Name
 	}
+
+	// Mirror attachments: pull each file with the bot token and hand the bytes
+	// to the comment create, which re-hosts them on Linear. Best-effort per
+	// file — a failed download (deleted file, over-cap, missing files:read
+	// scope) becomes a note in the comment rather than a redelivery loop.
+	var attachments []integrations.LinearCommentAttachment
+	body := ev.Text
+	for _, f := range ev.Files {
+		fileURL := firstNonEmpty(f.URLPrivateDownload, f.URLPrivate)
+		if fileURL == "" {
+			continue
+		}
+		data, err := e.slack.DownloadFile(ctx, token, fileURL)
+		if err != nil {
+			slog.ErrorContext(ctx, "sync: slack event: file download failed",
+				"event_id", ref.EventID, "org_id", ref.OrgID, "file_id", f.ID, "error", err)
+			body += fmt.Sprintf("\n\n_(attachment %q could not be synced)_", f.Name)
+			continue
+		}
+		attachments = append(attachments, integrations.LinearCommentAttachment{
+			Filename:    f.Name,
+			ContentType: f.Mimetype,
+			Data:        data,
+		})
+	}
+
 	comment, err := e.intg.LinearCreateComment(ctx, ref.OrgID, integrations.LinearCreateCommentInput{
 		IssueID:           issueID,
-		Body:              ev.Text,
+		Body:              body,
 		ParentID:          parentComment,
 		SlackAuthorID:     ev.User,
 		AuthorDisplayName: authorName,
+		Attachments:       attachments,
 	})
 	if err != nil {
 		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)

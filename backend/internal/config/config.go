@@ -46,6 +46,11 @@ type BillingConfig struct {
 type ServerConfig struct {
 	// Addr is the listen address.
 	Addr string `yaml:"addr"`
+	// PublicBaseURL is the internet-reachable base URL of this backend (no
+	// trailing slash), used to build URLs third parties must be able to fetch —
+	// e.g. the signed Linear-asset proxy links embedded in Slack image blocks.
+	// Empty disables such features (they degrade with a logged error).
+	PublicBaseURL string `yaml:"public_base_url"`
 }
 
 type LoggingConfig struct {

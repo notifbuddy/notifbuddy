@@ -159,6 +159,55 @@ func (s *Store) LinkByLinearComment(ctx context.Context, orgID, commentID string
 	`, orgID, commentID)
 }
 
+// MirroredAsset is one attachment of a mirrored message that has been synced
+// to the other side. Inline marks images rendered inside the message's blocks
+// (via the asset proxy); false means the file was shared into the thread.
+type MirroredAsset struct {
+	AssetURL string
+	Filename string
+	Inline   bool
+}
+
+// RecordMirroredAsset marks one of a mirrored object's attachments as synced.
+// source names the originating system in envelope vocabulary ("linear", ...)
+// and sourceID is that system's id for the containing object (comment id).
+// Written right after the successful sync; idempotent so a redelivered update
+// can't double-record.
+func (s *Store) RecordMirroredAsset(ctx context.Context, orgID, source, sourceID string, a MirroredAsset) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mirrored_assets (org_id, event_source, event_source_id, asset_url, inline, filename)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING
+	`, orgID, source, sourceID, a.AssetURL, a.Inline, a.Filename)
+	if err != nil {
+		return fmt.Errorf("store: record mirrored asset: %w", err)
+	}
+	return nil
+}
+
+// MirroredAssets returns an object's synced attachments in sync order (empty
+// when none).
+func (s *Store) MirroredAssets(ctx context.Context, orgID, source, sourceID string) ([]MirroredAsset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT asset_url, inline, filename FROM mirrored_assets
+		WHERE org_id = $1 AND event_source = $2 AND event_source_id = $3
+		ORDER BY created_at, asset_url
+	`, orgID, source, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("store: mirrored assets: %w", err)
+	}
+	defer rows.Close()
+	var out []MirroredAsset
+	for rows.Next() {
+		var a MirroredAsset
+		if err := rows.Scan(&a.AssetURL, &a.Inline, &a.Filename); err != nil {
+			return nil, fmt.Errorf("store: mirrored assets scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) scanLink(ctx context.Context, query string, args ...any) (MirroredMessage, error) {
 	var m MirroredMessage
 	err := s.pool.QueryRow(ctx, query, args...).Scan(

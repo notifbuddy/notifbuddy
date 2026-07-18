@@ -178,3 +178,136 @@ func TestLookupUserByEmail_MapsProfile(t *testing.T) {
 		t.Errorf("user = %+v", u)
 	}
 }
+
+func TestDownloadFile_SendsBearerAndCaps(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte("filebytes"))
+	}))
+	t.Cleanup(srv.Close)
+	c := NewWithHTTP(srv.URL, srv.Client())
+
+	data, err := c.DownloadFile(context.Background(), "xoxb-token", srv.URL+"/files/f1")
+	if err != nil {
+		t.Fatalf("DownloadFile: %v", err)
+	}
+	if string(data) != "filebytes" {
+		t.Errorf("data = %q", data)
+	}
+	// url_private only serves with the workspace token.
+	if gotAuth != "Bearer xoxb-token" {
+		t.Errorf("auth = %q", gotAuth)
+	}
+}
+
+func TestDownloadFile_NonOKStatusErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	c := NewWithHTTP(srv.URL, srv.Client())
+
+	if _, err := c.DownloadFile(context.Background(), "t", srv.URL+"/gone"); err == nil {
+		t.Fatal("want error on 404")
+	}
+}
+
+// UploadFile is the three-step external upload: reserve a URL, send the bytes,
+// complete against the channel/thread.
+func TestUploadFile_ExternalUploadFlow(t *testing.T) {
+	var gotBytes []byte
+	var gotComplete map[string]any
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/files.getUploadURLExternal", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.Form.Get("filename") != "crash.png" || r.Form.Get("length") != "8" {
+			t.Errorf("reserve params wrong: %v", r.Form)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"upload_url":"` + srv.URL + `/upload/v1/x","file_id":"F123"}`))
+	})
+	mux.HandleFunc("/upload/v1/x", func(w http.ResponseWriter, r *http.Request) {
+		gotBytes, _ = io.ReadAll(r.Body)
+	})
+	mux.HandleFunc("/files.completeUploadExternal", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &gotComplete)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	c := NewWithHTTP(srv.URL, srv.Client())
+
+	err := c.UploadFile(context.Background(), "xoxb-token", UploadOptions{
+		ChannelID: "C1", ThreadTS: "TS1", Filename: "crash.png", Data: []byte("imgbytes"),
+	})
+	if err != nil {
+		t.Fatalf("UploadFile: %v", err)
+	}
+	if string(gotBytes) != "imgbytes" {
+		t.Errorf("uploaded bytes = %q", gotBytes)
+	}
+	if gotComplete["channel_id"] != "C1" || gotComplete["thread_ts"] != "TS1" {
+		t.Errorf("complete params wrong: %v", gotComplete)
+	}
+	files, _ := gotComplete["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("complete files wrong: %v", gotComplete["files"])
+	}
+	f, _ := files[0].(map[string]any)
+	if f["id"] != "F123" || f["title"] != "crash.png" {
+		t.Errorf("complete file entry wrong: %v", f)
+	}
+}
+
+func TestUploadFile_ReserveErrorSurfaces(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":false,"error":"missing_scope"}`))
+	})
+	err := c.UploadFile(context.Background(), "t", UploadOptions{ChannelID: "C1", Filename: "a", Data: []byte("x")})
+	if err == nil || !strings.Contains(err.Error(), "missing_scope") {
+		t.Fatalf("want missing_scope error, got %v", err)
+	}
+}
+
+// Slack processes external uploads asynchronously: a slack_file block reference
+// is rejected with invalid_blocks until processing completes. The client must
+// retry that specific rejection.
+func TestPostMessage_RetriesInvalidBlocksWhileFileProcesses(t *testing.T) {
+	calls := 0
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_blocks"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"ts":"123.456"}`))
+	})
+	ts, err := c.PostMessage(context.Background(), "t", PostOptions{
+		ChannelID: "C1", Text: "x",
+		Blocks: []map[string]any{{"type": "image", "slack_file": map[string]any{"id": "F1"}, "alt_text": "x"}},
+	})
+	if err != nil || ts != "123.456" {
+		t.Fatalf("want retry success, got ts=%q err=%v", ts, err)
+	}
+	if calls != 3 {
+		t.Errorf("want 3 attempts, got %d", calls)
+	}
+}
+
+// Without blocks, invalid_blocks-adjacent failures must NOT retry (nothing to
+// wait for) — and other errors never retry even with blocks.
+func TestPostMessage_NoBlocksNoRetry(t *testing.T) {
+	calls := 0
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"ok":false,"error":"channel_not_found"}`))
+	})
+	_, err := c.PostMessage(context.Background(), "t", PostOptions{
+		ChannelID: "C1", Text: "x",
+		Blocks: []map[string]any{{"type": "section"}},
+	})
+	if err == nil || calls != 1 {
+		t.Fatalf("non-invalid_blocks error must not retry: calls=%d err=%v", calls, err)
+	}
+}
