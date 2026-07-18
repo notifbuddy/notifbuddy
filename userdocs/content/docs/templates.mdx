@@ -14,16 +14,18 @@ linear.data.state.name == 'Done'       # condition
 
 Reference fields off the event envelope:
 
-- `event_type` — `linear` or `github`
-- `linear.*` / `github.*` — the raw event payload
+- `event_type` — `linear`
+- `linear.*` — the raw event payload
 
-Example: `linear.data.state.name`, `linear.action`, `github.repository`.
+Example: `linear.data.state.name`, `linear.action`.
 
 ## Operators
 
 `==` `!=` `<` `<=` `>` `>=` · `&&` `||` `!` · `( )` · `.` `[ ]` · `.*` (object filter)
 
 Literals: strings (`'...'`), numbers, `true`, `false`, `null`.
+
+`==` compares strings case-insensitively: `'done' == 'Done'` is true.
 
 ## Functions
 
