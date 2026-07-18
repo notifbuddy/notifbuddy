@@ -17,18 +17,17 @@ export const docs = defineDocs({
   },
 });
 
-// Changelog entries: one markdown file per shipped change. Each gets its own
-// URL under /changelog/{slug} — that per-entry page is the SEO surface.
+// Changelog entries: one frontmatter-only file per shipped change. Entries are
+// short lines on the /changelog stream (description, two lines max) — no
+// per-entry pages. A larger feature links out to a docs page via `link`.
 export const changelog = defineDocs({
   dir: 'content/changelog',
   docs: {
     schema: pageSchema.extend({
       date: z.iso.date(),
       tags: z.array(z.string()).default([]),
+      link: z.string().optional(),
     }),
-    postprocess: {
-      includeProcessedMarkdown: true,
-    },
   },
   meta: {
     schema: metaSchema,

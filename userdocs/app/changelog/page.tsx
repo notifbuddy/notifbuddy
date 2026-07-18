@@ -52,9 +52,13 @@ export default function ChangelogIndex() {
             <h2 className="text-fd-muted-foreground border-b pb-2 text-sm font-medium tracking-wide uppercase">
               {monthFormat.format(new Date(`${month}-01`))}
             </h2>
-            <div className="mt-6 flex flex-col gap-8">
+            <div className="mt-6 flex flex-col gap-6">
               {entries.map((entry) => (
-                <article key={entry.url} className="flex flex-col gap-1 sm:flex-row sm:gap-6">
+                <article
+                  key={entry.url}
+                  id={entry.slugs[0]}
+                  className="flex flex-col gap-1 sm:flex-row sm:gap-6"
+                >
                   <time
                     dateTime={entry.data.date}
                     className="text-fd-muted-foreground w-28 shrink-0 text-sm sm:pt-0.5"
@@ -62,25 +66,22 @@ export default function ChangelogIndex() {
                     {dateFormat.format(new Date(entry.data.date))}
                   </time>
                   <div>
-                    <h3 className="text-lg font-semibold">
-                      <Link href={entry.url} className="hover:underline underline-offset-4">
-                        {entry.data.title}
-                      </Link>
-                    </h3>
+                    <h3 className="font-semibold">{entry.data.title}</h3>
                     {entry.data.description ? (
-                      <p className="text-fd-muted-foreground mt-1.5">{entry.data.description}</p>
-                    ) : null}
-                    {entry.data.tags.length > 0 ? (
-                      <div className="mt-2.5 flex flex-wrap gap-2">
-                        {entry.data.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-fd-muted text-fd-muted-foreground rounded-full px-2.5 py-0.5 text-xs"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
+                      <p className="text-fd-muted-foreground mt-1 text-sm">
+                        {entry.data.description}
+                        {entry.data.link ? (
+                          <>
+                            {' '}
+                            <Link
+                              href={entry.data.link}
+                              className="text-fd-foreground underline underline-offset-4"
+                            >
+                              Read more
+                            </Link>
+                          </>
+                        ) : null}
+                      </p>
                     ) : null}
                   </div>
                 </article>

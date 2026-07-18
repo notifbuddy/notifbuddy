@@ -1,24 +1,6 @@
 ---
-title: Attachments now sync both ways between Linear and Slack
-description: Images and files attached in Slack threads land in Linear comments, and Linear comment images render inside the mirrored Slack message — one message, not a separate bot post.
+title: Attachments sync both ways
+description: Slack files land in the Linear comment; Linear images render inside the mirrored Slack message. Needs a one-time Slack reconnect for the new file scopes.
 date: 2026-07-19
-tags: [sync, slack, linear]
+tags: [sync]
 ---
-
-Attachments were the last part of a conversation that didn't cross the bridge. Now they do, in both directions.
-
-## Slack → Linear
-
-Drop an image or file into a synced channel — as a message or a thread reply — and the mirrored Linear comment carries it natively. Files are re-hosted on Linear, so they're permanent, access-controlled by your Linear workspace, and visible right in the issue's attachment list.
-
-## Linear → Slack
-
-Images attached to a Linear comment render **inside** the mirrored Slack message — same author attribution, one message entity, no separate upload post from the app. This works even though Linear attaches files asynchronously: if the image lands a few seconds after the comment, notifbuddy grafts it onto the already-posted Slack message in place.
-
-Non-image files are shared into the message's thread.
-
-## The fine print
-
-- Requires the Slack app's `files:read` and `files:write` scopes — workspaces connected before this change need to reconnect Slack once.
-- Files up to 25 MB sync; anything larger degrades to a visible note instead of failing the message.
-- Linear images are served to Slack through short-lived signed URLs — links expire in minutes, and Slack's image cache keeps the rendered copy.

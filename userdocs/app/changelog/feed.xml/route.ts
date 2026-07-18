@@ -18,7 +18,8 @@ export function GET() {
 
   const items = entries
     .map((entry) => {
-      const url = `${siteUrl}${entry.url}`;
+      // No per-entry pages — feed items anchor into the stream.
+      const url = `${siteUrl}${changelogRoute}#${entry.slugs[0]}`;
       return `  <entry>
     <title>${escapeXml(entry.data.title)}</title>
     <link href="${url}"/>

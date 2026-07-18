@@ -9,10 +9,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const docs = source.getPages().map((page) => ({
     url: `${siteUrl}${page.url}`,
   }));
-  const changelog = changelogEntries().map((entry) => ({
-    url: `${siteUrl}${entry.url}`,
-    lastModified: entry.data.date,
-  }));
+  const latest = changelogEntries()[0];
 
-  return [{ url: `${siteUrl}${changelogRoute}` }, ...docs, ...changelog];
+  return [
+    { url: `${siteUrl}${changelogRoute}`, lastModified: latest?.data.date },
+    ...docs,
+  ];
 }
