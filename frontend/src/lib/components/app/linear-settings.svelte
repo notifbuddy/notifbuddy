@@ -7,6 +7,7 @@
 	import * as Command from '$lib/components/ui/command';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -240,6 +241,11 @@
 		}
 		if (res.state) applyState(res.state);
 	}
+
+	// The config pending removal confirmation; null = dialog closed. Wording in
+	// the dialog depends on whether it's an unsaved draft (discard) or a
+	// persisted config (remove).
+	let confirmRemove = $state<Draft | null>(null);
 
 	async function removeDraft(d: Draft) {
 		// An unsaved draft is just dropped from the list.
@@ -546,7 +552,7 @@
 												size="icon"
 												variant="ghost"
 												class="text-muted-foreground hover:text-destructive"
-												onclick={() => removeDraft(d)}
+												onclick={() => (confirmRemove = d)}
 												disabled={deleting[d.key]}
 												aria-label="Remove this team's config"
 											>
@@ -555,6 +561,22 @@
 										{/snippet}
 									</Tooltip.Trigger>
 									<Tooltip.Content>Remove this team's config</Tooltip.Content>
+								</Tooltip.Root>
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												size="sm"
+												onclick={() => saveDraft(d)}
+												disabled={saving[d.key]}
+											>
+												{#if saving[d.key]}<LoaderIcon class="animate-spin" data-icon="inline-start" />{:else}<SaveIcon data-icon="inline-start" />{/if}
+												Save
+											</Button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>Save this team's config</Tooltip.Content>
 								</Tooltip.Root>
 							</Tooltip.Provider>
 						</div>
@@ -763,18 +785,56 @@
 					</Collapsible.Root>
 					</div>
 				</Card.Content>
-				<Card.Footer class="gap-3">
-					<Button onclick={() => saveDraft(d)} disabled={saving[d.key]}>
-						{#if saving[d.key]}<LoaderIcon class="animate-spin" />{:else}<SaveIcon />{/if}
-						Save
-					</Button>
-					{#if saveMsg[d.key]}
+				{#if saveMsg[d.key]}
+					<!-- Save errors surface where the old footer button was; the Save
+					     action itself lives in the card header next to delete. -->
+					<Card.Footer class="justify-end">
 						<span class="text-destructive text-sm">{saveMsg[d.key]}</span>
-					{/if}
-				</Card.Footer>
+					</Card.Footer>
+				{/if}
 			</Card.Root>
 		{/each}
 	</div>
+
+	<!-- Removal confirmation. One controlled dialog for whichever card asked;
+	     the copy distinguishes discarding a never-saved draft from removing a
+	     persisted config (which stops channel automation for that team). -->
+	<AlertDialog.Root
+		open={confirmRemove !== null}
+		onOpenChange={(v) => {
+			if (!v) confirmRemove = null;
+		}}
+	>
+		{#if confirmRemove}
+			{@const target = confirmRemove}
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>
+						{target.settingId
+							? `Remove channel rules for ${teamName(target.teamId)}?`
+							: `Discard this draft?`}
+					</AlertDialog.Title>
+					<AlertDialog.Description>
+						{target.settingId
+							? `New issues for ${teamName(target.teamId)} will stop opening Slack channels. Channels that already exist stay as they are.`
+							: `This config for ${teamName(target.teamId)} hasn't been saved yet. Discarding it can't be undone.`}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+					<AlertDialog.Action
+						variant={target.settingId ? 'destructive' : 'default'}
+						onclick={() => {
+							removeDraft(target);
+							confirmRemove = null;
+						}}
+					>
+						{target.settingId ? 'Remove' : 'Discard draft'}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		{/if}
+	</AlertDialog.Root>
 {:else}
 	<!-- Linear isn't connected at the workspace level, so there are no channel
 	     rules to configure. Point the user to the integrations page to connect. -->
