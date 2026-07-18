@@ -29,3 +29,5 @@ userdocs/.env*.local
 .agents/
 .claude/
 .playwright-mcp/
+
+.infisical.json
