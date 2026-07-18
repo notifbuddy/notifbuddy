@@ -135,25 +135,32 @@
 					{link.title}
 				</Button>
 			{/each}
-			<Button
-				href="https://docs.notifbuddy.com"
-				target="_blank"
-				rel="noopener"
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground gap-2"
-			>
-				<BookOpenIcon class="size-4" />
-				Docs
-			</Button>
 		</nav>
+
+		<!-- Right cluster: external docs link | divider | profile menu. gap-2 +
+		     the divider's mx-1 = 12px a side, the same rhythm as the dividers
+		     on the left rail. -->
+		<div class="ms-auto flex items-center gap-2">
+		<Button
+			href="https://docs.notifbuddy.com"
+			target="_blank"
+			rel="noopener"
+			variant="ghost"
+			size="sm"
+			class="text-muted-foreground gap-2"
+		>
+			<BookOpenIcon class="size-4" />
+			Docs
+		</Button>
+
+		<div class="bg-border mx-1 mr-2 h-5 w-px" aria-hidden="true"></div>
 
 		<!-- Profile menu -->
 		{#if user}
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="icon" class="ms-auto rounded-full">
+						<Button {...props} variant="ghost" size="icon" class="rounded-full">
 							<Avatar.Root class="size-8">
 								<Avatar.Image src={avatarUrl(user)} alt={displayName(user)} />
 								<Avatar.Fallback class="bg-muted text-muted-foreground text-xs font-medium">
@@ -213,5 +220,6 @@
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}
+		</div>
 	</div>
 </header>
