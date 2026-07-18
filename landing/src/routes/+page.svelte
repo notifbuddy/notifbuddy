@@ -76,7 +76,10 @@
 
 <div class="landing flex min-h-svh flex-col">
 	<header class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
-		<Logo size={30} />
+		<!-- Below 420px the wordmark + action cluster can't share the row without
+		     shrinking tap targets, so the mark stands alone (the dot is the brand). -->
+		<span class="hidden min-[420px]:block"><Logo size={30} /></span>
+		<span class="min-[420px]:hidden"><Logo size={30} wordmark={false} /></span>
 		<div class="flex items-center gap-1.5">
 			<a
 				href="https://docs.notifbuddy.com"
@@ -195,7 +198,9 @@
 		</section>
 	</main>
 
-	<footer class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-6 sm:px-6">
+	<footer
+		class="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+	>
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
