@@ -1,6 +1,8 @@
 # notifbuddy
 
-**Note: project is currently experimental**, any feedback is greatly appreciated. Just raise an issue in this repo for any feedbacks you have.
+**Note: project is currently experimental**, any feedback is greatly appreciated. Join the
+[community slack](https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw)
+for feature requests, support, etc.
 
 2 way sync between linear <-> slack
 
