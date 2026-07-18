@@ -1,0 +1,59 @@
+name: Docs deploy trigger
+
+# The docs site deploys from notifbuddy/iac (deploys are iac's job — the
+# build/deploy logic lives in iac's docs-deploy.yml, same split as the
+# dashboard). This workflow just fires that one on every merge to main that
+# touches userdocs/, passing the merge commit as app_ref so iac builds exactly
+# what was merged.
+#
+# Cross-repo dispatch needs a token with Actions:write on iac — the default
+# GITHUB_TOKEN can't do it. Reuses the publish-images pattern: Infisical OIDC
+# → notifbuddy-ci GitHub App token minted for notifbuddy/iac.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'userdocs/**'
+      - '.github/workflows/docs-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # GitHub OIDC → Infisical machine identity
+
+concurrency: docs-deploy-trigger
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub
+      # OIDC — no App id/key stored as GitHub Actions secrets. Exports
+      # NOTIFBUDDY_CI_APP_ID + NOTIFBUDDY_CI_PRIVATE_KEY to the env.
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: "oidc"
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: "/ci"
+          export-type: "env"
+
+      - name: Mint cross-repo App token for notifbuddy/iac
+        id: apptoken
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
+          owner: notifbuddy
+          repositories: iac
+
+      - name: Dispatch iac docs-deploy with this ref
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
+        run: |
+          gh workflow run docs-deploy.yml \
+            --repo notifbuddy/iac \
+            --field app_ref="${GITHUB_SHA}"
