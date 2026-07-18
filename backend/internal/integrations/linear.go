@@ -3,6 +3,7 @@ package integrations
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
 )
 
@@ -254,6 +256,17 @@ type LinearCreateCommentInput struct {
 	// AuthorDisplayName is the author's Slack display name, used only for the
 	// plain-text provenance byline on app-level posts (unlinked identity).
 	AuthorDisplayName string
+	// Attachments are files mirrored with the comment. Each is uploaded to
+	// Linear's file storage (with the same token that posts the comment) and
+	// embedded in the body as markdown.
+	Attachments []LinearCommentAttachment
+}
+
+// LinearCommentAttachment is one file to upload alongside a mirrored comment.
+type LinearCommentAttachment struct {
+	Filename    string
+	ContentType string
+	Data        []byte
 }
 
 // LinearCreateComment posts a comment via the commentCreate GraphQL mutation.
@@ -263,6 +276,7 @@ type LinearCreateCommentInput struct {
 // explicitly app-level, never another user's credentials).
 func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in LinearCreateCommentInput) (LinearComment, error) {
 	var token string
+	byline := ""
 	if in.SlackAuthorID != "" {
 		uid, err := s.store.UserIDBySlackUserID(ctx, orgID, in.SlackAuthorID)
 		switch {
@@ -281,11 +295,12 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 			slog.InfoContext(ctx, "integrations: slack author has no linked linear identity; posting app-level",
 				"org_id", orgID, "slack_user_id", in.SlackAuthorID)
 			// Plain-text provenance so readers still know who spoke — this is
-			// a byline on an app-authored comment, not impersonation.
+			// a byline on an app-authored comment, not impersonation. Appended
+			// after the attachment embeds so it stays the comment's last line.
 			if in.AuthorDisplayName != "" {
-				in.Body += "\n\n— " + in.AuthorDisplayName + " on Slack"
+				byline = "\n\n— " + in.AuthorDisplayName + " on Slack"
 			} else {
-				in.Body += "\n\n— posted from Slack"
+				byline = "\n\n— posted from Slack"
 			}
 		}
 	}
@@ -296,6 +311,27 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 		}
 		token = t
 	}
+
+	// Upload attachments with the same token that authors the comment, and
+	// embed each as markdown (images render inline in Linear). A failed upload
+	// degrades to a note instead of failing the comment: an unuploadable file
+	// would otherwise nack and redeliver forever, and the text still matters.
+	for _, att := range in.Attachments {
+		assetURL, err := s.linearUploadFile(ctx, token, att)
+		if err != nil {
+			slog.ErrorContext(ctx, "integrations: linear file upload failed",
+				"org_id", orgID, "filename", att.Filename, "error", err)
+			in.Body += fmt.Sprintf("\n\n_(attachment %q could not be synced)_", att.Filename)
+			continue
+		}
+		name := mdLinkText(att.Filename)
+		if strings.HasPrefix(att.ContentType, "image/") {
+			in.Body += fmt.Sprintf("\n\n![%s](%s)", name, assetURL)
+		} else {
+			in.Body += fmt.Sprintf("\n\n[%s](%s)", name, assetURL)
+		}
+	}
+	in.Body = strings.TrimSpace(in.Body + byline)
 	const mutation = `mutation($input: CommentCreateInput!) {
 		commentCreate(input: $input) { success comment { id } }
 	}`
@@ -323,6 +359,221 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 		return LinearComment{}, fmt.Errorf("integrations: linear commentCreate returned success=false")
 	}
 	return LinearComment{ID: resp.Data.CommentCreate.Comment.ID}, nil
+}
+
+// mdLinkText sanitizes a filename for use as markdown link text so a bracketed
+// name can't break out of the link syntax.
+func mdLinkText(name string) string {
+	return strings.NewReplacer("[", "(", "]", ")", "\n", " ").Replace(name)
+}
+
+// linearUploadFile reserves storage via the fileUpload mutation, PUTs the bytes
+// to the returned signed URL with the headers Linear requires, and returns the
+// asset URL to embed in a comment body.
+func (s *Service) linearUploadFile(ctx context.Context, token string, att LinearCommentAttachment) (string, error) {
+	const mutation = `mutation($contentType: String!, $filename: String!, $size: Int!) {
+		fileUpload(contentType: $contentType, filename: $filename, size: $size) {
+			success
+			uploadFile { uploadUrl assetUrl headers { key value } }
+		}
+	}`
+	contentType := att.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	var resp struct {
+		Data struct {
+			FileUpload struct {
+				Success    bool `json:"success"`
+				UploadFile struct {
+					UploadURL string `json:"uploadUrl"`
+					AssetURL  string `json:"assetUrl"`
+					Headers   []struct {
+						Key   string `json:"key"`
+						Value string `json:"value"`
+					} `json:"headers"`
+				} `json:"uploadFile"`
+			} `json:"fileUpload"`
+		} `json:"data"`
+	}
+	vars := map[string]any{"contentType": contentType, "filename": att.Filename, "size": len(att.Data)}
+	if err := s.linearGraphQL(ctx, token, mutation, vars, &resp); err != nil {
+		return "", err
+	}
+	up := resp.Data.FileUpload.UploadFile
+	if !resp.Data.FileUpload.Success || up.UploadURL == "" {
+		return "", fmt.Errorf("integrations: linear fileUpload returned no upload url")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.UploadURL, bytes.NewReader(att.Data))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", contentType)
+	for _, h := range up.Headers {
+		req.Header.Set(h.Key, h.Value)
+	}
+	putResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("integrations: linear file put: %w", err)
+	}
+	defer putResp.Body.Close()
+	io.Copy(io.Discard, putResp.Body)
+	if putResp.StatusCode < 200 || putResp.StatusCode > 299 {
+		return "", fmt.Errorf("integrations: linear file put: status %d", putResp.StatusCode)
+	}
+	return up.AssetURL, nil
+}
+
+// LinearFileDownload fetches a private Linear upload (uploads.linear.app) with
+// the org's workspace token and returns its bytes and content type. Used to
+// re-host comment attachments in Slack, since Slack can't render URLs that
+// require Linear auth.
+func (s *Service) LinearFileDownload(ctx context.Context, orgID, fileURL string) ([]byte, string, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return nil, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("integrations: linear file download: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("integrations: linear file download: status %d", resp.StatusCode)
+	}
+	// Read one byte past the cap so an oversized file errors rather than being
+	// silently truncated into a corrupt mirror.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, slackapi.MaxFileBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("integrations: linear file download: read: %w", err)
+	}
+	if len(data) > slackapi.MaxFileBytes {
+		return nil, "", fmt.Errorf("integrations: linear file download: exceeds %d byte cap", slackapi.MaxFileBytes)
+	}
+	return data, resp.Header.Get("Content-Type"), nil
+}
+
+// assetProxyPayload is what a signed asset-proxy token decrypts to.
+type assetProxyPayload struct {
+	OrgID   string `json:"o"`
+	FileURL string `json:"u"`
+	// Exp is the unix-seconds expiry: long enough for Slack's one-time
+	// server-side fetch, short enough that a leaked URL is dead on arrival.
+	Exp int64 `json:"e"`
+}
+
+// assetProxyTTL bounds how long a minted asset URL keeps working. Slack's
+// image proxy fetches the bytes once within seconds of the post and serves
+// its own cached copy afterwards, so the URL only needs to survive that first
+// fetch — 5 minutes (GitHub uses the same window for private attachments).
+// The accepted tail risk: if Slack ever evicts its cache and re-fetches, the
+// image in old history breaks. Grafting updates re-mint fresh tokens.
+const assetProxyTTL = 5 * time.Minute
+
+// LinearAssetProxyURL builds a public, signed URL on our backend that streams
+// the given private Linear upload. Embedded as image_url in Slack blocks:
+// Slack's image proxy can fetch it, unlike uploads.linear.app (Linear auth) or
+// an unshared Slack file (per-viewer access). The token is AEAD-sealed, so the
+// URL is unguessable and tamper-proof, but anyone holding it can fetch the
+// asset — the same trust model as a Slack file link.
+func (s *Service) LinearAssetProxyURL(orgID, fileURL string) (string, error) {
+	base := strings.TrimRight(s.cfg.Server.PublicBaseURL, "/")
+	if base == "" {
+		return "", fmt.Errorf("integrations: server.public_base_url not configured; cannot build asset proxy URL")
+	}
+	raw, err := json.Marshal(assetProxyPayload{
+		OrgID:   orgID,
+		FileURL: fileURL,
+		Exp:     time.Now().Add(assetProxyTTL).Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
+	sealed, err := s.enc.Encrypt(raw)
+	if err != nil {
+		return "", fmt.Errorf("integrations: seal asset token: %w", err)
+	}
+	return base + "/integrations/linear/asset/" + base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+// openAssetProxyToken decrypts and validates an asset-proxy token: intact
+// seal, allowed host, unexpired. Every failure is generic — callers 404.
+func (s *Service) openAssetProxyToken(token string) (assetProxyPayload, error) {
+	sealed, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return assetProxyPayload{}, fmt.Errorf("bad encoding: %w", err)
+	}
+	raw, err := s.enc.Decrypt(sealed)
+	if err != nil {
+		return assetProxyPayload{}, fmt.Errorf("bad seal: %w", err)
+	}
+	var p assetProxyPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return assetProxyPayload{}, fmt.Errorf("bad payload: %w", err)
+	}
+	// Only Linear's upload host may be proxied — the sealed payload should
+	// never contain anything else, but fail closed regardless.
+	u, err := url.Parse(p.FileURL)
+	if err != nil || u.Scheme != "https" || u.Host != "uploads.linear.app" {
+		return assetProxyPayload{}, fmt.Errorf("disallowed target")
+	}
+	// Fail closed on missing expiry too: every minted token carries one.
+	if p.Exp <= 0 || time.Now().Unix() > p.Exp {
+		return assetProxyPayload{}, fmt.Errorf("expired")
+	}
+	return p, nil
+}
+
+// HandleLinearAssetProxy streams a private Linear upload identified by a
+// signed token (see LinearAssetProxyURL). Invalid or tampered tokens 404;
+// nothing about the failure is echoed back.
+func (s *Service) HandleLinearAssetProxy(w http.ResponseWriter, r *http.Request) {
+	if !s.Enabled() {
+		http.NotFound(w, r)
+		return
+	}
+	p, err := s.openAssetProxyToken(r.PathValue("token"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	token, err := s.LinearAccessToken(r.Context(), p.OrgID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, p.FileURL, nil)
+	if err != nil {
+		http.Error(w, "proxy failed", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("Authorization", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "proxy failed", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "proxy failed", http.StatusBadGateway)
+		return
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	// The asset is immutable (Linear upload URLs are content-addressed), so
+	// let Slack's image proxy cache it hard.
+	w.Header().Set("Cache-Control", "public, max-age=86400, immutable")
+	if _, err := io.Copy(w, io.LimitReader(resp.Body, slackapi.MaxFileBytes)); err != nil {
+		slog.WarnContext(r.Context(), "integrations: asset proxy stream interrupted", "error", err)
+	}
 }
 
 // LinearIssue is the subset of a Linear issue the sync engine needs (for

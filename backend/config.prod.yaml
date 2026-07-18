@@ -12,6 +12,9 @@
 
 server:
   addr: ":8080" # Cloud Run routes $PORT (default 8080) to this
+  # Internet-reachable base URL; used for the signed asset proxy links Slack
+  # fetches to render mirrored Linear images.
+  public_base_url: "https://api.notifbuddy.com"
 
 logging:
   format: "json" # one JSON object per line on stdout — Datadog parses level/msg/timestamp
@@ -63,6 +66,7 @@ pubsub:
 slack:
   client_id: "${SLACK_CLIENT_ID}" # TODO: prod Slack app client id
   client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
+  # Keep in sync with backend/manifests/slack.prod.yaml (the app manifest at api.slack.com).
   scopes:
     - app_mentions:read
     - channels:manage
@@ -72,6 +76,8 @@ slack:
     - groups:history
     - groups:write
     - reactions:write
+    - files:read # download a message's attachments to mirror into Linear
+    - files:write # share mirrored Linear attachments into the channel
     - chat:write
     - chat:write.public
     - chat:write.customize

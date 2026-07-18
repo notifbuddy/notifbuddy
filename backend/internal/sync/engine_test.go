@@ -3,7 +3,9 @@ package sync
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"xolo/backend/internal/integrations"
@@ -26,6 +28,7 @@ type fakeStore struct {
 	recorded       []store.MirroredMessage
 	deletedIssues  []string
 	statePatches   []statePatch
+	assets         map[string][]store.MirroredAsset // key: org|comment
 }
 
 // statePatch records a PatchLinearTeamState call for assertions.
@@ -43,7 +46,22 @@ func newFakeStore() *fakeStore {
 		channelToIssue: map[string]string{},
 		linksBySlack:   map[string]store.MirroredMessage{},
 		linksByLinear:  map[string]store.MirroredMessage{},
+		assets:         map[string][]store.MirroredAsset{},
 	}
+}
+
+func (f *fakeStore) RecordMirroredAsset(_ context.Context, org, source, sourceID string, a store.MirroredAsset) error {
+	key := org + "|" + source + "|" + sourceID
+	for _, have := range f.assets[key] {
+		if have.AssetURL == a.AssetURL {
+			return nil // idempotent, like ON CONFLICT DO NOTHING
+		}
+	}
+	f.assets[key] = append(f.assets[key], a)
+	return nil
+}
+func (f *fakeStore) MirroredAssets(_ context.Context, org, source, sourceID string) ([]store.MirroredAsset, error) {
+	return f.assets[org+"|"+source+"|"+sourceID], nil
 }
 
 func (f *fakeStore) LinearWebhookPayload(_ context.Context, id string) (json.RawMessage, error) {
@@ -120,6 +138,9 @@ type fakeSlack struct {
 	botUserID       string
 	usersByEmail    map[string]slackapi.User
 	usersByID       map[string]slackapi.User
+	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
+	uploads         []slackapi.UploadOptions
+	updates         []slackapi.UpdateOptions
 }
 
 func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, error) {
@@ -133,7 +154,7 @@ func (s *fakeSlack) ArchiveChannel(_ context.Context, _, channelID string) error
 	s.archivedChannel = channelID
 	return nil
 }
-func (s *fakeSlack) DeleteChannel(_ context.Context, _, _ string) error  { return nil }
+func (s *fakeSlack) DeleteChannel(_ context.Context, _, _ string) error { return nil }
 func (s *fakeSlack) InviteUsers(_ context.Context, _, _ string, ids []string) error {
 	s.invited = append(s.invited, ids...)
 	return nil
@@ -160,6 +181,20 @@ func (s *fakeSlack) UserByID(_ context.Context, _, id string) (slackapi.User, er
 func (s *fakeSlack) AuthTestUserID(_ context.Context, _ string) (string, error) {
 	return s.botUserID, nil
 }
+func (s *fakeSlack) DownloadFile(_ context.Context, _, fileURL string) ([]byte, error) {
+	if data, ok := s.files[fileURL]; ok {
+		return data, nil
+	}
+	return nil, fmt.Errorf("fakeSlack: no file at %s", fileURL)
+}
+func (s *fakeSlack) UploadFile(_ context.Context, _ string, opts slackapi.UploadOptions) error {
+	s.uploads = append(s.uploads, opts)
+	return nil
+}
+func (s *fakeSlack) UpdateMessage(_ context.Context, _ string, opts slackapi.UpdateOptions) error {
+	s.updates = append(s.updates, opts)
+	return nil
+}
 
 // fakeIntg satisfies Integrations.
 //
@@ -173,6 +208,8 @@ type fakeIntg struct {
 	issueTeamID     string
 	createdComments []integrations.LinearCreateCommentInput
 	nextCommentID   string
+	linearFiles     map[string][]byte // url -> bytes served by LinearFileDownload; missing url errors
+	linearFileCT    map[string]string // url -> content type; missing = application/octet-stream
 }
 
 func (i *fakeIntg) SlackBotToken(context.Context, string) (string, error) { return "xoxb-test", nil }
@@ -186,6 +223,19 @@ func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrati
 }
 func (i *fakeIntg) LinearIssueByID(context.Context, string, string) (integrations.LinearIssue, error) {
 	return integrations.LinearIssue{TeamID: i.issueTeamID}, nil
+}
+func (i *fakeIntg) LinearAssetProxyURL(_ string, fileURL string) (string, error) {
+	return "https://proxy.test/asset?u=" + fileURL, nil
+}
+func (i *fakeIntg) LinearFileDownload(_ context.Context, _ string, fileURL string) ([]byte, string, error) {
+	if data, ok := i.linearFiles[fileURL]; ok {
+		ct := i.linearFileCT[fileURL]
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		return data, ct, nil
+	}
+	return nil, "", fmt.Errorf("fakeIntg: no file at %s", fileURL)
 }
 func (i *fakeIntg) SettingForTeam(_ context.Context, _ string, teamID string) (integrations.LinearSettings, error) {
 	// nil map → any team maps (legacy single-config tests). Otherwise only teams
@@ -820,5 +870,459 @@ func TestOnSlackEvent_RedeliveredMessageMirrorsOnce(t *testing.T) {
 	}
 	if len(st.recorded) != 1 {
 		t.Fatalf("want 1 mirror link, got %d", len(st.recorded))
+	}
+}
+
+// slackFilePayload builds a message event carrying attachments (Slack tags
+// these with subtype=file_share).
+func slackFilePayload(user, text, channel, ts, threadTS string, files []map[string]any) json.RawMessage {
+	ev := map[string]any{
+		"type": "message", "subtype": "file_share",
+		"user": user, "text": text, "channel": channel, "ts": ts,
+		"files": files,
+	}
+	if threadTS != "" {
+		ev["thread_ts"] = threadTS
+	}
+	b, _ := json.Marshal(map[string]any{
+		"event_source": "slack",
+		"slack":        map[string]any{"event": ev},
+	})
+	return b
+}
+
+// A human message with an attachment (subtype=file_share) must still mirror,
+// with the file's bytes downloaded and handed to the comment create.
+func TestOnSlackEvent_FileShareMirrorsAttachment(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.slackPayloads["e10"] = slackFilePayload("U_HUMAN", "see attached", "C1", "TS10", "", []map[string]any{{
+		"id": "F1", "name": "logs.txt", "mimetype": "text/plain", "size": 5,
+		"url_private": "https://files.slack.com/f1",
+	}})
+
+	sl := &fakeSlack{botUserID: "U_BOT", files: map[string][]byte{"https://files.slack.com/f1": []byte("hello")}}
+	ig := &fakeIntg{nextCommentID: "cmt_f"}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnSlackEvent(context.Background(), slackRef("e10", "org1"))
+
+	if len(ig.createdComments) != 1 {
+		t.Fatalf("want 1 comment, got %d", len(ig.createdComments))
+	}
+	c := ig.createdComments[0]
+	if c.Body != "see attached" {
+		t.Errorf("body = %q", c.Body)
+	}
+	if len(c.Attachments) != 1 {
+		t.Fatalf("want 1 attachment, got %d", len(c.Attachments))
+	}
+	a := c.Attachments[0]
+	if a.Filename != "logs.txt" || a.ContentType != "text/plain" || string(a.Data) != "hello" {
+		t.Errorf("attachment wrong: %+v", a)
+	}
+}
+
+// url_private_download is preferred over url_private when both are present.
+func TestOnSlackEvent_FileSharePrefersDownloadURL(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.slackPayloads["e11"] = slackFilePayload("U_HUMAN", "", "C1", "TS11", "", []map[string]any{{
+		"id": "F1", "name": "a.png", "mimetype": "image/png",
+		"url_private": "https://files.slack.com/view", "url_private_download": "https://files.slack.com/dl",
+	}})
+	sl := &fakeSlack{botUserID: "U_BOT", files: map[string][]byte{"https://files.slack.com/dl": []byte("png")}}
+	ig := &fakeIntg{}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnSlackEvent(context.Background(), slackRef("e11", "org1"))
+
+	if len(ig.createdComments) != 1 || len(ig.createdComments[0].Attachments) != 1 {
+		t.Fatalf("comment with attachment expected: %+v", ig.createdComments)
+	}
+}
+
+// A failed file download must not fail (and endlessly redeliver) the mirror:
+// the text still posts, with a note naming the file that didn't make it.
+func TestOnSlackEvent_FileDownloadFailureDegradesToNote(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.slackPayloads["e12"] = slackFilePayload("U_HUMAN", "text survives", "C1", "TS12", "", []map[string]any{{
+		"id": "F_GONE", "name": "gone.pdf", "mimetype": "application/pdf",
+		"url_private": "https://files.slack.com/gone",
+	}})
+	sl := &fakeSlack{botUserID: "U_BOT"} // no files served → download errors
+	ig := &fakeIntg{}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("e12", "org1")); err != nil {
+		t.Fatalf("download failure must not nack the event: %v", err)
+	}
+	if len(ig.createdComments) != 1 {
+		t.Fatalf("want 1 comment, got %d", len(ig.createdComments))
+	}
+	c := ig.createdComments[0]
+	if len(c.Attachments) != 0 {
+		t.Errorf("failed download must not attach: %+v", c.Attachments)
+	}
+	if !strings.Contains(c.Body, "text survives") || !strings.Contains(c.Body, `"gone.pdf"`) {
+		t.Errorf("body should keep text and note the lost file: %q", c.Body)
+	}
+}
+
+// Defense 1 still holds for file shares: the bot's own file-share message
+// (user == bot user id, often without bot_id) must not echo into Linear.
+func TestOnSlackEvent_DropsBotFileShare(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.slackPayloads["e13"] = slackFilePayload("U_BOT", "", "C1", "TS13", "", []map[string]any{{
+		"id": "F2", "name": "echo.png", "mimetype": "image/png", "url_private": "https://files.slack.com/f2",
+	}})
+	ig := &fakeIntg{}
+	e := newEngine(st, &fakeSlack{botUserID: "U_BOT"}, ig, &spyPub{})
+
+	e.OnSlackEvent(context.Background(), slackRef("e13", "org1"))
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("bot file share must not mirror; got %d comments", len(ig.createdComments))
+	}
+}
+
+// Other non-human subtypes (message_changed, bot_message, ...) stay dropped.
+func TestOnSlackEvent_OtherSubtypesStillDropped(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.slackPayloads["e14"] = slackMessagePayload("U_HUMAN", "", "message_changed", "edited", "C1", "TS14", "")
+	ig := &fakeIntg{}
+	e := newEngine(st, &fakeSlack{botUserID: "U_BOT"}, ig, &spyPub{})
+
+	e.OnSlackEvent(context.Background(), slackRef("e14", "org1"))
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("message_changed must not mirror; got %d comments", len(ig.createdComments))
+	}
+}
+
+// A Linear comment embedding a private upload re-hosts it as a native Slack
+// file: the dead uploads.linear.app link is stripped from the text and the
+// bytes are shared into the thread under the mirrored message.
+func TestOnLinearEvent_CommentAttachmentUploadsToSlack(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d10"] = linearCommentPayload("create", "c10",
+		"log below\n\n[crash.log](https://uploads.linear.app/abc/crash.log)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_MSG"}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/crash.log": []byte("logbytes")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d10", "org1"))
+
+	if len(sl.posted) != 1 {
+		t.Fatalf("want 1 post, got %d", len(sl.posted))
+	}
+	if got := sl.posted[0].Text; got != "log below" {
+		t.Errorf("dead link should be stripped from text; got %q", got)
+	}
+	if len(sl.uploads) != 1 {
+		t.Fatalf("want 1 Slack file upload, got %d", len(sl.uploads))
+	}
+	up := sl.uploads[0]
+	if up.ChannelID != "C1" || up.ThreadTS != "TS_MSG" || up.Filename != "crash.log" || string(up.Data) != "logbytes" {
+		t.Errorf("upload wrong: %+v", up)
+	}
+}
+
+// An attachment-only comment still needs a text message (thread anchor +
+// mirror link); it gets a placeholder naming the files.
+func TestOnLinearEvent_AttachmentOnlyCommentGetsPlaceholder(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d11"] = linearCommentPayload("create", "c11",
+		"[spec.pdf](https://uploads.linear.app/abc/spec.pdf)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_ONLY"}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/spec.pdf": []byte("pdf")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d11", "org1"))
+
+	if len(sl.posted) != 1 || len(sl.uploads) != 1 {
+		t.Fatalf("want 1 post + 1 upload, got %d/%d", len(sl.posted), len(sl.uploads))
+	}
+	if got := sl.posted[0].Text; got != "📎 shared from Linear" {
+		t.Errorf("attachment-only comment should get the placeholder text; got %q", got)
+	}
+	if len(st.recorded) != 1 || st.recorded[0].SlackTS != "TS_ONLY" {
+		t.Errorf("mirror link not recorded: %+v", st.recorded)
+	}
+}
+
+// A reply's attachments go into the parent thread, not under the reply's ts.
+func TestOnLinearEvent_ReplyAttachmentStaysInThread(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linksByLinear["org1|c_root"] = store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "c_root", SlackChannelID: "C1", SlackTS: "ROOT", RootSlackTS: "ROOT",
+	}
+	st.linearPayloads["d12"] = linearCommentPayload("create", "c12",
+		"[r.dat](https://uploads.linear.app/abc/r.dat)", "issue1", "c_root", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_REPLY"}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("x")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d12", "org1"))
+
+	if len(sl.uploads) != 1 || sl.uploads[0].ThreadTS != "ROOT" {
+		t.Fatalf("reply attachment must share into the parent thread: %+v", sl.uploads)
+	}
+}
+
+// A failed Linear download leaves the markdown link in place (degraded but
+// visible) instead of dropping the attachment silently or failing the mirror.
+func TestOnLinearEvent_AttachmentDownloadFailureLeavesLink(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	body := "look\n\n[x.zip](https://uploads.linear.app/abc/x.zip)"
+	st.linearPayloads["d13"] = linearCommentPayload("create", "c13", body, "issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_FAIL"}
+	ig := &fakeIntg{} // no files served → download errors
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("d13", "org1")); err != nil {
+		t.Fatalf("download failure must not nack: %v", err)
+	}
+	if len(sl.uploads) != 0 {
+		t.Errorf("no upload expected: %+v", sl.uploads)
+	}
+	if len(sl.posted) != 1 || sl.posted[0].Text != body {
+		t.Errorf("text should keep the original link; got %+v", sl.posted)
+	}
+}
+
+// The production sequence that motivated the update handler: Linear fires the
+// Comment create with text only, then an update with the attachment embed
+// appended. The update must share the file into the mirrored message's thread
+// without re-posting any text.
+func TestOnLinearEvent_UpdateAppendsAttachmentToThread(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d20"] = linearCommentPayload("create", "c20", "text first", "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d21"] = linearCommentPayload("update", "c20",
+		"text first\n\n[late.zip](https://uploads.linear.app/abc/late.zip)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C20"}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/late.zip": []byte("late")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d20", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d21", "org1"))
+
+	if len(sl.posted) != 1 {
+		t.Fatalf("update must not re-post text; got %d posts", len(sl.posted))
+	}
+	if len(sl.uploads) != 1 {
+		t.Fatalf("want 1 upload from the update, got %d", len(sl.uploads))
+	}
+	up := sl.uploads[0]
+	if up.ChannelID != "C1" || up.ThreadTS != "TS_C20" || up.Filename != "late.zip" || string(up.Data) != "late" {
+		t.Errorf("upload wrong: %+v", up)
+	}
+}
+
+// A redelivered (or repeated) update must not share the same asset twice.
+func TestOnLinearEvent_RedeliveredUpdateSharesAssetOnce(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linksByLinear["org1|c21"] = store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "c21", SlackChannelID: "C1", SlackTS: "TS_C21", RootSlackTS: "TS_C21",
+	}
+	st.linearPayloads["d22"] = linearCommentPayload("update", "c21",
+		"[x.zip](https://uploads.linear.app/abc/x.zip)", "issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/x.zip": []byte("x")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d22", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d22", "org1")) // redelivery
+
+	if len(sl.uploads) != 1 {
+		t.Fatalf("asset must share exactly once; got %d uploads", len(sl.uploads))
+	}
+	if len(sl.posted) != 0 {
+		t.Errorf("update must never post text: %+v", sl.posted)
+	}
+}
+
+// An asset already shared by the create path must not be re-shared when the
+// update re-sends the same body.
+func TestOnLinearEvent_UpdateSkipsAssetsSharedAtCreate(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	body := "pic\n\n[a.zip](https://uploads.linear.app/abc/a.zip)"
+	st.linearPayloads["d23"] = linearCommentPayload("create", "c23", body, "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d24"] = linearCommentPayload("update", "c23", body, "issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C23"}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/a.zip": []byte("a")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d23", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d24", "org1"))
+
+	if len(sl.uploads) != 1 {
+		t.Fatalf("create already shared the asset; update must skip it. got %d uploads", len(sl.uploads))
+	}
+}
+
+// An update for a comment that was never mirrored (unmapped issue, pre-sync
+// comment) is ignored.
+func TestOnLinearEvent_UpdateForUnmirroredCommentIgnored(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d25"] = linearCommentPayload("update", "c_unknown",
+		"![x.png](https://uploads.linear.app/abc/x.png)", "issue1", "", "Ada", "ada@x.io", false)
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d25", "org1"))
+	if len(sl.uploads) != 0 || len(sl.posted) != 0 {
+		t.Fatalf("unmirrored comment update must be a no-op: %d uploads %d posts", len(sl.uploads), len(sl.posted))
+	}
+}
+
+// A reply comment's late attachment goes into the parent thread.
+func TestOnLinearEvent_UpdateReplyAttachmentUsesRootThread(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linksByLinear["org1|c_reply"] = store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "c_reply", SlackChannelID: "C1", SlackTS: "TS_REPLY", RootSlackTS: "ROOT",
+	}
+	st.linearPayloads["d26"] = linearCommentPayload("update", "c_reply",
+		"[r.dat](https://uploads.linear.app/abc/r.dat)", "issue1", "c_root", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{}
+	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("r")}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d26", "org1"))
+	if len(sl.uploads) != 1 || sl.uploads[0].ThreadTS != "ROOT" {
+		t.Fatalf("late reply attachment must land in the parent thread: %+v", sl.uploads)
+	}
+}
+
+// An image attachment present at create renders inside the message itself: an
+// image block pointing at our signed asset proxy — never a separate
+// app-authored post, and no bytes moved through the engine.
+func TestOnLinearEvent_ImageRendersInsideMessageBlocks(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d30"] = linearCommentPayload("create", "c30",
+		"look at this\n\n![shot.png](https://uploads.linear.app/abc/shot.png)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C30"}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d30", "org1"))
+
+	if len(sl.uploads) != 0 {
+		t.Fatalf("image must not be a separate channel share: %+v", sl.uploads)
+	}
+	if len(sl.posted) != 1 {
+		t.Fatalf("want 1 post, got %d", len(sl.posted))
+	}
+	blocks := sl.posted[0].Blocks
+	if len(blocks) != 2 || blocks[0]["type"] != "section" || blocks[1]["type"] != "image" {
+		t.Fatalf("want section+image blocks, got %+v", blocks)
+	}
+	wantURL := "https://proxy.test/asset?u=https://uploads.linear.app/abc/shot.png"
+	if blocks[1]["image_url"] != wantURL || blocks[1]["alt_text"] != "shot.png" {
+		t.Errorf("image block must reference the asset proxy: %+v", blocks[1])
+	}
+	if sl.posted[0].Text != "look at this" {
+		t.Errorf("text fallback wrong: %q", sl.posted[0].Text)
+	}
+}
+
+// The production UX case: text-only create, then an update adding an image.
+// The mirrored message itself is edited (chat.update) to carry the image
+// block — same entity, no separate post, no thread share.
+func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d31"] = linearCommentPayload("create", "c31", "text first", "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d32"] = linearCommentPayload("update", "c31",
+		"text first\n\n![late.png](https://uploads.linear.app/abc/late.png)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C31"}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d31", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d32", "org1"))
+
+	if len(sl.posted) != 1 {
+		t.Fatalf("update must not post a new message; got %d posts", len(sl.posted))
+	}
+	if len(sl.uploads) != 0 {
+		t.Fatalf("image must not be a separate channel share: %+v", sl.uploads)
+	}
+	if len(sl.updates) != 1 {
+		t.Fatalf("want 1 chat.update, got %d", len(sl.updates))
+	}
+	up := sl.updates[0]
+	if up.ChannelID != "C1" || up.TS != "TS_C31" {
+		t.Errorf("must update the original mirrored message: %+v", up)
+	}
+	if up.Text != "text first" {
+		t.Errorf("updated text wrong: %q", up.Text)
+	}
+	if len(up.Blocks) != 2 || up.Blocks[1]["type"] != "image" {
+		t.Fatalf("want section+image blocks on the update, got %+v", up.Blocks)
+	}
+
+	// Redelivery of the same update must be a no-op.
+	e.OnLinearEvent(context.Background(), linearRef("d32", "org1"))
+	if len(sl.updates) != 1 {
+		t.Fatalf("redelivered update must not re-sync: %d updates", len(sl.updates))
+	}
+}
+
+// A second update adding another image rebuilds the blocks with BOTH images
+// (the first one's file id comes from mirrored_assets).
+func TestOnLinearEvent_SecondImageKeepsFirstInBlocks(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d33"] = linearCommentPayload("create", "c33", "pics", "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d34"] = linearCommentPayload("update", "c33",
+		"pics\n\n![a.png](https://uploads.linear.app/abc/a.png)", "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d35"] = linearCommentPayload("update", "c33",
+		"pics\n\n![a.png](https://uploads.linear.app/abc/a.png)\n\n![b.png](https://uploads.linear.app/abc/b.png)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C33"}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d33", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d34", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d35", "org1"))
+
+	if len(sl.updates) != 2 {
+		t.Fatalf("want 2 chat.updates, got %d", len(sl.updates))
+	}
+	last := sl.updates[1]
+	if len(last.Blocks) != 3 {
+		t.Fatalf("second update must carry section + both images, got %+v", last.Blocks)
+	}
+	urls := []string{}
+	for _, b := range last.Blocks[1:] {
+		urls = append(urls, fmt.Sprint(b["image_url"]))
+	}
+	if !strings.HasSuffix(urls[0], "/a.png") || !strings.HasSuffix(urls[1], "/b.png") {
+		t.Errorf("block image urls wrong: %v", urls)
 	}
 }

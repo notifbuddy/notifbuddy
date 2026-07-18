@@ -187,6 +187,9 @@ func main() {
 	mux.HandleFunc("GET /integrations/linear/connect", gateBilling(intgSvc.HandleLinearConnect))
 	mux.HandleFunc("GET /integrations/linear/callback", intgSvc.HandleLinearCallback)
 	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
+	// Signed public proxy for private Linear uploads, so Slack can render
+	// mirrored images inline (see LinearAssetProxyURL).
+	mux.HandleFunc("GET /integrations/linear/asset/{token}", intgSvc.HandleLinearAssetProxy)
 	mux.HandleFunc("POST /billing/stripe/webhook", billingSvc.HandleStripeWebhook)
 	mux.HandleFunc("POST /auth/workos/webhook", billingSvc.HandleWorkOSWebhook)
 	// Push-based pub/sub providers (gcp) deliver messages here; the handler

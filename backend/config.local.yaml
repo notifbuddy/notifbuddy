@@ -10,6 +10,11 @@
 
 server:
   addr: ":8080" # listen address
+  # Internet-reachable base URL (your dev tunnel); used for the signed asset
+  # proxy links Slack fetches to render mirrored Linear images. Kept in .env so
+  # personal tunnel hostnames don't land in the repo. Empty just disables
+  # inline image mirroring (logged loudly; the markdown link is kept).
+  public_base_url: "${PUBLIC_BASE_URL}"
 
 logging:
   format: "text" # human-readable for dev; "json" for anything log-shipped
@@ -47,7 +52,8 @@ pubsub:
 slack:
   client_id: "11589880917329.11617102178177" # Slack app client id
   client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
-  # Bot scopes (modeled on Axolo's channel-per-PR app). Trim here + in the README manifest to match what you use.
+  # Bot scopes (modeled on Axolo's channel-per-PR app). Keep in sync with
+  # backend/manifests/slack.local.yaml (the app manifest at api.slack.com).
   scopes:
     - app_mentions:read
     - channels:manage
@@ -57,6 +63,8 @@ slack:
     - groups:history
     - groups:write
     - reactions:write
+    - files:read # download a message's attachments to mirror into Linear
+    - files:write # share mirrored Linear attachments into the channel
     - chat:write
     - chat:write.public
     - chat:write.customize # post as the bot but display a per-message name/avatar (attribution)
