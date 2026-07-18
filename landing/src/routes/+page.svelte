@@ -79,6 +79,13 @@
 		<Logo size={30} />
 		<div class="flex items-center gap-1.5">
 			<a
+				href="https://docs.notifbuddy.com"
+				class="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				rel="noopener"
+			>
+				Docs
+			</a>
+			<a
 				href="https://github.com/notifbuddy/notifbuddy"
 				class="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-9 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none"
 				aria-label="notifbuddy on GitHub"
@@ -192,10 +199,20 @@
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
-		<a
-			class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
-			href="/privacy">privacy</a
-		>
+		<span class="flex items-center gap-4">
+			<a
+				class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+				href="https://docs.notifbuddy.com/changelog">changelog</a
+			>
+			<a
+				class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+				href="https://docs.notifbuddy.com">docs</a
+			>
+			<a
+				class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+				href="/privacy">privacy</a
+			>
+		</span>
 	</footer>
 </div>
 

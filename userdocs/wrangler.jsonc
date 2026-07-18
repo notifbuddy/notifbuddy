@@ -1,0 +1,18 @@
+{
+	// The docs site ships as a Cloudflare Worker with static assets, exactly
+	// like landing/ and frontend/. `wrangler deploy` (iac's docs-deploy.yml)
+	// creates/updates the Worker and uploads the Next.js static export (out/);
+	// infra only attaches the docs.notifbuddy.com custom domain.
+	//
+	// No account_id here — wrangler doesn't interpolate ${VAR} in config, so
+	// the deploy workflow passes CLOUDFLARE_ACCOUNT_ID via the env instead
+	// (same convention as landing/wrangler.jsonc).
+	"name": "notifbuddy-docs",
+	"compatibility_date": "2026-07-01",
+	"assets": {
+		// Next.js static export output. Unmatched paths get the exported
+		// 404.html with a real 404 status.
+		"directory": "./out",
+		"not_found_handling": "404-page"
+	}
+}

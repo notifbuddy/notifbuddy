@@ -7,6 +7,11 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: <Logo />,
     },
+    links: [
+      { text: 'Docs', url: '/', active: 'nested-url' },
+      { text: 'Changelog', url: '/changelog', active: 'nested-url' },
+      { text: 'Dashboard', url: 'https://dashboard.notifbuddy.com', external: true },
+    ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };
 }

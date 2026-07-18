@@ -1,0 +1,17 @@
+---
+title: "Introducing notifbuddy: a Slack channel per Linear issue, synced both ways"
+description: notifbuddy opens a Slack channel for each Linear issue that needs one and mirrors the conversation in both directions — comments, threads, and authorship included.
+date: 2026-07-05
+tags: [launch]
+---
+
+notifbuddy is a two-way bridge between Linear and Slack, built around one idea: **an issue that needs discussion gets its own channel, and the two sides never drift apart.**
+
+## What it does today
+
+- **Channel per issue** — a Slack channel opens automatically when an issue hits the status or condition you choose (or manually, when you ask). Channel names come from a template with the issue's own fields.
+- **Two-way conversation sync** — Linear comments appear in the channel with the author's name and avatar; Slack messages come back as Linear comments, posted with the author's own linked Linear identity when connected. Threads stay threads on both sides.
+- **Team-scoped rules** — each Linear team gets its own config: creation trigger, archive trigger, channel-name template, and members to auto-add. Templates and conditions use GitHub-Actions-style expressions, and you can test them against real events before saving.
+- **Auto-archive** — when the issue reaches the state you consider done, the channel closes itself.
+
+The beta is live at [dashboard.notifbuddy.com](https://dashboard.notifbuddy.com) — connect Linear and Slack, pick a team, and the next issue that qualifies gets its channel.

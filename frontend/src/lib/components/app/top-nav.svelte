@@ -18,6 +18,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import Logo from '$shared/components/logo.svelte';
 	import { cn } from '$lib/utils';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
@@ -134,6 +135,17 @@
 					{link.title}
 				</Button>
 			{/each}
+			<Button
+				href="https://docs.notifbuddy.com"
+				target="_blank"
+				rel="noopener"
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground gap-2"
+			>
+				<BookOpenIcon class="size-4" />
+				Docs
+			</Button>
 		</nav>
 
 		<!-- Profile menu -->
