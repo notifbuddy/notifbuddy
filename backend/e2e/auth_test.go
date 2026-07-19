@@ -5,6 +5,8 @@ package e2e
 import (
 	"net/http"
 	"testing"
+
+	"xolo/backend/e2e/fakeapis/session"
 )
 
 // TestPing_Unauthenticated asserts /ping rejects anonymous callers.
@@ -34,9 +36,8 @@ func TestMe_Unauthenticated(t *testing.T) {
 	requireStatus(t, r, http.StatusUnauthorized)
 }
 
-// TestMe_ReturnsIdentity asserts /me echoes the session's identity + active org.
-// The organizations list may be empty (WorkOS is null-routed) — we only assert
-// the fields that come straight from the session claims.
+// TestMe_ReturnsIdentity asserts /me echoes the session's identity + active
+// org — the whole round-trip through the authd fake.
 func TestMe_ReturnsIdentity(t *testing.T) {
 	s := newSession(t, "user_me_42", "me42@e2e.test", "org_me_42", "member")
 	r := getJSON(t, s, "/me")
@@ -63,14 +64,16 @@ func TestMe_ReturnsIdentity(t *testing.T) {
 	}
 }
 
-// TestMe_TamperedCookie asserts a cookie sealed with the wrong password is
-// rejected (proves the seal is actually validated, not just parsed).
+// TestMe_TamperedCookie asserts a token signed with the wrong secret is
+// rejected (proves the signature is actually validated, not just parsed).
 func TestMe_TamperedCookie(t *testing.T) {
-	bad, err := sealSession("this-is-a-different-cookie-password-000", "u", "e@e.test", "o", "admin")
+	bad, err := session.Mint("this-is-a-different-session-secret-000", session.Identity{
+		UserID: "u", Email: "e@e.test", OrgID: "o", Role: "admin",
+	})
 	if err != nil {
-		t.Fatalf("seal: %v", err)
+		t.Fatalf("mint: %v", err)
 	}
-	s := &session{cookie: bad}
+	s := &forgedSession{cookie: bad}
 	r := getJSON(t, s, "/me")
 	requireStatus(t, r, http.StatusUnauthorized)
 }

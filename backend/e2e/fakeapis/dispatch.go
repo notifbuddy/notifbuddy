@@ -9,7 +9,6 @@ import (
 	"xolo/backend/e2e/fakeapis/github"
 	"xolo/backend/e2e/fakeapis/linear"
 	"xolo/backend/e2e/fakeapis/respond"
-	"xolo/backend/e2e/fakeapis/workos"
 )
 
 // dispatch routes a captured request to the fake for its Host. Add a provider
@@ -21,7 +20,6 @@ type dispatch struct {
 
 func newDispatch() *dispatch {
 	d := &dispatch{byHost: map[string]http.Handler{}}
-	d.byHost[workos.Host] = workos.Handler()
 	// Scaffolds — loud 501 until a real flow needs them.
 	d.byHost[linear.Host] = linear.Handler()
 	d.byHost[github.Host] = github.Handler()

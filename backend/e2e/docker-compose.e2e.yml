@@ -15,15 +15,17 @@
 #   ui    (profile: ui)      — the SvelteKit dashboard Playwright suite, run in a
 #                              browser against the real backend on localhost:8080
 #
-# Outbound SDK traffic (WorkOS today; Linear/GitHub as wired) is captured by
-# fakeapis instead of reaching the internet — the backend keeps using the real
-# SDKs against the real hostnames, we just intercept at the network.
+# Outbound SDK traffic (Linear/GitHub as wired) is captured by fakeapis instead
+# of reaching the internet — the backend keeps using the real SDKs against the
+# real hostnames, we just intercept at the network. authd is first-party, so
+# the backend reaches fakeapis' authd fake directly (AUTHD_BASE_URL), not
+# through the proxy.
 #
-# The forged-session cookie password MUST be identical for backend and tests;
-# both read the same COOKIE_PW anchor below.
+# The session-token secret MUST be identical for fakeapis (verifies) and the
+# tests (forge); both read the same SESSION_SECRET anchor below.
 name: notifbuddy-e2e
 
-x-cookie-pw: &cookie_pw "e2e-cookie-password-0123456789-abcdefgh"
+x-session-secret: &session_secret "e2e-session-secret-0123456789-abcdefgh"
 x-linear-secret: &linear_secret "e2e-linear-webhook-secret"
 
 services:
@@ -49,7 +51,7 @@ services:
       FAKEAPIS_ADDR: ":8888"
       FAKEAPIS_CA_OUT: /certs/ca.pem # backend mounts + trusts this
       FAKEAPIS_SESSION_OUT: /certs/session.json # forged cookie for the UI suite
-      WORKOS_COOKIE_PASSWORD: *cookie_pw # seal the session with the backend's password
+      E2E_SESSION_SECRET: *session_secret # signs the minted session tokens
     volumes:
       - certs:/certs # share the minted CA + session cookie with the others
     healthcheck:
@@ -70,8 +72,7 @@ services:
         condition: service_healthy # CA present before the first outbound call
     environment:
       CONFIG_FILE: /app/config.e2e.yaml
-      WORKOS_API_KEY: e2e-fake-workos-key
-      WORKOS_COOKIE_PASSWORD: *cookie_pw
+      AUTHD_BASE_URL: http://fakeapis:8888 # fakeapis' authd fake (direct; NO_PROXY covers it)
       DATABASE_URL: postgres://notifbuddy:notifbuddy@postgres:5432/notifbuddy?sslmode=disable
       INTEGRATION_ENC_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= # base64 of a fixed 32-byte key
       LINEAR_WEBHOOK_SECRET: *linear_secret
@@ -99,7 +100,7 @@ services:
         condition: service_started
     environment:
       E2E_BASE_URL: http://backend:8080
-      WORKOS_COOKIE_PASSWORD: *cookie_pw
+      E2E_SESSION_SECRET: *session_secret
       LINEAR_WEBHOOK_SECRET: *linear_secret
 
   # Dashboard (SvelteKit SPA) Playwright suite. Behind the "ui" profile.
@@ -109,9 +110,9 @@ services:
   # http://localhost:5173 and the API is http://localhost:8080 — exactly the
   # origins config.e2e.yaml already allows (cors.allow_origin / post_login_url).
   # That makes the SPA→API call cross-origin (CORS handled) but same-site (host
-  # "localhost"), so the forged wos_session cookie is sent. The cookie itself is
-  # read from /certs/session.json, minted by fakeapis with the same password the
-  # backend uses.
+  # "localhost"), so the forged session cookie is sent. The cookie itself is
+  # read from /certs/session.json, minted by fakeapis with the same secret its
+  # authd fake verifies.
   ui:
     profiles: ["ui"]
     build:

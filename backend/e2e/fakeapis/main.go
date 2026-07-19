@@ -1,16 +1,18 @@
 // Command fakeapis is the e2e egress interceptor: a single TLS-terminating
 // forward proxy that captures every outbound call the backend's SDKs make to
-// third-party APIs (WorkOS today; Linear and GitHub as they're wired) and
-// serves them from in-process fakes.
+// third-party APIs (Linear and GitHub as they're wired) and serves them from
+// in-process fakes. It also serves the authd (Better Auth) fake directly over
+// plain HTTP — authd is first-party, so the backend reaches it via
+// auth.base_url rather than through the proxy.
 //
 // Why a proxy and not an SDK base-URL override: the production code keeps
-// calling the real api.workos.com over the real SDK — nothing test-specific
-// leaks into it. The backend container just gets HTTPS_PROXY pointed here plus
-// our CA in its trust store (SSL_CERT_FILE), so the Go SDKs' default transport
+// calling the real hostnames over the real SDKs — nothing test-specific leaks
+// into it. The backend container just gets HTTPS_PROXY pointed here plus our
+// CA in its trust store (SSL_CERT_FILE), so the Go SDKs' default transport
 // (ProxyFromEnvironment) tunnels through us. We MITM the CONNECT with a leaf
 // cert minted on the fly from our own CA, then dispatch by Host to a fake.
 //
-// Expand it by adding a host handler in upstreams.go — no new certs, DNS, or
+// Expand it by adding a host handler in dispatch.go — no new certs, DNS, or
 // app changes.
 package main
 
@@ -23,9 +25,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"xolo/backend/e2e/fakeapis/authd"
 	"xolo/backend/e2e/fakeapis/session"
 )
 
@@ -44,22 +48,27 @@ func main() {
 	}
 	log.Printf("fakeapis: CA written to %s", caOut)
 
-	// Forge the shared signed-in session and publish it onto the same volume, so
-	// the Playwright UI suite can authenticate its browser without a live WorkOS
-	// login. Skipped when no cookie password is provided (backend-only runs).
-	if pw := os.Getenv("WORKOS_COOKIE_PASSWORD"); pw != "" {
-		sessOut := envOr("FAKEAPIS_SESSION_OUT", "/certs/session.json")
-		if err := session.Write(sessOut, pw); err != nil {
-			log.Fatalf("fakeapis: write session to %s: %v", sessOut, err)
-		}
-		log.Printf("fakeapis: session written to %s", sessOut)
+	// The shared e2e secret signs session tokens; the authd fake verifies them.
+	secret := os.Getenv("E2E_SESSION_SECRET")
+	if secret == "" {
+		log.Fatal("fakeapis: E2E_SESSION_SECRET is required")
 	}
 
+	// Mint the shared signed-in session and publish it onto the same volume, so
+	// the Playwright UI suite can authenticate its browser without a live
+	// sign-in.
+	sessOut := envOr("FAKEAPIS_SESSION_OUT", "/certs/session.json")
+	if err := session.Write(sessOut, secret); err != nil {
+		log.Fatalf("fakeapis: write session to %s: %v", sessOut, err)
+	}
+	log.Printf("fakeapis: session written to %s", sessOut)
+
 	mux := newDispatch()
+	authdFake := authd.Handler(secret)
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proxy(ca, mux, w, r) }),
+		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proxy(ca, mux, authdFake, w, r) }),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -81,8 +90,9 @@ func main() {
 }
 
 // proxy is the top-level proxy handler. CONNECT starts a MITM TLS tunnel;
+// /api/auth/* is the first-party authd fake (reached directly, not proxied);
 // anything else is either the healthcheck or a plain-HTTP proxied request.
-func proxy(ca *ca, mux *dispatch, w http.ResponseWriter, r *http.Request) {
+func proxy(ca *ca, mux *dispatch, authdFake http.Handler, w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
 		handleConnect(ca, mux, w, r)
 		return
@@ -90,6 +100,10 @@ func proxy(ca *ca, mux *dispatch, w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/auth/") {
+		authdFake.ServeHTTP(w, r)
 		return
 	}
 	// Plain-HTTP proxied request (target carried in the absolute URL / Host).

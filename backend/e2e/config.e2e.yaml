@@ -2,20 +2,20 @@
 #
 # Runs the real server against a throwaway Postgres inside docker compose with
 # external dependencies either stubbed or intercepted:
-#   - Outbound SDK calls (WorkOS today) go through the fakeapis MITM proxy
-#     (HTTPS_PROXY -> fakeapis, SSL_CERT_FILE -> its CA) and are served by
-#     in-process fakes — the server keeps using the real SDK against the real
-#     hostname. Inbound sessions are still forged offline by the test harness
-#     (sealed cookie + unsigned JWT payload), which is all AuthenticateSession
-#     validates.
+#   - Sessions resolve against the authd fake fakeapis serves over plain HTTP
+#     (auth.base_url below) — tokens are HMAC-signed identity payloads forged
+#     offline by the harness with the shared secret.
+#   - Outbound SDK calls (Linear/GitHub as wired) go through the fakeapis MITM
+#     proxy (HTTPS_PROXY -> fakeapis, SSL_CERT_FILE -> its CA) and are served
+#     by in-process fakes — the server keeps using the real SDK against the
+#     real hostname.
 #   - Slack / Linear / Cloudflare / Stripe secrets are empty => "not configured".
 #   - Linear webhook secret IS set so we can test HMAC verification (401 on a bad
 #     signature, 202 on a good one).
 #   - billing.mode = beta => nothing locks.
 #
 # Secrets come from the environment (docker-compose.e2e.yml sets them). An unset
-# ${VAR} expands to "" (feature disabled) — only the WorkOS essentials are
-# required by config.validate().
+# ${VAR} expands to "" (feature disabled).
 
 server:
   addr: ":8080"

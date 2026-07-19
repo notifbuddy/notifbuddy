@@ -45,7 +45,7 @@ backend:
 
 ```sh
 E2E_BASE_URL=http://localhost:8080 \
-WORKOS_COOKIE_PASSWORD=<the server's cookie password> \
+E2E_SESSION_SECRET=<the fakeapis authd fake's session secret> \
 LINEAR_WEBHOOK_SECRET=<the server's linear webhook secret> \
 go test -tags e2e -count=1 -v ./e2e/...
 ```
@@ -66,29 +66,27 @@ happens at the network:
   CA>`. Go's default SDK transport (`ProxyFromEnvironment`) tunnels every
   outbound HTTPS call through the proxy, which MITMs the `CONNECT` with a leaf
   cert minted on the fly and dispatches by `Host` to a fake.
-- Every captured request is logged (`fakeapis: capture GET api.workos.com/...`).
+- Every captured request is logged (`fakeapis: capture GET api.linear.app/...`).
 
 **Expand it** by registering a `Host` in `fakeapis/dispatch.go` and adding a
-per-host package (`fakeapis/workos`, `fakeapis/linear`, `fakeapis/github`) — no
-new certs, DNS, or app changes. `api.linear.app` and `api.github.com` are already
-registered as loud `501` scaffolds; fill in their handlers when a flow needs
-them.
+per-host package (`fakeapis/linear`, `fakeapis/github`) — no new certs, DNS, or
+app changes. `api.linear.app` and `api.github.com` are already registered as
+loud `501` scaffolds; fill in their handlers when a flow needs them.
 
-The WorkOS fake answers the calls `/me` and the settings pages fan out to: the
-organization-membership list, `GET /organizations/{id}`, and `GET
-/user_management/users/{id}` — all describing one shared e2e org/user (see
-`fakeapis/session`), so `/me` resolves a complete, org-scoped identity.
+### Auth (the authd fake + forged sessions)
 
-### Inbound auth (forged sessions)
+authd (Better Auth) is first-party, so it is NOT reached through the proxy —
+the backend's `auth.base_url` points straight at fakeapis, which serves a
+minimal authd fake (`fakeapis/authd`): `get-session`, `get-active-member`, and
+`organization/list`, with a loud `501` for anything else.
 
-Separately, a WorkOS **session cookie** is a symmetric-sealed blob wrapping an
-**unsigned** JWT whose signature `AuthenticateSession` never verifies (it only
-base64-decodes the payload). So we forge any session offline by sealing a
-hand-built JWT with the same cookie password the server uses. The **Go** suite
-does this per-test (`sealSession` in `harness_test.go`); the **UI** suite reuses
-one identity — `fakeapis` seals it on start into `session.json` on the shared
-volume, and the browser is seeded with that cookie (`frontend/e2e/fixtures.ts`).
-No live WorkOS is required.
+Sessions are stateless: the token is an HMAC-signed identity payload (see
+`fakeapis/session`), so any user/org/role can be forged offline with the shared
+`E2E_SESSION_SECRET` and the fake answers for it without registration. The
+**Go** suite does this per-test (`newSession` in `harness_test.go`); the **UI**
+suite reuses one identity — `fakeapis` mints it on start into `session.json` on
+the shared volume, and the browser is seeded with that cookie
+(`frontend/e2e/fixtures.ts`). No live sign-in is required.
 
 ### Dashboard suite (Playwright)
 
@@ -97,7 +95,7 @@ and serves it on `:5173`. It runs with `network_mode: service:backend`, so from
 the browser's view the SPA is `localhost:5173` and the API is `localhost:8080` —
 exactly the origins `config.e2e.yaml` already allows (`cors.allow_origin` /
 `app.post_login_url`). That makes the SPA→API call cross-origin (CORS is
-exercised) but same-site (host `localhost`), so the forged `wos_session` cookie
+exercised) but same-site (host `localhost`), so the forged session cookie
 is sent on every credentialed fetch. Specs live in `frontend/e2e/`.
 
 ## Coverage

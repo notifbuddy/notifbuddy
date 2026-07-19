@@ -9,16 +9,15 @@
 // it up; run it via backend/e2e/run.sh (docker compose) or point E2E_BASE_URL at
 // a running server. With E2E_BASE_URL unset, TestMain skips the whole package.
 //
-// Authentication: the WorkOS session cookie is a symmetric-sealed blob wrapping
-// an *unsigned* JWT whose signature AuthenticateSession never checks (see
-// parseJWTPayload in the SDK). So the harness forges arbitrary sessions offline
-// by sealing a hand-built JWT with the same cookie password the server uses —
-// no live WorkOS required.
+// Authentication: the backend forwards the request's Cookie header to authd —
+// in this stack, the fake served by fakeapis. Its session token is an
+// HMAC-signed identity payload (see fakeapis/session), so the harness forges
+// arbitrary sessions offline with the same shared secret the fake verifies
+// with — no live sign-in required.
 package e2e
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,13 +26,13 @@ import (
 	"testing"
 	"time"
 
-	workos "github.com/workos/workos-go/v9"
+	"xolo/backend/e2e/fakeapis/session"
 )
 
 var (
-	baseURL        string
-	cookiePassword string
-	linearSecret   string
+	baseURL       string
+	sessionSecret string
+	linearSecret  string
 )
 
 func TestMain(m *testing.M) {
@@ -42,9 +41,9 @@ func TestMain(m *testing.M) {
 		fmt.Println("e2e: E2E_BASE_URL not set — skipping the e2e suite (run via backend/e2e/run.sh)")
 		os.Exit(0)
 	}
-	cookiePassword = os.Getenv("WORKOS_COOKIE_PASSWORD")
-	if cookiePassword == "" {
-		fmt.Println("e2e: WORKOS_COOKIE_PASSWORD not set — cannot forge sessions")
+	sessionSecret = os.Getenv("E2E_SESSION_SECRET")
+	if sessionSecret == "" {
+		fmt.Println("e2e: E2E_SESSION_SECRET not set — cannot forge sessions")
 		os.Exit(1)
 	}
 	linearSecret = os.Getenv("LINEAR_WEBHOOK_SECRET")
@@ -74,46 +73,26 @@ func waitForServer(base string, timeout time.Duration) error {
 	return fmt.Errorf("timed out after %s: %w", timeout, lastErr)
 }
 
-// session identifies a forged caller.
-type session struct {
+// forgedSession identifies a forged caller.
+type forgedSession struct {
 	userID string
 	email  string
 	orgID  string
 	role   string
-	cookie string // sealed wos_session value
+	cookie string // signed session-token value
 }
 
-// newSession forges a sealed session cookie for the given identity. orgID/role
+// newSession forges a signed session token for the given identity. orgID/role
 // may be empty to model a signed-in-but-org-less user.
-func newSession(t *testing.T, userID, email, orgID, role string) *session {
+func newSession(t *testing.T, userID, email, orgID, role string) *forgedSession {
 	t.Helper()
-	cookie, err := sealSession(cookiePassword, userID, email, orgID, role)
+	cookie, err := session.Mint(sessionSecret, session.Identity{
+		UserID: userID, Email: email, OrgID: orgID, Role: role,
+	})
 	if err != nil {
 		t.Fatalf("forge session: %v", err)
 	}
-	return &session{userID: userID, email: email, orgID: orgID, role: role, cookie: cookie}
-}
-
-// sealSession builds the wos_session cookie value the server accepts: a WorkOS
-// SessionData sealed with the cookie password, carrying an unsigned JWT whose
-// payload holds the org/role/exp claims the server reads.
-func sealSession(password, userID, email, orgID, role string) (string, error) {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
-	claims := map[string]any{
-		"sid":    "session_e2e_" + userID,
-		"org_id": orgID,
-		"role":   role,
-		"exp":    time.Now().Add(time.Hour).Unix(),
-	}
-	cb, err := json.Marshal(claims)
-	if err != nil {
-		return "", err
-	}
-	payload := base64.RawURLEncoding.EncodeToString(cb)
-	accessToken := header + "." + payload + ".e2e-unsigned"
-
-	user := &workos.User{ID: userID, Email: email}
-	return workos.SealSessionFromAuthResponse(accessToken, "refresh_e2e", user, nil, password)
+	return &forgedSession{userID: userID, email: email, orgID: orgID, role: role, cookie: cookie}
 }
 
 // response is a decoded HTTP response.
@@ -140,9 +119,9 @@ var noRedirectClient = &http.Client{
 	},
 }
 
-// do issues an HTTP request. Pass a *session for an authenticated call or nil to
+// do issues an HTTP request. Pass a *forgedSession for an authenticated call or nil to
 // stay anonymous. body may be nil, a []byte, or any JSON-marshalable value.
-func do(t *testing.T, sess *session, method, path string, body any, headers map[string]string) *response {
+func do(t *testing.T, sess *forgedSession, method, path string, body any, headers map[string]string) *response {
 	t.Helper()
 
 	var rdr io.Reader
@@ -167,7 +146,7 @@ func do(t *testing.T, sess *session, method, path string, body any, headers map[
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if sess != nil {
-		req.AddCookie(&http.Cookie{Name: "wos_session", Value: sess.cookie})
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: sess.cookie})
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -186,16 +165,16 @@ func do(t *testing.T, sess *session, method, path string, body any, headers map[
 }
 
 // getJSON / postJSON / putJSON / del are thin verb helpers.
-func getJSON(t *testing.T, s *session, path string) *response {
+func getJSON(t *testing.T, s *forgedSession, path string) *response {
 	return do(t, s, http.MethodGet, path, nil, nil)
 }
-func postJSON(t *testing.T, s *session, path string, body any) *response {
+func postJSON(t *testing.T, s *forgedSession, path string, body any) *response {
 	return do(t, s, http.MethodPost, path, body, nil)
 }
-func putJSON(t *testing.T, s *session, path string, body any) *response {
+func putJSON(t *testing.T, s *forgedSession, path string, body any) *response {
 	return do(t, s, http.MethodPut, path, body, nil)
 }
-func del(t *testing.T, s *session, path string) *response {
+func del(t *testing.T, s *forgedSession, path string) *response {
 	return do(t, s, http.MethodDelete, path, nil, nil)
 }
 
