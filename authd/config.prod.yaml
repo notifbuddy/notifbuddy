@@ -1,0 +1,30 @@
+# PRODUCTION authd configuration. Same shape as config.local.yaml; sensitive
+# values reference env vars (`${VAR}`), resolved at startup — a referenced-
+# but-unset variable is a hard error. Select this file with
+# CONFIG_FILE=config.prod.yaml (the Docker image / Cloud Run sets this).
+
+server:
+  port: 8787 # Cloud Run injects PORT; the PORT env wins when set
+
+auth:
+  base_url: "https://auth.notifbuddy.com"
+  secret: "${BETTER_AUTH_SECRET}" # SECRET — Infisical prod
+  cookie_domain: ".notifbuddy.com" # api.* must see the session cookie
+
+database:
+  url: "${DATABASE_URL}" # injected by infra from the Neon connection string
+
+cors:
+  trusted_origins:
+    - "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")
+
+github:
+  # Prod GitHub OAuth app; callback https://auth.notifbuddy.com/api/auth/callback/github
+  client_id: "${GITHUB_CLIENT_ID}"
+  client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
+
+email:
+  resend_api_key: "${RESEND_API_KEY}" # SECRET
+  # DMARC on the zone uses strict alignment: mail MUST come from the Resend
+  # sending domain notifications.notifbuddy.com, not the bare zone.
+  from: "notifbuddy <auth@notifications.notifbuddy.com>"

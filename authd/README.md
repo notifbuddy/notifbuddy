@@ -24,7 +24,12 @@ browser's cookie.
 
 ## Configuration
 
-See `.env.example`. GitHub OAuth is the only sign-in method — both
-`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are required. Resend email is an
-optional pair — set both variables or neither; half a pair fails loudly at
-boot.
+Same pattern as the backend: non-sensitive settings live in a committed YAML
+file (`config.local.yaml` by default, `config.prod.yaml` in the Docker image;
+override with `CONFIG_FILE`), and SENSITIVE values reference env vars with
+`${VAR}` — resolved at startup, referenced-but-unset is a hard error. `.env`
+holds only those secrets (see `.env.example`).
+
+GitHub OAuth is the only sign-in method — `github.client_id`/`client_secret`
+are required. Resend email is optional: an empty `email.resend_api_key` sends
+invitation mail to the console (dev sink).

@@ -2,32 +2,20 @@
 // organizations, memberships, and invitations, in our own Postgres (local pg
 // in dev, Neon in prod). The service is fully request-driven: no daemons, no
 // cron — safe to scale to zero (NOT-20).
+//
+// All settings come from config.ts (YAML + ${VAR} env refs); required values
+// are validated there at load, so this module can use them unconditionally.
 import { betterAuth } from 'better-auth';
 import { organization } from 'better-auth/plugins';
 import pg from 'pg';
+import { config } from './config.ts';
 import { sendEmail } from './email.ts';
 
-const {
-	DATABASE_URL,
-	BETTER_AUTH_URL,
-	GITHUB_CLIENT_ID,
-	GITHUB_CLIENT_SECRET,
-	TRUSTED_ORIGINS,
-	COOKIE_DOMAIN,
-} = process.env;
-
-if (!DATABASE_URL) throw new Error('authd: DATABASE_URL is required');
-
-const pool = new pg.Pool({ connectionString: DATABASE_URL });
-
-// GitHub is the only sign-in method — no email/password. Missing creds is a
-// loud startup error, never a silent auth-less service.
-if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
-	throw new Error('authd: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required');
-}
+const pool = new pg.Pool({ connectionString: config.database.url });
 
 export const auth = betterAuth({
-	baseURL: BETTER_AUTH_URL ?? 'http://localhost:8787',
+	baseURL: config.auth.base_url,
+	secret: config.auth.secret,
 	database: pool,
 
 	// activeOrganizationId is per-session and starts null — without this hook a
@@ -48,17 +36,18 @@ export const auth = betterAuth({
 		},
 	},
 
+	// GitHub is the only sign-in method — no email/password.
 	socialProviders: {
 		github: {
-			clientId: GITHUB_CLIENT_ID,
-			clientSecret: GITHUB_CLIENT_SECRET,
+			clientId: config.github.client_id,
+			clientSecret: config.github.client_secret,
 		},
 	},
 
 	plugins: [
 		organization({
 			sendInvitationEmail: async ({ email, inviter, organization: org, invitation }) => {
-				const url = `${BETTER_AUTH_URL}/accept-invitation/${invitation.id}`;
+				const url = `${config.auth.base_url}/accept-invitation/${invitation.id}`;
 				await sendEmail({
 					to: email,
 					subject: `${inviter.user.name || inviter.user.email} invited you to ${org.name} on notifbuddy`,
@@ -78,14 +67,14 @@ export const auth = betterAuth({
 
 	// SPA at a sibling origin (dashboard.<zone> / localhost:5173) calls us
 	// directly, so its origin must be trusted for CSRF.
-	trustedOrigins: (TRUSTED_ORIGINS ?? 'http://localhost:5173').split(','),
+	trustedOrigins: config.cors.trusted_origins,
 
 	advanced: {
-		...(COOKIE_DOMAIN
+		...(config.auth.cookie_domain
 			? {
 					crossSubDomainCookies: {
 						enabled: true,
-						domain: COOKIE_DOMAIN, // ".notifbuddy.com" in prod: api.* must see the session
+						domain: config.auth.cookie_domain, // ".notifbuddy.com" in prod: api.* must see the session
 					},
 				}
 			: {}),

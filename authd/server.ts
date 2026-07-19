@@ -4,14 +4,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth.ts';
+import { config } from './config.ts';
 
-const port = Number(process.env.PORT ?? 8787);
+// Cloud Run's PORT contract wins over the configured port.
+const port = Number(process.env.PORT ?? config.server.port);
 const handler = toNodeHandler(auth);
 
 // CORS for the SPA: Better Auth's trustedOrigins handles CSRF, not CORS —
 // browser calls from the dashboard origin still need the headers (with
 // credentials, so the origin is echoed, never *).
-const trustedOrigins = (process.env.TRUSTED_ORIGINS ?? 'http://localhost:5173').split(',');
+const trustedOrigins = config.cors.trusted_origins;
 
 function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
 	const origin = req.headers.origin;
