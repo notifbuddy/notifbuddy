@@ -6,8 +6,15 @@ name: Release → GHCR (self-host images)
 # publish-images.yml and deploy straight to our prod, but self-hosters should
 # only ever move when we cut a version. Nothing here touches prod.
 #
-# Images land at ghcr.io/notifbuddy/{backend,authd,dashboard}, tagged with the
-# full version, the major.minor series, and latest.
+# Images land at ghcr.io/notifbuddy/{backend,authd,dashboard} as amd64 + arm64
+# manifest lists, tagged with the full version, the major.minor series, and
+# latest.
+#
+# Each architecture builds on its own native runner (arm64 on GitHub's
+# ubuntu-24.04-arm, free for public repos) rather than under QEMU, then a
+# second job stitches the per-arch digests into one manifest list. Emulated
+# arm64 builds are slow enough to dominate the release, and authd's npm
+# install is exactly the kind of work QEMU is worst at.
 #
 # NOTE: a GHCR package is private on first publish. Each of the three has to be
 # flipped to public once, by hand, in the org's package settings — otherwise
@@ -23,35 +30,96 @@ permissions:
 
 concurrency: release-${{ github.ref }}
 
+env:
+  REGISTRY: ghcr.io/notifbuddy
+
 jobs:
-  images:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        image: [backend, authd, dashboard]
+        arch: [amd64, arm64]
+        # These entries carry no new combinations — they just attach the
+        # per-image build inputs and the per-arch runner to the six jobs above.
         include:
-          - name: backend
+          - image: backend
             context: backend
             dockerfile: backend/Dockerfile
-          - name: authd
+          - image: authd
             context: authd
             dockerfile: authd/Dockerfile
           # The SPA build needs frontend/ and the repo-root shared/, so this
           # one builds from the repo root.
-          - name: dashboard
+          - image: dashboard
             context: .
             dockerfile: frontend/Dockerfile
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-
-      # arm64 matters here in a way it doesn't for Cloud Run: self-hosters run
-      # on Graviton, Ampere and the like. The Go build cross-compiles natively
-      # (see backend/Dockerfile); the SPA build is architecture-independent and
-      # pinned to the build platform; only authd's npm install runs emulated,
-      # and its dependencies are pure JavaScript.
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.image }}
+
+      # Pushed by digest with no tag: tagging happens once, in the manifest job,
+      # so a half-finished release never leaves :latest pointing at one arch.
+      - name: Build ${{ matrix.image }} (${{ matrix.arch }})
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      # Hand the digest to the manifest job as an empty file named after it.
+      # The "sha256:" prefix is stripped because upload-artifact rejects a
+      # colon in a path; the manifest job puts it back.
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, authd, dashboard]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -62,20 +130,31 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/notifbuddy/${{ matrix.name }}
+          images: ${{ env.REGISTRY }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
-      - name: Build + push ${{ matrix.name }}
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create manifest list
+        working-directory: /tmp/digests
+        run: |
+          # Both substitutions are meant to split into separate arguments:
+          # one -t per tag, one image@digest per architecture.
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ matrix.image }}@sha256:%s ' *)
+
+      # Fails the release if the list didn't come out with both architectures.
+      - name: Verify both architectures are present
+        run: |
+          ref="${{ env.REGISTRY }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}"
+          docker buildx imagetools inspect "$ref"
+          for want in linux/amd64 linux/arm64; do
+            docker buildx imagetools inspect "$ref" --raw \
+              | jq -e --arg w "$want" \
+                  '[.manifests[] | select(.platform) | "\(.platform.os)/\(.platform.architecture)"] | index($w)' \
+                  >/dev/null \
+              || { echo "::error::$ref is missing $want"; exit 1; }
+          done
