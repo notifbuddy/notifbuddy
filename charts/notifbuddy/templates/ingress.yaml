@@ -1,0 +1,59 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "notifbuddy.fullname" . }}
+{{- $dashboard := include "notifbuddy.host.dashboard" . }}
+{{- $api := include "notifbuddy.host.api" . }}
+{{- $auth := include "notifbuddy.host.auth" . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $dashboard | quote }}
+        - {{ $api | quote }}
+        - {{ $auth | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" $fullname) | quote }}
+  {{- end }}
+  rules:
+    - host: {{ $dashboard | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-dashboard
+                port:
+                  number: 8080
+    - host: {{ $api | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-backend
+                port:
+                  number: 8080
+    - host: {{ $auth | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-authd
+                port:
+                  number: 8787
+{{- end }}

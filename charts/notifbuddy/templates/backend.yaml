@@ -1,0 +1,93 @@
+{{- $fullname := include "notifbuddy.fullname" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-backend
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+  selector:
+    {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-backend
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notifbuddy.podLabels" (dict "ctx" . "component" "backend") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-backend.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "notifbuddy.image" (dict "ctx" . "name" "backend") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The whole Secret: the config references secrets as ${VAR}, and
+          # which ones exist depends on the integrations that are enabled.
+          # Anything the config does not reference is simply unused.
+          envFrom:
+            - secretRef:
+                name: {{ include "notifbuddy.secretName" . }}
+          env:
+            - name: CONFIG_FILE
+              value: /config/config.yaml
+          ports:
+            - name: http
+              containerPort: 8080
+          # TCP rather than HTTP: the API has no unauthenticated health route
+          # (/ping requires a session and answers 401), so an httpGet probe
+          # would read a healthy server as failing. The server binds only
+          # after config validation and schema migration, so "accepting
+          # connections" is still a meaningful readiness signal.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-backend
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

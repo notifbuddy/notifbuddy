@@ -1,0 +1,108 @@
+{{- $api := include "notifbuddy.host.api" . -}}
+{{- $dashboard := include "notifbuddy.host.dashboard" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "notifbuddy.fullname" . }}-backend
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+data:
+  # Same shape as the config.yaml in the repo. Secrets stay out of here: they
+  # are ${VAR} references resolved from the environment at startup, and an
+  # unset reference is a hard error rather than a silent empty value.
+  config.yaml: |
+    server:
+      addr: ":8080"
+      public_base_url: "https://{{ $api }}"
+
+    logging:
+      format: {{ .Values.logging.format | quote }}
+      level: {{ .Values.logging.level | quote }}
+      # Log shipping to Axiom is ours, not something a self-host install
+      # should be pointed at. Everything goes to stdout.
+      axiom_enabled: false
+
+    cors:
+      allow_origin: "https://{{ $dashboard }}"
+
+    auth:
+      # In-cluster: session validation is a server-to-server call, so it does
+      # not need to leave the cluster or resolve the public hostname.
+      base_url: "http://{{ include "notifbuddy.fullname" . }}-authd:8787"
+
+    app:
+      post_login_url: "https://{{ $dashboard }}"
+      insecure_cookies: false
+
+    database:
+      url: "${DATABASE_URL}"
+
+    encryption:
+      # Cloud KMS is GCP-only; self-hosted installs seal integration tokens
+      # with a local AES-GCM key from the Secret.
+      provider: "local"
+      local_key: "${INTEGRATION_ENC_KEY}"
+      kms_key_id: ""
+
+    pubsub:
+      # Events ride on the application database (watermill). The GCP Pub/Sub
+      # provider is for our own deployment and needs GCP credentials.
+      provider: "postgres"
+      postgres:
+        poll_interval: "1s"
+        log_events: false
+
+    {{- if .Values.integrations.slack.enabled }}
+    slack:
+      client_id: {{ .Values.integrations.slack.clientId | quote }}
+      client_secret: "${SLACK_CLIENT_SECRET}"
+      scopes:
+        - app_mentions:read
+        - channels:manage
+        - channels:history
+        - channels:read
+        - commands
+        - groups:history
+        - groups:write
+        - reactions:write
+        - files:read
+        - files:write
+        - chat:write
+        - chat:write.public
+        - chat:write.customize
+        - im:history
+        - im:read
+        - im:write
+        - users:read
+        - users:read.email
+        - reactions:read
+        - emoji:read
+      user_scopes:
+        - chat:write
+        - channels:write
+      callback_url: "https://{{ $api }}/integrations/slack/callback"
+      signing_secret: "${SLACK_SIGNING_SECRET}"
+    {{- end }}
+
+    {{- if .Values.integrations.linear.enabled }}
+    linear:
+      client_id: {{ .Values.integrations.linear.clientId | quote }}
+      client_secret: "${LINEAR_CLIENT_SECRET}"
+      scopes:
+        - read
+        - write
+      callback_url: "https://{{ $api }}/integrations/linear/callback"
+      webhook_secret: "${LINEAR_WEBHOOK_SECRET}"
+    {{- end }}
+
+    {{- if .Values.integrations.cloudflare.enabled }}
+    cloudflare:
+      account_id: {{ .Values.integrations.cloudflare.accountId | quote }}
+      api_token: "${CF_API_TOKEN}"
+      model: {{ .Values.integrations.cloudflare.model | quote }}
+    {{- end }}
+
+    billing:
+      # Billing is ours; self-hosted installs get every feature with no plan
+      # gating and no Stripe.
+      mode: "beta"

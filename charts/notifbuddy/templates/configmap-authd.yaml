@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "notifbuddy.fullname" . }}-authd
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      port: 8787
+
+    auth:
+      # Public URL: this one is browser-facing (OAuth redirects come back to
+      # it), so unlike the backend's it cannot be the in-cluster address.
+      base_url: "https://{{ include "notifbuddy.host.auth" . }}"
+      secret: "${BETTER_AUTH_SECRET}"
+      # Parent of all three hostnames, so the dashboard and API both see the
+      # session cookie this service sets.
+      cookie_domain: {{ include "notifbuddy.cookieDomain" . | quote }}
+
+    database:
+      url: "${DATABASE_URL}"
+
+    cors:
+      trusted_origins:
+        - "https://{{ include "notifbuddy.host.dashboard" . }}"
+
+    github:
+      client_id: {{ required "notifbuddy: set `github.clientId` — GitHub OAuth is the only sign-in method" .Values.github.clientId | quote }}
+      client_secret: "${GITHUB_CLIENT_SECRET}"
+
+    email:
+    {{- if .Values.integrations.email.enabled }}
+      resend_api_key: "${RESEND_API_KEY}"
+      from: {{ required "notifbuddy: set `integrations.email.from` when email is enabled" .Values.integrations.email.from | quote }}
+    {{- else }}
+      # No key: organisation invitations are logged by this service rather
+      # than emailed. Invite links still work if you copy them out of the log.
+      resend_api_key: ""
+      from: ""
+    {{- end }}

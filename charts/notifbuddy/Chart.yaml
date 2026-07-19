@@ -1,0 +1,36 @@
+apiVersion: v2
+name: notifbuddy
+description: Slack channels for your Linear issues — self-hosted.
+type: application
+
+# version is the chart's own version; appVersion is the image tag it deploys.
+# Both move when we cut a release. appVersion carries the leading "v" so the
+# git tag, the published image tag and this string are all identical.
+version: 0.1.0
+appVersion: "v0.1.0-beta"
+
+home: https://notifbuddy.com
+sources:
+  - https://github.com/notifbuddy/notifbuddy
+icon: https://notifbuddy.com/apple-touch-icon.png
+
+keywords:
+  - slack
+  - linear
+  - notifications
+  - developer-tools
+
+maintainers:
+  - name: notifbuddy
+    url: https://github.com/notifbuddy
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/images: |
+    - name: backend
+      image: ghcr.io/notifbuddy/backend:v0.1.0-beta
+    - name: authd
+      image: ghcr.io/notifbuddy/authd:v0.1.0-beta
+    - name: dashboard
+      image: ghcr.io/notifbuddy/dashboard:v0.1.0-beta
