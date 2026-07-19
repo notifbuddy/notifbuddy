@@ -2,9 +2,8 @@
 // set literally in a committed YAML file, SENSITIVE values reference an env
 // var with `${VAR}` (or `$VAR`), resolved at startup — a referenced-but-unset
 // variable is a hard error. Select the file with CONFIG_FILE (default:
-// config.local.yaml next to this module).
+// config.local.yaml in the working directory — run from authd/).
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 export interface Config {
@@ -36,8 +35,7 @@ function resolveEnvRefs(value: unknown): unknown {
 	return value;
 }
 
-const file =
-	process.env.CONFIG_FILE ?? fileURLToPath(new URL('./config.local.yaml', import.meta.url));
+const file = process.env.CONFIG_FILE ?? 'config.local.yaml';
 
 export const config = resolveEnvRefs(parse(readFileSync(file, 'utf8'))) as Config;
 
