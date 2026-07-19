@@ -1,14 +1,22 @@
 # --- build -----------------------------------------------------------------
-FROM golang:1.25.8-alpine AS build
+# Pinned to the build platform and cross-compiled below: the self-host release
+# publishes arm64 too, and Go cross-compiles in seconds where emulating the
+# whole toolchain under QEMU takes minutes. Both are no-ops for a plain
+# single-platform `docker build`.
+FROM --platform=$BUILDPLATFORM golang:1.25.8-alpine AS build
 WORKDIR /src
 
 # Cache deps first.
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Build a static binary (no cgo) for a minimal runtime image.
+# Build a static binary (no cgo) for a minimal runtime image. TARGETOS/TARGETARCH
+# are supplied by buildx and default to the build platform when unset.
+ARG TARGETOS
+ARG TARGETARCH
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+	go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 # --- runtime ---------------------------------------------------------------
 FROM alpine:3.20
