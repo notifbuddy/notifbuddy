@@ -31,7 +31,7 @@ import (
 
 func main() {
 	// Best-effort load of backend/.env so the env vars referenced by the config
-	// (e.g. $WORKOS_API_KEY) are present without any shell setup. Real env vars
+	// (e.g. $SLACK_CLIENT_SECRET) are present without any shell setup. Real env vars
 	// already set take precedence; a missing file is not an error.
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		slog.Warn("could not load .env; relying on real environment", "error", err)
@@ -80,7 +80,7 @@ func main() {
 		fatal("encryption", err)
 	}
 
-	// Auth (WorkOS): redirect handlers + the session-loading middleware.
+	// Auth (authd): the session-resolving middleware + org/member proxying.
 	authSvc := auth.New(cfg)
 
 	// Pub/sub: the provider-agnostic eventing bus (postgres/watermill or GCP
@@ -104,7 +104,10 @@ func main() {
 	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
 
 	// Billing (Stripe): 21-day trials + per-seat Pro subscriptions. Seat counts
-	// come from WorkOS org memberships via the auth service. Runs with a nil
+	// come from authd org memberships via the auth service. NB: the member list
+	// is cookie-scoped — background renewals can't resolve it and leave the
+	// stored seat count unchanged (fine while billing.mode=beta; a service-level
+	// seat source is part of the NOT-20 follow-up). Runs with a nil
 	// store when no DB is configured, reporting "not configured".
 	billingSvc := billing.New(st, cfg, func(ctx context.Context, orgID string) (int, error) {
 		members, err := authSvc.ListOrganizationMembers(ctx, orgID, 200)
@@ -177,10 +180,10 @@ func main() {
 		}
 	}
 
+	// Login, logout, and OAuth callbacks live in authd (the Better Auth
+	// service) — the SPA talks to it directly; this backend only validates
+	// the resulting session cookie via the auth middleware.
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /auth/login", authSvc.HandleLogin)
-	mux.HandleFunc("GET /auth/callback", authSvc.HandleCallback)
-	mux.HandleFunc("GET /auth/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /integrations/slack/connect", gateBilling(intgSvc.HandleSlackConnect))
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
 	mux.HandleFunc("POST /integrations/slack/webhook", intgSvc.HandleSlackWebhook)
@@ -191,7 +194,6 @@ func main() {
 	// mirrored images inline (see LinearAssetProxyURL).
 	mux.HandleFunc("GET /integrations/linear/asset/{token}", intgSvc.HandleLinearAssetProxy)
 	mux.HandleFunc("POST /billing/stripe/webhook", billingSvc.HandleStripeWebhook)
-	mux.HandleFunc("POST /auth/workos/webhook", billingSvc.HandleWorkOSWebhook)
 	// Push-based pub/sub providers (gcp) deliver messages here; the handler
 	// does its own OIDC auth, like the provider webhooks above do signatures.
 	if bus != nil {

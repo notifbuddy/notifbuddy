@@ -1,72 +1,55 @@
+// Package auth validates sessions and manages organizations against authd,
+// the Better Auth service (authd/ in this repo). The browser talks to authd
+// directly for sign-in/sign-up/logout; this package's job is (a) resolving
+// the request's session user from the forwarded cookie and (b) proxying
+// org/member/invitation operations, always on behalf of the caller — every
+// authd call carries the caller's own cookie, never a service credential.
 package auth
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"sync"
 	"time"
-
-	workos "github.com/workos/workos-go/v9"
 
 	"xolo/backend/internal/config"
 )
 
-// sessionCookieName is the name of the HttpOnly cookie holding the sealed
-// WorkOS session (access token + refresh token + user, encrypted with the
-// cookie password). The browser never sees its contents.
-const sessionCookieName = "wos_session"
-
-// pendingCookieName holds the WorkOS pending_authentication_token (sealed) while
-// the user completes email verification. It is short-lived and cleared once
-// verification succeeds.
-const pendingCookieName = "wos_pending"
-
-// pendingCookieMaxAge bounds how long a half-finished verification can sit
-// around. WorkOS pending tokens are short-lived anyway; this just caps the
-// cookie.
-const pendingCookieMaxAge = 15 * 60 // seconds
-
-// orgSelectCookieName holds the sealed org-selection state (pending token + the
-// organizations the user may choose between) while they pick an organization.
-const orgSelectCookieName = "wos_org_select"
-
-// OrgChoice is one selectable organization, surfaced to the SPA's picker.
-type OrgChoice struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// orgSelectState is sealed into the org-selection cookie: the WorkOS pending
-// token plus the organizations to choose from.
-type orgSelectState struct {
-	PendingToken  string      `json:"pending_token"`
-	Organizations []OrgChoice `json:"organizations"`
-}
-
-// Service holds everything the auth flow needs, resolved once at startup.
+// Service talks to authd. Safe for concurrent use.
 type Service struct {
-	client         *workos.Client
-	redirectURI    string // WORKOS_REDIRECT_URI — must match the dashboard
-	cookiePassword string // ≥32 chars; seals/unseals the session cookie
-	postLoginURL   string // where to send the browser after a successful login
-	secureCookies  bool   // Secure flag on the session cookie (off only for plain-HTTP testing)
-	// loginProvider, when set, sends the user straight to a specific AuthKit
-	// provider (e.g. "GitHubOAuth") instead of rendering AuthKit's method
-	// selector. Required when only a single social connection is enabled, since
-	// the bare authorize endpoint otherwise can't resolve a connection. Empty
-	// means "let AuthKit show its hosted selector".
-	loginProvider string
+	baseURL      string // authd base URL, e.g. http://localhost:8787
+	hc           *http.Client
+	postLoginURL string
+
+	// Session cache: get-session (+ active-member) per request would double
+	// every API call's latency, so resolved users are cached briefly, keyed by
+	// a hash of the Cookie header. 60s keeps revocation lag negligible.
+	mu    sync.Mutex
+	cache map[string]cachedUser
 }
 
-// ctxKey is an unexported context key type so our session value can't collide
-// with anything else stored in the request context.
-type ctxKey struct{}
+type cachedUser struct {
+	user *SessionUser
+	exp  time.Time
+}
 
-// httpCtxKey keys the raw HTTP writer/request pair in the context. Some ogen
-// handlers (VerifyEmail) need to read a cookie and set the session cookie, but
-// ogen only hands handlers a context — so WithSession stashes the HTTP objects
-// here for those handlers to retrieve via HTTPFromContext.
+const sessionCacheTTL = 60 * time.Second
+
+// ctxKey / httpCtxKey mirror the previous WorkOS implementation: WithSession
+// stashes the resolved user and the raw HTTP pair for ogen handlers.
+type ctxKey struct{}
 type httpCtxKey struct{}
 
 // HTTPPair bundles the writer and request for handlers that need raw HTTP access.
@@ -76,341 +59,168 @@ type HTTPPair struct {
 }
 
 // SessionUser is the minimal user info the JSON handlers need. It is nil in the
-// context when the request is unauthenticated. OrgID/Role describe the
-// organization the current session is scoped to (empty when the user has no
-// active organization).
+// context when the request is unauthenticated. OrgID/Role describe the active
+// organization (empty when the user has none).
 type SessionUser struct {
 	ID                string
 	Email             string
 	FirstName         string
 	LastName          string
-	ProfilePictureURL string // GitHub avatar for GitHub logins; WorkOS captures it at sign-in
+	ProfilePictureURL string
 	OrgID             string
 	Role              string
 }
 
-// New builds the WorkOS client from the loaded Config. Secret fields
-// (API key, cookie password) have already been resolved from their env
-// references during config load.
+// Role slugs the product recognizes (Better Auth org plugin defaults, plus
+// viewer kept for API compatibility).
+const (
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+	RoleViewer = "viewer"
+	// roleOwner is Better Auth's creator role; surfaced as admin-equivalent.
+	roleOwner = "owner"
+)
+
+// Errors mirrored from the previous implementation; handlers map them to
+// status codes.
+var (
+	ErrMembershipNotFound = errors.New("organization membership not found")
+	ErrOwnRole            = errors.New("cannot change your own role")
+	ErrInvitationNotFound = errors.New("invitation not found")
+)
+
+// UserMessageError wraps an authd-provided message that is safe to show to the
+// end user.
+type UserMessageError struct{ Msg string }
+
+func (e UserMessageError) Error() string { return e.Msg }
+
+// New builds the authd client from the loaded Config.
 func New(cfg config.Config) *Service {
 	return &Service{
-		client:         workos.NewClient(cfg.WorkOS.APIKey, workos.WithClientID(cfg.WorkOS.ClientID)),
-		redirectURI:    cfg.WorkOS.RedirectURI,
-		cookiePassword: cfg.WorkOS.CookiePassword,
-		postLoginURL:   cfg.App.PostLoginURL,
-		// Secure cookies work over http://localhost (browsers exempt localhost),
-		// so we keep them on unless app.insecure_cookies is set (only needed for
-		// plain-HTTP testing on a non-localhost host).
-		secureCookies: !cfg.App.InsecureCookies,
-		loginProvider: cfg.WorkOS.LoginProvider,
+		baseURL:      strings.TrimRight(cfg.Auth.BaseURL, "/"),
+		hc:           &http.Client{Timeout: 10 * time.Second},
+		postLoginURL: cfg.App.PostLoginURL,
+		cache:        map[string]cachedUser{},
 	}
 }
 
-// HandleLogin redirects the browser to the WorkOS AuthKit hosted login page.
-// AuthKit owns the login screen (email/password, social, SSO — configured in
-// the WorkOS dashboard); we only kick off the flow.
-func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	params := workos.AuthKitAuthorizationURLParams{
-		RedirectURI: a.redirectURI,
-	}
-	// Send the user straight to a specific provider (e.g. GitHub) when
-	// configured, instead of AuthKit's selector.
-	if a.loginProvider != "" {
-		params.Provider = &a.loginProvider
-	}
-	// Accept-on-login: if the user came from an Invitation link, carry the token
-	// through AuthKit's `state` so it round-trips to our callback, which feeds it
-	// into AuthenticateWithCode to attach the invited organization.
-	if invToken := r.URL.Query().Get("invitation_token"); invToken != "" {
-		params.State = &invToken
-	}
-	url, err := a.client.GetAuthKitAuthorizationURL(params)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "auth: build authorization URL failed", "error", err)
-		http.Error(w, "failed to start login", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, url, http.StatusFound)
-}
+// --- session middleware ------------------------------------------------------
 
-// HandleCallback is the WORKOS_REDIRECT_URI target. AuthKit redirects here with
-// a `code` query param after the user signs in. We exchange it for tokens, seal
-// them into the session cookie, and bounce the browser back to the SPA.
-func (a *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		// AuthKit returns error/error_description on failure (e.g. user cancelled).
-		if e := r.URL.Query().Get("error"); e != "" {
-			slog.WarnContext(r.Context(), "auth: callback error", "error", e, "error_description", r.URL.Query().Get("error_description"))
-		}
-		http.Error(w, "missing authorization code", http.StatusBadRequest)
-		return
-	}
-
-	params := &workos.UserManagementAuthenticateWithCodeParams{Code: code}
-	// Accept-on-login: the Invitation token arrives either directly as
-	// ?invitation_token= (WorkOS Invitation links) or echoed back in ?state=
-	// (when we kicked off login via /auth/login?invitation_token=). Either way,
-	// passing it attaches the new session to the invited organization.
-	if invToken := r.URL.Query().Get("invitation_token"); invToken != "" {
-		params.InvitationToken = &invToken
-	} else if state := r.URL.Query().Get("state"); state != "" {
-		params.InvitationToken = &state
-	}
-
-	resp, err := a.client.UserManagement().AuthenticateWithCode(r.Context(), params)
-	if err != nil {
-		// Expected branches that need extra steps rather than a hard failure.
-		var emailErr *workos.EmailVerificationRequiredError
-		if errors.As(err, &emailErr) {
-			// GitHub OAuth users land unverified: WorkOS emails a code.
-			a.startEmailVerification(w, r, emailErr.PendingAuthenticationToken)
-			return
-		}
-		var orgErr *workos.OrganizationSelectionRequiredError
-		if errors.As(err, &orgErr) {
-			// User belongs to multiple orgs and must choose one.
-			a.startOrgSelection(w, r, orgErr.PendingAuthenticationToken, orgErr.Organizations)
-			return
-		}
-		// Any other error: log the structured details and fail.
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) {
-			slog.ErrorContext(r.Context(), "auth: exchange code failed",
-				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message,
-				"error_code", apiErr.ErrorCode, "error_description", apiErr.ErrorDescription,
-				"request_id", apiErr.RequestID, "body", apiErr.RawBody)
-		} else {
-			slog.ErrorContext(r.Context(), "auth: exchange code failed", "error", err)
-		}
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
-		return
-	}
-
-	if _, err := a.establishSession(w, resp); err != nil {
-		http.Error(w, "failed to create session", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, a.postLoginURL, http.StatusFound)
-}
-
-// startEmailVerification seals the pending authentication token into a
-// short-lived cookie and redirects the browser to the SPA with ?verify=1 so it
-// shows the code-entry step. WorkOS has already emailed the code.
-func (a *Service) startEmailVerification(w http.ResponseWriter, r *http.Request, pendingToken string) {
-	if pendingToken == "" {
-		slog.ErrorContext(r.Context(), "auth: email_verification_required but no pending token returned")
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
-		return
-	}
-	sealed, err := workos.Seal(pendingToken, a.cookiePassword)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "auth: seal pending token failed", "error", err)
-		http.Error(w, "failed to start verification", http.StatusInternalServerError)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     pendingCookieName,
-		Value:    sealed,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   pendingCookieMaxAge,
-	})
-	http.Redirect(w, r, a.postLoginURL+"/?verify=1", http.StatusFound)
-}
-
-// establishSession seals an authenticated WorkOS response into the session
-// cookie and returns the resulting session user (with org/role derived from the
-// new token's claims). Shared by the OAuth callback, email-verification, and
-// org-selection completions. It only sets the cookie and returns an error; the
-// caller decides how to report failure (redirect vs. JSON), so this never
-// writes to w on error.
-func (a *Service) establishSession(w http.ResponseWriter, resp *workos.AuthenticateResponse) (*SessionUser, error) {
-	sealed, err := workos.SealSessionFromAuthResponse(
-		resp.AccessToken, resp.RefreshToken, resp.User, resp.Impersonator, a.cookiePassword)
-	if err != nil {
-		slog.Error("auth: seal session failed", "error", err)
-		return nil, err
-	}
-	a.setSessionCookie(w, sealed)
-
-	// Derive org_id/role from the freshly issued token's claims by reading back
-	// the sealed session — keeps org/role extraction in one place.
-	su := toSessionUser(resp.User, deref(resp.OrganizationID), "")
-	if reauth, err := workos.AuthenticateSession(sealed, a.cookiePassword); err == nil && reauth.Authenticated && su != nil {
-		su.OrgID = reauth.OrganizationID
-		su.Role = reauth.Role
-	}
-	return su, nil
-}
-
-// CompleteEmailVerification finishes a login that was gated on email
-// verification. It reads the sealed pending token from the request cookie,
-// exchanges it plus the user-supplied code for a session, sets the session
-// cookie, clears the pending cookie, and returns the authenticated user.
-// Returns nil + an error on any failure (bad/expired code, missing pending
-// cookie) — the caller maps that to a 401.
-func (a *Service) CompleteEmailVerification(w http.ResponseWriter, r *http.Request, code string) (*SessionUser, error) {
-	c, err := r.Cookie(pendingCookieName)
-	if err != nil || c.Value == "" {
-		return nil, errors.New("no pending verification")
-	}
-	pendingToken, err := workos.Unseal[string](c.Value, a.cookiePassword)
-	if err != nil {
-		return nil, errors.New("invalid pending verification cookie")
-	}
-
-	resp, err := a.client.UserManagement().AuthenticateWithEmailVerification(r.Context(),
-		&workos.UserManagementAuthenticateWithEmailVerificationParams{
-			Code:                       code,
-			PendingAuthenticationToken: pendingToken,
-		})
-	if err != nil {
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) {
-			slog.WarnContext(r.Context(), "auth: verify email failed",
-				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
-		} else {
-			slog.WarnContext(r.Context(), "auth: verify email failed", "error", err)
-		}
-		return nil, errors.New("verification failed")
-	}
-
-	su, err := a.establishSession(w, resp)
-	if err != nil {
-		return nil, err
-	}
-	a.clearPendingCookie(w)
-	return su, nil
-}
-
-// clearPendingCookie expires the pending-verification cookie.
-func (a *Service) clearPendingCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     pendingCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
+// WithSession resolves the request's session via authd and stashes the user
+// (nil when unauthenticated) plus the raw HTTP pair in the context. Handlers
+// decide whether nil means 401 — enforcement stays in one place.
+func (a *Service) WithSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := a.resolveUser(r)
+		ctx := context.WithValue(r.Context(), ctxKey{}, user)
+		ctx = context.WithValue(ctx, httpCtxKey{}, HTTPPair{W: w, R: r})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// startOrgSelection seals the pending token plus the org choices into a
-// short-lived cookie and redirects the SPA to its org-picker step. The SPA reads
-// the choices via GET /auth/pending-orgs and POSTs the pick to /auth/select-org.
-func (a *Service) startOrgSelection(w http.ResponseWriter, r *http.Request, pendingToken string, orgs []workos.PendingAuthenticationOrganization) {
-	if pendingToken == "" || len(orgs) == 0 {
-		slog.ErrorContext(r.Context(), "auth: organization_selection_required but missing token/orgs")
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
-		return
-	}
-	state := orgSelectState{PendingToken: pendingToken}
-	for _, o := range orgs {
-		state.Organizations = append(state.Organizations, OrgChoice{ID: o.ID, Name: o.Name})
-	}
-	sealed, err := workos.Seal(state, a.cookiePassword)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "auth: seal org-selection state failed", "error", err)
-		http.Error(w, "failed to start org selection", http.StatusInternalServerError)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     orgSelectCookieName,
-		Value:    sealed,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   pendingCookieMaxAge,
-	})
-	http.Redirect(w, r, a.postLoginURL+"/?select-org=1", http.StatusFound)
+// UserFromContext returns the authenticated user stashed by WithSession, or nil.
+func UserFromContext(ctx context.Context) *SessionUser {
+	u, _ := ctx.Value(ctxKey{}).(*SessionUser)
+	return u
 }
 
-// PendingOrgChoices returns the organizations the user may choose between, read
-// from the sealed org-selection cookie. Returns nil if there's no pending
-// selection.
-func (a *Service) PendingOrgChoices(r *http.Request) []OrgChoice {
-	state, ok := a.readOrgSelectState(r)
-	if !ok {
+// HTTPFromContext returns the raw HTTP pair stashed by WithSession.
+func HTTPFromContext(ctx context.Context) (HTTPPair, bool) {
+	p, ok := ctx.Value(httpCtxKey{}).(HTTPPair)
+	return p, ok
+}
+
+// OrgUserFromRequest returns the active organization id and user id for a
+// request's session (both empty if unauthenticated or org-less).
+func OrgUserFromRequest(r *http.Request) (orgID, userID string) {
+	if u := UserFromContext(r.Context()); u != nil {
+		return u.OrgID, u.ID
+	}
+	return "", ""
+}
+
+// resolveUser turns the request's cookies into a SessionUser via authd,
+// consulting the short-lived cache first.
+func (a *Service) resolveUser(r *http.Request) *SessionUser {
+	cookie := r.Header.Get("Cookie")
+	if cookie == "" {
 		return nil
 	}
-	return state.Organizations
+	key := cacheKey(cookie)
+
+	// The SPA sends Cache-Control: no-cache right after changing the active
+	// organization in authd (a change this backend can't observe) — honor it
+	// by skipping the cached view for this request.
+	if r.Header.Get("Cache-Control") != "no-cache" {
+		a.mu.Lock()
+		if c, ok := a.cache[key]; ok && time.Now().Before(c.exp) {
+			a.mu.Unlock()
+			return c.user
+		}
+		a.mu.Unlock()
+	}
+
+	user := a.fetchUser(r.Context(), cookie)
+
+	a.mu.Lock()
+	// Opportunistic eviction keeps the map from growing without a janitor —
+	// there is deliberately no background goroutine (scale-to-zero rule).
+	if len(a.cache) > 4096 {
+		a.cache = map[string]cachedUser{}
+	}
+	a.cache[key] = cachedUser{user: user, exp: time.Now().Add(sessionCacheTTL)}
+	a.mu.Unlock()
+	return user
 }
 
-// readOrgSelectState unseals the org-selection cookie.
-func (a *Service) readOrgSelectState(r *http.Request) (orgSelectState, bool) {
-	c, err := r.Cookie(orgSelectCookieName)
-	if err != nil || c.Value == "" {
-		return orgSelectState{}, false
-	}
-	state, err := workos.Unseal[orgSelectState](c.Value, a.cookiePassword)
-	if err != nil {
-		return orgSelectState{}, false
-	}
-	return state, true
+func cacheKey(cookie string) string {
+	sum := sha256.Sum256([]byte(cookie))
+	return hex.EncodeToString(sum[:])
 }
 
-// CompleteOrgSelection finishes a login gated on org selection: it exchanges the
-// chosen organization plus the stashed pending token for a session, sets the
-// session cookie, clears the selection cookie, and returns the user. Returns nil
-// + error on any failure (no pending selection, invalid token/org).
-func (a *Service) CompleteOrgSelection(w http.ResponseWriter, r *http.Request, organizationID string) (*SessionUser, error) {
-	state, ok := a.readOrgSelectState(r)
-	if !ok {
-		return nil, errors.New("no pending organization selection")
+// getSessionResponse is the subset of authd's get-session payload we read.
+type getSessionResponse struct {
+	Session struct {
+		ActiveOrganizationID string `json:"activeOrganizationId"`
+	} `json:"session"`
+	User struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Image string `json:"image"`
+	} `json:"user"`
+}
+
+func (a *Service) fetchUser(ctx context.Context, cookie string) *SessionUser {
+	var sess getSessionResponse
+	if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/get-session", nil, &sess); err != nil {
+		return nil // unauthenticated or authd unreachable — request proceeds anonymous
 	}
-	// Guard: the chosen org must be one of the offered choices.
-	valid := false
-	for _, o := range state.Organizations {
-		if o.ID == organizationID {
-			valid = true
-			break
+	if sess.User.ID == "" {
+		return nil
+	}
+	first, last := splitName(sess.User.Name)
+	su := &SessionUser{
+		ID:                sess.User.ID,
+		Email:             sess.User.Email,
+		FirstName:         first,
+		LastName:          last,
+		ProfilePictureURL: sess.User.Image,
+		OrgID:             sess.Session.ActiveOrganizationID,
+	}
+	if su.OrgID != "" {
+		var member struct {
+			Role string `json:"role"`
+		}
+		if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/organization/get-active-member", nil, &member); err == nil {
+			su.Role = normalizeRole(member.Role)
 		}
 	}
-	if !valid {
-		return nil, errors.New("organization not in pending selection")
-	}
-
-	resp, err := a.client.UserManagement().AuthenticateWithOrganizationSelection(r.Context(),
-		&workos.UserManagementAuthenticateWithOrganizationSelectionParams{
-			PendingAuthenticationToken: state.PendingToken,
-			OrganizationID:             organizationID,
-		})
-	if err != nil {
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) {
-			slog.WarnContext(r.Context(), "auth: org selection failed",
-				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
-		} else {
-			slog.WarnContext(r.Context(), "auth: org selection failed", "error", err)
-		}
-		return nil, errors.New("organization selection failed")
-	}
-
-	su, err := a.establishSession(w, resp)
-	if err != nil {
-		return nil, err
-	}
-	a.clearOrgSelectCookie(w)
-	return su, nil
+	return su
 }
 
-// clearOrgSelectCookie expires the org-selection cookie.
-func (a *Service) clearOrgSelectCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     orgSelectCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
-}
+// --- organizations -----------------------------------------------------------
 
 // OrgMembership is the trimmed view of one of a user's organizations.
 type OrgMembership struct {
@@ -419,49 +229,130 @@ type OrgMembership struct {
 	Role string
 }
 
-// ListUserOrganizations returns the active organizations a user belongs to (up
-// to `limit`), for surfacing in /me. Best-effort: returns nil on error so /me
-// still works without the org list.
-func (a *Service) ListUserOrganizations(ctx context.Context, userID string, limit int) []OrgMembership {
-	status := workos.UserManagementOrganizationMembershipStatuses("active")
-	it := a.client.OrganizationMembership().List(ctx, &workos.OrganizationMembershipListParams{
-		UserID:   &userID,
-		Statuses: []workos.UserManagementOrganizationMembershipStatuses{status},
-	})
-	var out []OrgMembership
-	for it.Next() && len(out) < limit {
-		m := it.Current()
-		om := OrgMembership{ID: m.OrganizationID, Name: deref(m.OrganizationName)}
-		if m.Role != nil {
-			om.Role = m.Role.Slug
-		}
-		out = append(out, om)
+type orgListEntry struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListUserOrganizations returns the organizations the session's user belongs
+// to (up to limit). The userID parameter is kept for handler compatibility;
+// authd scopes the list by the forwarded cookie. Best-effort: nil on error so
+// /me still works without the org list.
+func (a *Service) ListUserOrganizations(ctx context.Context, _ string, limit int) []OrgMembership {
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return nil
 	}
-	if err := it.Err(); err != nil {
+	var orgs []orgListEntry
+	if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/organization/list", nil, &orgs); err != nil {
 		slog.ErrorContext(ctx, "auth: list user organizations failed", "error", err)
 		return nil
+	}
+	out := make([]OrgMembership, 0, len(orgs))
+	for i, o := range orgs {
+		if i >= limit {
+			break
+		}
+		out = append(out, OrgMembership{ID: o.ID, Name: o.Name})
 	}
 	return out
 }
 
-// Role slugs the product recognizes. Roles with these slugs must exist in the
-// WorkOS environment (configured in the dashboard).
-const (
-	RoleAdmin  = "admin"
-	RoleMember = "member"
-	RoleViewer = "viewer"
-)
+// CreateOrganizationForUser creates an organization for the signed-in user and
+// makes it their active organization. Better Auth adds the creator as owner.
+// The returned SessionUser carries the new OrgID.
+func (a *Service) CreateOrganizationForUser(_ http.ResponseWriter, r *http.Request, userID, name string) (*SessionUser, error) {
+	if userID == "" {
+		return nil, errors.New("unauthenticated")
+	}
+	cookie := r.Header.Get("Cookie")
+	if cookie == "" {
+		return nil, errors.New("no session cookie")
+	}
+	ctx := r.Context()
 
-// ErrMembershipNotFound reports that a membership id does not exist within the
-// given organization (including memberships that belong to another org).
-var ErrMembershipNotFound = errors.New("organization membership not found")
+	origin := r.Header.Get("Origin")
+	var created struct {
+		ID string `json:"id"`
+	}
+	body := map[string]any{"name": name, "slug": slugify(name)}
+	if err := a.callWithOrigin(ctx, cookie, origin, http.MethodPost, "/api/auth/organization/create", body, &created); err != nil {
+		slog.ErrorContext(ctx, "auth: create organization failed", "error", err)
+		return nil, err
+	}
+	if err := a.callWithOrigin(ctx, cookie, origin, http.MethodPost, "/api/auth/organization/set-active",
+		map[string]any{"organizationId": created.ID}, nil); err != nil {
+		slog.ErrorContext(ctx, "auth: set active organization failed", "org_id", created.ID, "error", err)
+		return nil, err
+	}
+	a.invalidate(cookie)
 
-// ErrOwnRole reports an attempt by a caller to change their own role.
-var ErrOwnRole = errors.New("cannot change your own role")
+	su := a.fetchUser(ctx, cookie)
+	if su == nil {
+		return nil, errors.New("session lookup failed after organization create")
+	}
+	return su, nil
+}
 
-// Member is the trimmed view of one organization member the handlers return.
-// It joins a WorkOS organization membership (id, role) with the underlying
-// user's identity (email, name).
+// fullOrganization is the subset of get-full-organization we read.
+type fullOrganization struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Members []struct {
+		ID     string `json:"id"`
+		UserID string `json:"userId"`
+		Role   string `json:"role"`
+		User   struct {
+			Email string `json:"email"`
+			Name  string `json:"name"`
+			Image string `json:"image"`
+		} `json:"user"`
+	} `json:"members"`
+}
+
+func (a *Service) fullOrganization(ctx context.Context, cookie, orgID string) (*fullOrganization, error) {
+	var org fullOrganization
+	path := "/api/auth/organization/get-full-organization?organizationId=" + url.QueryEscape(orgID)
+	if err := a.call(ctx, cookie, http.MethodGet, path, nil, &org); err != nil {
+		return nil, err
+	}
+	return &org, nil
+}
+
+// GetOrganizationName returns the organization's display name.
+func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return "", errors.New("unauthenticated")
+	}
+	org, err := a.fullOrganization(ctx, cookie, orgID)
+	if err != nil {
+		slog.ErrorContext(ctx, "auth: get organization failed", "org_id", orgID, "error", err)
+		return "", err
+	}
+	return org.Name, nil
+}
+
+// UpdateOrganizationName renames the organization and returns the stored name.
+func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string) (string, error) {
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return "", errors.New("unauthenticated")
+	}
+	var resp struct {
+		Name string `json:"name"`
+	}
+	body := map[string]any{"organizationId": orgID, "data": map[string]any{"name": name}}
+	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/update", body, &resp); err != nil {
+		slog.ErrorContext(ctx, "auth: update organization name failed", "org_id", orgID, "error", err)
+		return "", err
+	}
+	return resp.Name, nil
+}
+
+// --- members -----------------------------------------------------------------
+
+// Member is the trimmed view of one organization member.
 type Member struct {
 	ID                string
 	UserID            string
@@ -472,163 +363,74 @@ type Member struct {
 	ProfilePictureURL string
 }
 
-// ListOrganizationMembers returns the active members of an organization (up to
-// `limit`). Each WorkOS membership only carries the user ID and role, so we
-// resolve each member's identity (email, name) with a follow-up user lookup.
-// Best-effort per member: a failed user lookup still yields a row with the IDs
-// and role we already have.
+// ListOrganizationMembers returns the members of an organization (up to limit).
 func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, limit int) ([]Member, error) {
-	status := workos.UserManagementOrganizationMembershipStatuses("active")
-	it := a.client.OrganizationMembership().List(ctx, &workos.OrganizationMembershipListParams{
-		OrganizationID: &orgID,
-		Statuses:       []workos.UserManagementOrganizationMembershipStatuses{status},
-	})
-	var out []Member
-	for it.Next() && len(out) < limit {
-		out = append(out, a.memberFromMembership(ctx, *it.Current()))
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return nil, errors.New("unauthenticated")
 	}
-	if err := it.Err(); err != nil {
-		slog.ErrorContext(ctx, "auth: list organization members failed", "error", err)
+	org, err := a.fullOrganization(ctx, cookie, orgID)
+	if err != nil {
+		slog.ErrorContext(ctx, "auth: list organization members failed", "org_id", orgID, "error", err)
 		return nil, err
+	}
+	var out []Member
+	for i, m := range org.Members {
+		if i >= limit {
+			break
+		}
+		first, last := splitName(m.User.Name)
+		out = append(out, Member{
+			ID:                m.ID,
+			UserID:            m.UserID,
+			Email:             m.User.Email,
+			FirstName:         first,
+			LastName:          last,
+			Role:              normalizeRole(m.Role),
+			ProfilePictureURL: m.User.Image,
+		})
 	}
 	return out, nil
 }
 
-// CreateOrganizationForUser creates a WorkOS organization for the signed-in
-// user (fresh sign-ups that didn't arrive via an invitation have none), adds
-// them as its first member, and re-scopes the session to the new organization
-// by exchanging the session's refresh token with the new organization_id —
-// the same mechanism WorkOS uses for org switching. The re-issued session is
-// sealed back into the cookie; the returned SessionUser carries the new OrgID.
-//
-// The membership is created with the environment's default role. If the org
-// creation succeeds but a later step fails, the WorkOS org exists without a
-// scoped session — safe: retrying creates a fresh org and the empty one is
-// invisible to the user (a nuisance for the WorkOS dashboard, not a bug).
-func (a *Service) CreateOrganizationForUser(w http.ResponseWriter, r *http.Request, userID, name string) (*SessionUser, error) {
-	// NB: userID comes from the caller (the ogen handler's context) — the
-	// HTTPPair request predates the middleware's user injection, so its own
-	// context deliberately can't answer UserFromContext.
-	if userID == "" {
-		return nil, errors.New("unauthenticated")
-	}
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil || c.Value == "" {
-		return nil, errors.New("no session cookie")
-	}
-	sd, err := workos.Unseal[workos.SessionData](c.Value, a.cookiePassword)
-	if err != nil || sd.RefreshToken == "" {
-		return nil, errors.New("invalid session cookie")
-	}
-
-	org, err := a.client.Organizations().Create(r.Context(), &workos.OrganizationsCreateParams{Name: name})
-	if err != nil {
-		slog.ErrorContext(r.Context(), "auth: create organization failed", "error", err)
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) && apiErr.Message != "" {
-			return nil, UserMessageError{Msg: apiErr.Message}
-		}
-		return nil, err
-	}
-
-	if _, err := a.client.OrganizationMembership().Create(r.Context(), &workos.OrganizationMembershipCreateParams{
-		UserID:         userID,
-		OrganizationID: org.ID,
-	}); err != nil {
-		slog.ErrorContext(r.Context(), "auth: create organization membership failed", "org_id", org.ID, "user_id", userID, "error", err)
-		return nil, err
-	}
-
-	resp, err := a.client.UserManagement().AuthenticateWithRefreshToken(r.Context(),
-		&workos.UserManagementAuthenticateWithRefreshTokenParams{
-			RefreshToken:   sd.RefreshToken,
-			OrganizationID: &org.ID,
-		})
-	if err != nil {
-		slog.ErrorContext(r.Context(), "auth: rescope session to new org failed", "org_id", org.ID, "error", err)
-		return nil, err
-	}
-	return a.establishSession(w, resp)
-}
-
-// GetOrganizationName returns the organization's display name from WorkOS.
-func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
-	org, err := a.client.Organizations().Get(ctx, orgID)
-	if err != nil {
-		slog.ErrorContext(ctx, "auth: get organization failed", "org_id", orgID, "error", err)
-		return "", err
-	}
-	return org.Name, nil
-}
-
-// UserMessageError wraps a WorkOS-provided message that is safe and useful to
-// show to the end user (e.g. "Default test organizations cannot be updated.").
-type UserMessageError struct{ Msg string }
-
-func (e UserMessageError) Error() string { return e.Msg }
-
-// UpdateOrganizationName renames the organization in WorkOS and returns the
-// stored name. WorkOS rejections come back as a UserMessageError so handlers
-// can surface the reason.
-func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string) (string, error) {
-	org, err := a.client.Organizations().Update(ctx, orgID, &workos.OrganizationsUpdateParams{Name: &name})
-	if err != nil {
-		slog.ErrorContext(ctx, "auth: update organization name failed", "org_id", orgID, "error", err)
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) && apiErr.Message != "" {
-			return "", UserMessageError{Msg: apiErr.Message}
-		}
-		return "", err
-	}
-	return org.Name, nil
-}
-
-// memberFromMembership joins a WorkOS membership with the underlying user's
-// identity. Best-effort: a failed user lookup still yields a Member with the
-// IDs and role the membership already carries.
-func (a *Service) memberFromMembership(ctx context.Context, m workos.UserOrganizationMembership) Member {
-	member := Member{ID: m.ID, UserID: m.UserID}
-	if m.Role != nil {
-		member.Role = m.Role.Slug
-	}
-	if u, err := a.client.UserManagement().Get(ctx, m.UserID); err != nil {
-		slog.ErrorContext(ctx, "auth: resolve member user failed", "user_id", m.UserID, "error", err)
-	} else {
-		member.Email = u.Email
-		member.FirstName = deref(u.FirstName)
-		member.LastName = deref(u.LastName)
-		member.ProfilePictureURL = deref(u.ProfilePictureURL)
-	}
-	return member
-}
-
-// UpdateOrganizationMemberRole sets the role of one organization membership
-// and returns the refreshed member. The membership must belong to orgID (one
-// organization can never touch another's memberships) and must not be the
-// caller's own (so an org can't accidentally demote its last admin).
+// UpdateOrganizationMemberRole sets one membership's role. The membership must
+// belong to orgID and must not be the caller's own.
 func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, callerUserID, membershipID, roleSlug string) (Member, error) {
-	m, err := a.client.OrganizationMembership().Get(ctx, membershipID)
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return Member{}, errors.New("unauthenticated")
+	}
+	org, err := a.fullOrganization(ctx, cookie, orgID)
 	if err != nil {
-		slog.ErrorContext(ctx, "auth: get membership failed", "membership_id", membershipID, "error", err)
 		return Member{}, ErrMembershipNotFound
 	}
-	if m.OrganizationID != orgID {
+	var target *Member
+	for _, m := range org.Members {
+		if m.ID == membershipID {
+			first, last := splitName(m.User.Name)
+			target = &Member{ID: m.ID, UserID: m.UserID, Email: m.User.Email,
+				FirstName: first, LastName: last, ProfilePictureURL: m.User.Image}
+			break
+		}
+	}
+	if target == nil {
 		return Member{}, ErrMembershipNotFound
 	}
-	if m.UserID == callerUserID {
+	if target.UserID == callerUserID {
 		return Member{}, ErrOwnRole
 	}
-	updated, err := a.client.OrganizationMembership().Update(ctx, membershipID, &workos.OrganizationMembershipUpdateParams{
-		Role: workos.OrganizationMembershipRoleSingle{Slug: roleSlug},
-	})
-	if err != nil {
+	body := map[string]any{"organizationId": orgID, "memberId": membershipID, "role": roleSlug}
+	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/update-member-role", body, nil); err != nil {
 		slog.ErrorContext(ctx, "auth: update membership role failed", "membership_id", membershipID, "error", err)
 		return Member{}, err
 	}
-	return a.memberFromMembership(ctx, *updated), nil
+	target.Role = roleSlug
+	return *target, nil
 }
 
-// Invitation is the trimmed Invitation shape the handlers return.
+// --- invitations -------------------------------------------------------------
+
+// Invitation is the trimmed invitation shape the handlers return.
 type Invitation struct {
 	ID        string
 	Email     string
@@ -637,228 +439,219 @@ type Invitation struct {
 	Role      string
 }
 
-// ErrInvitationNotFound reports that an invitation id does not exist within
-// the given organization (including invitations that belong to another org).
-var ErrInvitationNotFound = errors.New("invitation not found")
-
-// SendInvitation invites an email to the given organization, optionally with a
-// role, attributing the invite to the inviter. Returns the created Invitation.
-func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, inviterUserID string) (*Invitation, error) {
-	params := &workos.UserManagementSendInvitationParams{
-		Email:          email,
-		OrganizationID: &orgID,
-	}
-	if role != "" {
-		params.RoleSlug = &role
-	}
-	if inviterUserID != "" {
-		params.InviterUserID = &inviterUserID
-	}
-	inv, err := a.client.UserManagement().SendInvitation(ctx, params)
-	if err != nil {
-		var apiErr *workos.APIError
-		if errors.As(err, &apiErr) {
-			slog.ErrorContext(ctx, "auth: send Invitation failed",
-				"status", apiErr.StatusCode, "code", apiErr.Code, "message", apiErr.Message, "request_id", apiErr.RequestID)
-		} else {
-			slog.ErrorContext(ctx, "auth: send Invitation failed", "error", err)
-		}
-		return nil, err
-	}
-	return &Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt, Role: deref(inv.RoleSlug)}, nil
+type invitationEntry struct {
+	ID             string `json:"id"`
+	Email          string `json:"email"`
+	Status         string `json:"status"`
+	ExpiresAt      string `json:"expiresAt"`
+	Role           string `json:"role"`
+	OrganizationID string `json:"organizationId"`
 }
 
-// ListInvitations returns up to `limit` invitations for an organization.
-func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) ([]Invitation, error) {
-	it := a.client.UserManagement().ListInvitations(ctx,
-		&workos.UserManagementListInvitationsParams{OrganizationID: &orgID})
-	var out []Invitation
-	for it.Next() && len(out) < limit {
-		inv := it.Current()
-		out = append(out, Invitation{ID: inv.ID, Email: inv.Email, State: string(inv.State), ExpiresAt: inv.ExpiresAt, Role: deref(inv.RoleSlug)})
+func (i invitationEntry) toInvitation() Invitation {
+	return Invitation{ID: i.ID, Email: i.Email, State: i.Status, ExpiresAt: i.ExpiresAt, Role: normalizeRole(i.Role)}
+}
+
+// SendInvitation invites an email to the organization.
+func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, _ string) (*Invitation, error) {
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return nil, errors.New("unauthenticated")
 	}
-	if err := it.Err(); err != nil {
+	if role == "" {
+		role = RoleMember
+	}
+	var inv invitationEntry
+	body := map[string]any{"organizationId": orgID, "email": email, "role": role}
+	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/invite-member", body, &inv); err != nil {
+		slog.ErrorContext(ctx, "auth: send invitation failed", "error", err)
+		return nil, err
+	}
+	out := inv.toInvitation()
+	return &out, nil
+}
+
+// ListInvitations returns up to limit invitations for an organization.
+func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) ([]Invitation, error) {
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return nil, errors.New("unauthenticated")
+	}
+	var invs []invitationEntry
+	path := "/api/auth/organization/list-invitations?organizationId=" + url.QueryEscape(orgID)
+	if err := a.call(ctx, cookie, http.MethodGet, path, nil, &invs); err != nil {
 		slog.ErrorContext(ctx, "auth: list invitations failed", "error", err)
 		return nil, err
+	}
+	var out []Invitation
+	for i, inv := range invs {
+		if i >= limit {
+			break
+		}
+		out = append(out, inv.toInvitation())
 	}
 	return out, nil
 }
 
-// RevokeInvitation revokes one of an organization's invitations so its link
-// can no longer be accepted. The invitation must belong to orgID (one
-// organization can never touch another's invitations).
+// RevokeInvitation cancels one of an organization's invitations.
 func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID string) (*Invitation, error) {
-	inv, err := a.client.UserManagement().GetInvitation(ctx, invitationID)
-	if err != nil {
-		slog.ErrorContext(ctx, "auth: get invitation failed", "invitation_id", invitationID, "error", err)
-		return nil, ErrInvitationNotFound
+	cookie, ok := cookieFromContext(ctx)
+	if !ok {
+		return nil, errors.New("unauthenticated")
 	}
-	if deref(inv.OrganizationID) != orgID {
-		return nil, ErrInvitationNotFound
-	}
-	revoked, err := a.client.UserManagement().RevokeInvitation(ctx, invitationID)
+	// Scope check: the invitation must belong to orgID.
+	invs, err := a.ListInvitations(ctx, orgID, 1000)
 	if err != nil {
-		slog.ErrorContext(ctx, "auth: revoke invitation failed", "invitation_id", invitationID, "error", err)
 		return nil, err
 	}
-	return &Invitation{ID: revoked.ID, Email: revoked.Email, State: string(revoked.State), ExpiresAt: revoked.ExpiresAt, Role: deref(revoked.RoleSlug)}, nil
-}
-
-// HandleLogout clears the session cookie and redirects to the WorkOS logout
-// endpoint, which ends the AuthKit session server-side and then returns the
-// browser to the SPA.
-func (a *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	logoutURL := a.postLoginURL // fallback if we can't build the WorkOS logout URL
-
-	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-		session := workos.NewSession(a.client, c.Value, a.cookiePassword)
-		if url, err := session.GetLogoutURL(r.Context(), a.postLoginURL); err == nil {
-			logoutURL = url
-		} else {
-			slog.WarnContext(r.Context(), "auth: build logout URL failed", "error", err)
+	found := false
+	for _, inv := range invs {
+		if inv.ID == invitationID {
+			found = true
+			break
 		}
 	}
-
-	a.clearSessionCookie(w)
-	http.Redirect(w, r, logoutURL, http.StatusFound)
-}
-
-// WithSession is outer net/http middleware that runs before the ogen server.
-// It reads the session cookie, validates (and transparently refreshes) it, and
-// stashes the resulting user in the request context. ogen derives handler ctx
-// from r.Context(), so Ping/GetMe can read the user via UserFromContext.
-//
-// Unauthenticated requests are passed through with a nil user — the JSON
-// handlers decide whether that's a 401. This keeps auth enforcement in one
-// place (the handlers) and cookie mechanics in another (here).
-func (a *Service) WithSession(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := a.loadUser(w, r)
-		ctx := context.WithValue(r.Context(), ctxKey{}, user)
-		// Also expose the raw HTTP pair so handlers that must touch cookies
-		// directly (VerifyEmail) can reach them through the ogen ctx.
-		ctx = context.WithValue(ctx, httpCtxKey{}, HTTPPair{W: w, R: r})
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-// HTTPFromContext returns the raw HTTP writer/request stashed by WithSession.
-// ok is false if they're absent (e.g. a handler invoked outside the middleware).
-func HTTPFromContext(ctx context.Context) (HTTPPair, bool) {
-	p, ok := ctx.Value(httpCtxKey{}).(HTTPPair)
-	return p, ok
-}
-
-// loadUser unseals the session cookie and returns the user, or nil if there is
-// no valid session. If the access token has expired but a refresh token is
-// present, it refreshes the session and rewrites the cookie in place.
-func (a *Service) loadUser(w http.ResponseWriter, r *http.Request) *SessionUser {
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil || c.Value == "" {
-		return nil
+	if !found {
+		return nil, ErrInvitationNotFound
 	}
+	var cancelled struct {
+		Invitation invitationEntry `json:"invitation"`
+	}
+	body := map[string]any{"invitationId": invitationID}
+	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/cancel-invitation", body, &cancelled); err != nil {
+		slog.ErrorContext(ctx, "auth: cancel invitation failed", "invitation_id", invitationID, "error", err)
+		return nil, err
+	}
+	out := cancelled.Invitation.toInvitation()
+	if out.ID == "" {
+		out = Invitation{ID: invitationID, State: "canceled"}
+	}
+	return &out, nil
+}
 
-	result, err := workos.AuthenticateSession(c.Value, a.cookiePassword)
+// --- plumbing ----------------------------------------------------------------
+
+// call performs an authd request with the caller's cookie, decoding a JSON
+// response into out (may be nil). authd error bodies ({"message": ...}) become
+// UserMessageError so handlers can surface them.
+func (a *Service) call(ctx context.Context, cookie, method, path string, body any, out any) error {
+	return a.callWithOrigin(ctx, cookie, originFromContext(ctx), method, path, body, out)
+}
+
+// callWithOrigin is call with an explicit Origin header (used where the
+// origin comes from the raw request rather than the context).
+func (a *Service) callWithOrigin(ctx context.Context, cookie, origin, method, path string, body any, out any) error {
+	var reqBody io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reqBody = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, reqBody)
 	if err != nil {
-		return nil
+		return err
 	}
-
-	if result.Authenticated {
-		return toSessionUser(result.User, result.OrganizationID, result.Role)
+	req.Header.Set("Cookie", cookie)
+	if origin != "" {
+		req.Header.Set("Origin", origin)
 	}
-
-	// Access token expired but the cookie was otherwise valid — try a refresh.
-	if result.NeedsRefresh {
-		refreshed, err := a.client.RefreshSession(r.Context(), c.Value, a.cookiePassword)
-		if err != nil || !refreshed.Authenticated {
-			// Refresh failed. This is commonly a *concurrent-refresh race*: the SPA
-			// fires several requests at once, the first rotates the WorkOS refresh
-			// token and rewrites the cookie, and the rest arrive carrying the now-
-			// stale sealed cookie so their refresh hits invalid_grant. We must NOT
-			// clear the cookie here — a sibling request may have just set a valid
-			// one. Treat this single request as unauthenticated (401); the browser
-			// retries and picks up the fresh cookie. Only an explicit logout clears
-			// the session.
-			return nil
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := a.hc.Do(req)
+	if err != nil {
+		return fmt.Errorf("auth: authd %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("auth: authd %s: read: %w", path, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		var e struct {
+			Message string `json:"message"`
 		}
-		a.setSessionCookie(w, refreshed.SealedSession)
-		// Re-read the refreshed session so org_id/role come from the new token's
-		// claims (RefreshSessionResult.Session doesn't expose them directly).
-		if reauth, err := workos.AuthenticateSession(refreshed.SealedSession, a.cookiePassword); err == nil && reauth.Authenticated {
-			return toSessionUser(reauth.User, reauth.OrganizationID, reauth.Role)
+		if json.Unmarshal(raw, &e) == nil && e.Message != "" {
+			return UserMessageError{Msg: e.Message}
+		}
+		return fmt.Errorf("auth: authd %s: status %d", path, resp.StatusCode)
+	}
+	if out != nil && len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return fmt.Errorf("auth: authd %s: decode: %w", path, err)
 		}
 	}
-
 	return nil
 }
 
-// setSessionCookie writes the sealed session as an HttpOnly cookie. SameSite=Lax
-// is enough here because the post-login redirect is a top-level navigation; the
-// SPA then sends the cookie on same-site XHR with credentials: 'include'.
-func (a *Service) setSessionCookie(w http.ResponseWriter, sealed string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    sealed,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(30 * 24 * time.Hour),
-	})
+// invalidate drops the cached session for a cookie (after org changes that
+// alter the active organization).
+func (a *Service) invalidate(cookie string) {
+	a.mu.Lock()
+	delete(a.cache, cacheKey(cookie))
+	a.mu.Unlock()
 }
 
-// clearSessionCookie expires the session cookie.
-func (a *Service) clearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   a.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
-}
-
-// UserFromContext returns the authenticated user stashed by WithSession, or nil.
-func UserFromContext(ctx context.Context) *SessionUser {
-	u, _ := ctx.Value(ctxKey{}).(*SessionUser)
-	return u
-}
-
-// OrgUserFromRequest returns the active organization id and user id for a
-// request's session (both empty if unauthenticated or org-less). It's an adapter
-// for callers — like the integrations service — that need the caller's identity
-// from a *http.Request without depending on the session internals.
-func OrgUserFromRequest(r *http.Request) (orgID, userID string) {
-	if u := UserFromContext(r.Context()); u != nil {
-		return u.OrgID, u.ID
+// cookieFromContext extracts the request's Cookie header via the HTTP pair
+// stashed by WithSession.
+func cookieFromContext(ctx context.Context) (string, bool) {
+	p, ok := HTTPFromContext(ctx)
+	if !ok || p.R == nil {
+		return "", false
 	}
-	return "", ""
+	c := p.R.Header.Get("Cookie")
+	return c, c != ""
 }
 
-// toSessionUser flattens a WorkOS user (with *string name fields) plus the
-// active organization context into our internal shape. orgID/role may be empty
-// when the session isn't scoped to an organization. Returns nil for a nil user
-// so callers stay simple.
-func toSessionUser(u *workos.User, orgID, role string) *SessionUser {
-	if u == nil {
-		return nil
-	}
-	return &SessionUser{
-		ID:                u.ID,
-		Email:             u.Email,
-		FirstName:         deref(u.FirstName),
-		LastName:          deref(u.LastName),
-		ProfilePictureURL: deref(u.ProfilePictureURL),
-		OrgID:             orgID,
-		Role:              role,
-	}
-}
-
-func deref(s *string) string {
-	if s == nil {
+// originFromContext extracts the request's Origin header (the SPA origin).
+// Better Auth's CSRF check requires a trusted Origin on state-changing calls;
+// forwarding the browser's own Origin keeps that check meaningful.
+func originFromContext(ctx context.Context) string {
+	p, ok := HTTPFromContext(ctx)
+	if !ok || p.R == nil {
 		return ""
 	}
-	return *s
+	return p.R.Header.Get("Origin")
+}
+
+// normalizeRole maps Better Auth's owner role onto admin — the product's role
+// vocabulary predates the migration and treats the org creator as admin.
+func normalizeRole(role string) string {
+	if role == roleOwner {
+		return RoleAdmin
+	}
+	return role
+}
+
+// splitName splits a display name into first/last on the first space.
+func splitName(name string) (first, last string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(name, " ", 2)
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], parts[1]
+}
+
+var slugStrip = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slugify derives a URL-safe org slug from the display name, with a random
+// suffix so equal names never collide (Better Auth requires unique slugs).
+func slugify(name string) string {
+	s := slugStrip.ReplaceAllString(strings.ToLower(name), "-")
+	s = strings.Trim(s, "-")
+	if len(s) > 30 {
+		s = s[:30]
+	}
+	if s == "" {
+		s = "org"
+	}
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return s + "-" + hex.EncodeToString(b)
 }

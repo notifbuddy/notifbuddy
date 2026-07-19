@@ -1,0 +1,21 @@
+{
+	"name": "authd",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "notifbuddy auth service — Better Auth (users, orgs, invitations) for cloud and self-host.",
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"start": "node server.js",
+		"migrate": "better-auth migrate --config auth.js -y"
+	},
+	"dependencies": {
+		"better-auth": "^1.6.23",
+		"pg": "^8.22.0"
+	},
+	"devDependencies": {
+		"@better-auth/cli": "1.5.0-beta.13"
+	}
+}

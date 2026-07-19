@@ -112,14 +112,6 @@ type Handler interface {
 	//
 	// GET /organization/profile
 	GetOrganizationProfile(ctx context.Context) (GetOrganizationProfileRes, error)
-	// GetPendingOrgs implements getPendingOrgs operation.
-	//
-	// During the org-selection step the SPA calls this to read the organizations the user may choose
-	// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
-	// there is no pending selection.
-	//
-	// GET /auth/pending-orgs
-	GetPendingOrgs(ctx context.Context) (GetPendingOrgsRes, error)
 	// ListInvitations implements listInvitations operation.
 	//
 	// Returns the invitations for the caller's active organization. Requires a session scoped to an
@@ -164,13 +156,6 @@ type Handler interface {
 	//
 	// DELETE /invitations/{invitationId}
 	RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (RevokeInvitationRes, error)
-	// SelectOrg implements selectOrg operation.
-	//
-	// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
-	// the stashed pending token for a session, sets the session cookie, and returns the user.
-	//
-	// POST /auth/select-org
-	SelectOrg(ctx context.Context, req *SelectOrgRequest) (SelectOrgRes, error)
 	// SubmitOssApplication implements submitOssApplication operation.
 	//
 	// Records an application for the free-forever open-source tier: a sponsor URL (the open-source repo or
@@ -225,16 +210,6 @@ type Handler interface {
 	//
 	// PUT /organization/avatar
 	UploadOrganizationAvatar(ctx context.Context, req *UploadOrgAvatarRequest) (UploadOrganizationAvatarRes, error)
-	// VerifyEmail implements verifyEmail operation.
-	//
-	// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
-	// email verification before issuing a session. The `/auth/callback` handler detects this, stores the
-	// WorkOS `pending_authentication_token` in a short-lived sealed cookie, and sends the browser to the
-	// SPA's verification step. The SPA collects the code WorkOS emailed and POSTs it here to finish
-	// authentication and establish the session.
-	//
-	// POST /auth/verify-email
-	VerifyEmail(ctx context.Context, req *VerifyEmailRequest) (VerifyEmailRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

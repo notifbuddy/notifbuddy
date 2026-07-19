@@ -27,13 +27,9 @@ logging:
 cors:
   allow_origin: "http://localhost:5173" # exercised by the CORS preflight test
 
-workos:
-  client_id: "client_e2e" # literal; only presence is validated
-  api_key: "${WORKOS_API_KEY}" # any non-empty value; calls are intercepted by fakeapis
-  cookie_password: "${WORKOS_COOKIE_PASSWORD}" # >=32 chars; seals/opens the session cookie
-  redirect_uri: "http://localhost:8080/auth/callback"
-  login_provider: "" # show the selector; unused in e2e
-  webhook_secret: "" # WorkOS webhook endpoint disabled
+auth:
+  # fakeapis serves a minimal authd (get-session et al) for e2e sessions.
+  base_url: "${AUTHD_BASE_URL}"
 
 app:
   post_login_url: "http://localhost:5173"

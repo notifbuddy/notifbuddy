@@ -7,11 +7,7 @@ import (
 
 // validCfg returns a config that passes the non-pubsub validation rules.
 func validCfg() Config {
-	cfg := defaultConfig()
-	cfg.WorkOS.ClientID = "client_x"
-	cfg.WorkOS.APIKey = "sk_x"
-	cfg.WorkOS.CookiePassword = strings.Repeat("x", 32)
-	return cfg
+	return defaultConfig() // auth.base_url has a dev default; nothing else is required
 }
 
 func TestValidate_PubSubProvider(t *testing.T) {

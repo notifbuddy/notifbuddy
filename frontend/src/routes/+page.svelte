@@ -7,92 +7,65 @@
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import { userStore, signIn, type User, type Organization as Org } from '$lib/user.svelte';
+	import { authClient } from '$lib/auth-client';
+	import { userStore, signIn, switchOrg, type User } from '$lib/user.svelte';
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
 
-	// Which mid-login step (if any) the callback bounced us into.
-	const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-	const startInVerify = params?.has('verify') ?? false;
-	const startInSelectOrg = params?.has('select-org') ?? false;
+	// ---- Email + password (Better Auth) ----
+	let mode = $state<'signin' | 'signup'>('signin');
+	let email = $state('');
+	let password = $state('');
+	let fullName = $state('');
+	let authing = $state(false);
+	let authError = $state<string | null>(null);
 
-	// ---- Email verification step ----
-	let needsVerify = $state(startInVerify);
-	let verifyCode = $state('');
-	let verifying = $state(false);
-	let verifyError = $state<string | null>(null);
-
-	// ---- Organization selection step ----
-	let needsSelectOrg = $state(startInSelectOrg);
-	let pendingOrgs = $state<Org[]>([]);
+	// ---- Organization steps. A session with orgs but no active one gets the
+	// picker; a session with no orgs at all gets the create form. ----
+	const needsSelectOrg = $derived(
+		!!user && !user.organizationId && (user.organizations?.length ?? 0) > 0
+	);
+	const needsCreateOrg = $derived(
+		!!user && !user.organizationId && (user.organizations?.length ?? 0) === 0
+	);
 	let selectingOrgId = $state<string | null>(null);
-	let selectOrgError = $state<string | null>(null);
-
-	// ---- Organization creation step (signed in but org-less: fresh sign-ups
-	// that didn't arrive via an invitation) ----
-	const needsCreateOrg = $derived(!!user && !user.organizationId);
 	let orgName = $state('');
 	let creatingOrg = $state(false);
 	let createOrgError = $state<string | null>(null);
 
-	// Boot: pick the right entry path. If a step is in progress there's no session
-	// yet, so we don't call /me.
-	if (startInSelectOrg) {
-		loadPendingOrgs();
-	} else if (!startInVerify) {
-		loadUser();
-	}
+	userStore.load();
 
 	// This is the entry route: it owns the signed-out / mid-login UI. Once the
-	// session resolves to a real user (and we're not mid verify/select-org), send
-	// them into the app at the first dashboard product.
+	// session resolves to a user with an active org, send them into the app.
 	$effect(() => {
-		if (user && !needsVerify && !needsSelectOrg && !needsCreateOrg) goto('/dashboard/linear');
+		if (user && !needsSelectOrg && !needsCreateOrg) goto('/dashboard/linear');
 	});
 
-	async function loadUser() {
-		await userStore.load();
-	}
-
-	async function loadPendingOrgs() {
-		const { data, error: reqError } = await api.GET('/auth/pending-orgs');
-		if (reqError || !data) {
-			// No pending selection (expired?) — fall back to the normal flow.
-			needsSelectOrg = false;
-			loadUser();
-			return;
-		}
-		pendingOrgs = (data.organizations ?? []) as Org[];
-	}
-
-	async function submitVerifyCode(e: SubmitEvent) {
+	async function submitEmailAuth(e: SubmitEvent) {
 		e.preventDefault();
-		verifying = true;
-		verifyError = null;
-		const { data, error: reqError } = await api.POST('/auth/verify-email', {
-			body: { code: verifyCode.trim() }
-		});
-		verifying = false;
-		if (reqError || !data) {
-			verifyError = 'That code was not accepted. Check the code and try again.';
+		authing = true;
+		authError = null;
+		const { error } =
+			mode === 'signin'
+				? await authClient.signIn.email({ email: email.trim(), password })
+				: await authClient.signUp.email({
+						email: email.trim(),
+						password,
+						name: fullName.trim() || email.trim()
+					});
+		authing = false;
+		if (error) {
+			authError = error.message ?? 'Sign-in failed. Check your details and try again.';
 			return;
 		}
-		finishLogin(data as User);
+		// Session cookie is set; /me now resolves and the effect routes onward.
+		await userStore.load(true);
 	}
 
 	async function chooseOrg(orgId: string) {
 		selectingOrgId = orgId;
-		selectOrgError = null;
-		const { data, error: reqError } = await api.POST('/auth/select-org', {
-			body: { organizationId: orgId }
-		});
-		selectingOrgId = null;
-		if (reqError || !data) {
-			selectOrgError = 'Could not select that organization. Please try signing in again.';
-			return;
-		}
-		finishLogin(data as User);
+		await switchOrg(orgId); // sets the active org in authd, then reloads
 	}
 
 	async function submitCreateOrg(e: SubmitEvent) {
@@ -112,11 +85,9 @@
 		finishLogin(data as User);
 	}
 
-	// Common tail for verify / select-org / create-org: session cookie is now
-	// set; show the signed-in UI and clean the URL.
+	// Common tail for create-org: the session is now scoped to the new org;
+	// the redirect effect fires off the refreshed user.
 	function finishLogin(u: User) {
-		needsVerify = false;
-		needsSelectOrg = false;
 		userStore.user = u;
 		history.replaceState(null, '', window.location.pathname);
 	}
@@ -153,7 +124,7 @@
 	];
 </script>
 
-{#if user && !needsVerify && !needsSelectOrg && !needsCreateOrg}
+{#if user && !needsSelectOrg && !needsCreateOrg}
 	<!-- Signed in with an org: the $effect above redirects to /dashboard/linear;
 	     show a brief placeholder while navigation happens so the page isn't
 	     blank. (Org-less sessions fall through to the create-org card below.) -->
@@ -184,21 +155,19 @@
 			<div class="flex flex-col items-center gap-1.5 text-center">
 				<Logo size={34} />
 				<h1 class="mt-3 text-lg font-semibold tracking-tight">
-					{#if needsVerify}
-						Check your email
-					{:else if needsSelectOrg}
+					{#if needsSelectOrg}
 						Choose an organization
 					{:else if needsCreateOrg}
 						Create your organization
+					{:else if mode === 'signup'}
+						Create your account
 					{:else}
 						Streamline your notifications
 					{/if}
 				</h1>
 				<p class="text-muted-foreground max-w-xs text-sm leading-relaxed text-balance">
-					{#if needsVerify}
-						Enter the verification code we emailed you to finish signing in.
-					{:else if needsSelectOrg}
-						Pick the organization you want to sign in to.
+					{#if needsSelectOrg}
+						Pick the organization you want to work in.
 					{:else if needsCreateOrg}
 						Name the organization your team will share — you can rename it later.
 					{:else}
@@ -208,61 +177,26 @@
 			</div>
 
 			<div class="mt-6 flex flex-col gap-4">
-				{#if needsVerify}
-					<!-- Email verification step (e.g. first GitHub OAuth login). -->
-					<form class="flex flex-col gap-3" onsubmit={submitVerifyCode}>
-						<input
-							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-center font-mono text-base tracking-[0.4em] focus-visible:ring-2 focus-visible:outline-none"
-							type="text"
-							inputmode="numeric"
-							autocomplete="one-time-code"
-							placeholder="000000"
-							bind:value={verifyCode}
-							disabled={verifying}
-							required
-						/>
-						<Button type="submit" size="lg" disabled={verifying || verifyCode.trim() === ''}>
-							{#if verifying}
-								<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								Verifying…
-							{:else}
-								Verify and sign in
-							{/if}
-						</Button>
-					</form>
-					{#if verifyError}
-						<p class="text-destructive text-center text-sm">{verifyError}</p>
-					{/if}
-				{:else if needsSelectOrg}
-					<!-- Organization selection step (user belongs to multiple orgs). -->
-					{#if pendingOrgs.length === 0}
-						<p class="text-muted-foreground flex items-center justify-center gap-2 text-sm">
-							<LoaderIcon class="size-4 animate-spin" />
-							Loading organizations…
-						</p>
-					{:else}
-						<div class="flex flex-col gap-2">
-							{#each pendingOrgs as org (org.id)}
-								<Button
-									variant="outline"
-									size="lg"
-									class="justify-start"
-									onclick={() => chooseOrg(org.id)}
-									disabled={selectingOrgId !== null}
-								>
-									{#if selectingOrgId === org.id}
-										<LoaderIcon data-icon="inline-start" class="animate-spin" />
-									{:else}
-										<BuildingIcon data-icon="inline-start" class="text-muted-foreground" />
-									{/if}
-									{org.name}
-								</Button>
-							{/each}
-						</div>
-					{/if}
-					{#if selectOrgError}
-						<p class="text-destructive text-center text-sm">{selectOrgError}</p>
-					{/if}
+				{#if needsSelectOrg}
+					<!-- Organization selection: the session has orgs but none active. -->
+					<div class="flex flex-col gap-2">
+						{#each user?.organizations ?? [] as org (org.id)}
+							<Button
+								variant="outline"
+								size="lg"
+								class="justify-start"
+								onclick={() => chooseOrg(org.id)}
+								disabled={selectingOrgId !== null}
+							>
+								{#if selectingOrgId === org.id}
+									<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								{:else}
+									<BuildingIcon data-icon="inline-start" class="text-muted-foreground" />
+								{/if}
+								{org.name}
+							</Button>
+						{/each}
+					</div>
 				{:else if needsCreateOrg}
 					<!-- Organization creation step (signed in, no organization yet). -->
 					<form class="flex flex-col gap-3" onsubmit={submitCreateOrg}>
@@ -292,14 +226,73 @@
 					<!-- Still checking the session: skeleton in place of the action. -->
 					<Skeleton class="h-11 w-full rounded-md" />
 				{:else}
-					<!-- Signed out (or store cleared after a failed request). -->
-					<Button onclick={signIn} size="lg" class="font-medium">
+					<!-- Signed out: email/password against authd, or GitHub. -->
+					<form class="flex flex-col gap-3" onsubmit={submitEmailAuth}>
+						{#if mode === 'signup'}
+							<input
+								class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
+								type="text"
+								placeholder="Your name"
+								autocomplete="name"
+								bind:value={fullName}
+								disabled={authing}
+							/>
+						{/if}
+						<input
+							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
+							type="email"
+							placeholder="you@company.com"
+							autocomplete="email"
+							bind:value={email}
+							disabled={authing}
+							required
+						/>
+						<input
+							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
+							type="password"
+							placeholder="Password"
+							autocomplete={mode === 'signup' ? 'new-password' : 'current-password'}
+							minlength={8}
+							bind:value={password}
+							disabled={authing}
+							required
+						/>
+						<Button
+							type="submit"
+							size="lg"
+							class="font-medium"
+							disabled={authing || email.trim() === '' || password === ''}
+						>
+							{#if authing}
+								<LoaderIcon data-icon="inline-start" class="animate-spin" />
+								{mode === 'signup' ? 'Creating account…' : 'Signing in…'}
+							{:else}
+								{mode === 'signup' ? 'Create account' : 'Sign in'}
+							{/if}
+						</Button>
+					</form>
+					{#if authError}
+						<p class="text-destructive text-center text-sm">{authError}</p>
+					{/if}
+					<div class="text-muted-foreground/80 flex items-center gap-3 text-xs" aria-hidden="true">
+						<span class="bg-border h-px flex-1"></span>
+						or
+						<span class="bg-border h-px flex-1"></span>
+					</div>
+					<Button onclick={signIn} size="lg" variant="outline" class="font-medium">
 						<GithubIcon data-icon="inline-start" size={18} />
 						Continue with GitHub
 					</Button>
-					<p class="text-muted-foreground/80 text-center text-xs">
-						We only read your identity to sign you in.
-					</p>
+					<button
+						type="button"
+						class="text-muted-foreground hover:text-foreground text-center text-xs underline-offset-4 hover:underline"
+						onclick={() => {
+							mode = mode === 'signin' ? 'signup' : 'signin';
+							authError = null;
+						}}
+					>
+						{mode === 'signin' ? "New here? Create an account" : 'Already have an account? Sign in'}
+					</button>
 				{/if}
 			</div>
 		</section>

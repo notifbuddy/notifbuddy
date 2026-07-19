@@ -30,13 +30,9 @@ logging:
 cors:
   allow_origin: "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")
 
-workos:
-  client_id: "${WORKOS_CLIENT_ID}"
-  api_key: "${WORKOS_API_KEY}" # SECRET
-  cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET (>=32 chars)
-  redirect_uri: "https://api.notifbuddy.com/auth/callback" # TODO: prod backend base + /auth/callback; must match a WorkOS dashboard redirect
-  login_provider: "GitHubOAuth"
-  webhook_secret: "${WORKOS_WEBHOOK_SECRET}" # SECRET — verifies WorkOS-Signature (membership events → seat sync)
+auth:
+  # authd (the Better Auth service) — its Cloud Run URL, injected by infra.
+  base_url: "${AUTHD_BASE_URL}"
 
 app:
   post_login_url: "https://dashboard.notifbuddy.com" # prod dashboard URL the browser lands on after login/logout

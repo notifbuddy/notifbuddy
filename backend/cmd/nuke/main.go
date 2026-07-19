@@ -1,6 +1,7 @@
 // Command nuke is the break-glass environment reset: it revokes every stored
-// Slack/Linear token at the provider, deletes all WorkOS organizations and
-// users, and truncates every table in the app database. The schema survives
+// Slack/Linear token at the provider, truncates every table in the app
+// database, and truncates authd's tables (users, orgs, sessions) when
+// AUTHD_DATABASE_URL is set. The schema survives
 // (migrations are idempotent CREATE IF NOT EXISTS and re-apply on the next
 // backend start); the data does not.
 //
@@ -15,10 +16,10 @@
 //
 //  1. decrypt + revoke Slack tokens (auth.revoke) and Linear tokens
 //     (oauth/revoke) — best-effort per token, failures logged and skipped
-//  2. delete every WorkOS organization, then every WorkOS user — best-effort
-//     per item
-//  3. TRUNCATE every table in the public schema (app tables + watermill
+//  2. TRUNCATE every table in the public schema (app tables + watermill
 //     topics) — hard failure
+//  3. TRUNCATE authd's public schema the same way when AUTHD_DATABASE_URL is
+//     set (skipped loudly otherwise — auth data then survives the nuke)
 package main
 
 import (
@@ -33,7 +34,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	workos "github.com/workos/workos-go/v9"
 
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
@@ -70,8 +70,8 @@ func main() {
 	}
 
 	revokeTokens(ctx, pool, enc)
-	nukeWorkOS(ctx, workos.NewClient(cfg.WorkOS.APIKey))
 	truncateAll(ctx, pool)
+	nukeAuthd(ctx)
 
 	slog.Info("nuke complete — schema intact, all data gone; migrations re-apply on next backend start")
 }
@@ -186,38 +186,22 @@ func revokeLinear(ctx context.Context, token string) error {
 	return nil
 }
 
-// nukeWorkOS deletes every organization (memberships and invitations go with
-// them), then every user. Best-effort per item.
-func nukeWorkOS(ctx context.Context, client *workos.Client) {
-	orgs, users := 0, 0
-
-	it := client.Organizations().List(ctx, &workos.OrganizationsListParams{})
-	for it.Next() {
-		org := it.Current()
-		if err := client.Organizations().Delete(ctx, org.ID); err != nil {
-			slog.Warn("nuke: delete workos org failed", "org_id", org.ID, "name", org.Name, "error", err)
-			continue
-		}
-		orgs++
+// nukeAuthd truncates authd's tables (users, sessions, orgs, invitations)
+// when AUTHD_DATABASE_URL points at authd's database. Without it the auth
+// data survives — loudly, so a partial nuke can't masquerade as a full one.
+func nukeAuthd(ctx context.Context) {
+	dsn := os.Getenv("AUTHD_DATABASE_URL")
+	if dsn == "" {
+		slog.Warn("nuke: AUTHD_DATABASE_URL not set — authd data NOT nuked (users/orgs/sessions survive)")
+		return
 	}
-	if err := it.Err(); err != nil {
-		slog.Error("nuke: list workos orgs failed", "error", err)
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		slog.Error("nuke: authd database connect failed", "error", err)
+		return
 	}
-
-	ut := client.UserManagement().List(ctx, &workos.UserManagementListParams{})
-	for ut.Next() {
-		u := ut.Current()
-		if err := client.UserManagement().Delete(ctx, u.ID); err != nil {
-			slog.Warn("nuke: delete workos user failed", "user_id", u.ID, "email", u.Email, "error", err)
-			continue
-		}
-		users++
-	}
-	if err := ut.Err(); err != nil {
-		slog.Error("nuke: list workos users failed", "error", err)
-	}
-
-	slog.Info("nuke: workos wipe done", "organizations", orgs, "users", users)
+	defer pool.Close()
+	truncateAll(ctx, pool)
 }
 
 // truncateAll empties every table in the public schema in one statement

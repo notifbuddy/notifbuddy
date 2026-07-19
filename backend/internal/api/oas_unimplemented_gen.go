@@ -156,17 +156,6 @@ func (UnimplementedHandler) GetOrganizationProfile(ctx context.Context) (r GetOr
 	return r, ht.ErrNotImplemented
 }
 
-// GetPendingOrgs implements getPendingOrgs operation.
-//
-// During the org-selection step the SPA calls this to read the organizations the user may choose
-// between. The choices were stashed by `/auth/callback` in a short-lived sealed cookie. Returns 401 if
-// there is no pending selection.
-//
-// GET /auth/pending-orgs
-func (UnimplementedHandler) GetPendingOrgs(ctx context.Context) (r GetPendingOrgsRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // ListInvitations implements listInvitations operation.
 //
 // Returns the invitations for the caller's active organization. Requires a session scoped to an
@@ -226,16 +215,6 @@ func (UnimplementedHandler) RegenerateOrganizationAvatar(ctx context.Context) (r
 //
 // DELETE /invitations/{invitationId}
 func (UnimplementedHandler) RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (r RevokeInvitationRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// SelectOrg implements selectOrg operation.
-//
-// Finishes a login that WorkOS gated on organization selection. Exchanges the chosen organization plus
-// the stashed pending token for a session, sets the session cookie, and returns the user.
-//
-// POST /auth/select-org
-func (UnimplementedHandler) SelectOrg(ctx context.Context, req *SelectOrgRequest) (r SelectOrgRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -311,18 +290,5 @@ func (UnimplementedHandler) UpdateOrganizationProfile(ctx context.Context, req *
 //
 // PUT /organization/avatar
 func (UnimplementedHandler) UploadOrganizationAvatar(ctx context.Context, req *UploadOrgAvatarRequest) (r UploadOrganizationAvatarRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// VerifyEmail implements verifyEmail operation.
-//
-// Some providers (notably GitHub OAuth) return an unverified email on first login, so WorkOS requires
-// email verification before issuing a session. The `/auth/callback` handler detects this, stores the
-// WorkOS `pending_authentication_token` in a short-lived sealed cookie, and sends the browser to the
-// SPA's verification step. The SPA collects the code WorkOS emailed and POSTs it here to finish
-// authentication and establish the session.
-//
-// POST /auth/verify-email
-func (UnimplementedHandler) VerifyEmail(ctx context.Context, req *VerifyEmailRequest) (r VerifyEmailRes, _ error) {
 	return r, ht.ErrNotImplemented
 }

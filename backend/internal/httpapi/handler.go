@@ -82,55 +82,6 @@ func (h Handler) GetMe(ctx context.Context) (api.GetMeRes, error) {
 	return resp, nil
 }
 
-// VerifyEmail implements the `verifyEmail` operation: POST /auth/verify-email.
-// It completes a login that WorkOS gated on email verification (see
-// startEmailVerification in auth.go) by exchanging the user-entered code plus
-// the stashed pending token for a session. On success the session cookie is set
-// and the user is returned; on any failure it returns 401.
-func (h Handler) VerifyEmail(ctx context.Context, req *api.VerifyEmailRequest) (api.VerifyEmailRes, error) {
-	p, ok := auth.HTTPFromContext(ctx)
-	if !ok {
-		return &api.Error{Message: "unauthorized"}, nil
-	}
-	user, err := h.auth.CompleteEmailVerification(p.W, p.R, req.Code)
-	if err != nil {
-		return &api.Error{Message: "verification failed"}, nil
-	}
-	return h.toUserResponse(ctx, user), nil
-}
-
-// GetPendingOrgs implements `getPendingOrgs`: GET /auth/pending-orgs.
-// Returns the organizations the user may choose between during org selection.
-func (h Handler) GetPendingOrgs(ctx context.Context) (api.GetPendingOrgsRes, error) {
-	p, ok := auth.HTTPFromContext(ctx)
-	if !ok {
-		return &api.Error{Message: "no pending selection"}, nil
-	}
-	choices := h.auth.PendingOrgChoices(p.R)
-	if len(choices) == 0 {
-		return &api.Error{Message: "no pending selection"}, nil
-	}
-	resp := &api.PendingOrganizations{}
-	for _, c := range choices {
-		resp.Organizations = append(resp.Organizations, api.Organization{ID: c.ID, Name: c.Name})
-	}
-	return resp, nil
-}
-
-// SelectOrg implements `selectOrg`: POST /auth/select-org.
-// Completes a login gated on organization selection.
-func (h Handler) SelectOrg(ctx context.Context, req *api.SelectOrgRequest) (api.SelectOrgRes, error) {
-	p, ok := auth.HTTPFromContext(ctx)
-	if !ok {
-		return &api.Error{Message: "no pending selection"}, nil
-	}
-	user, err := h.auth.CompleteOrgSelection(p.W, p.R, req.OrganizationId)
-	if err != nil {
-		return &api.Error{Message: "organization selection failed"}, nil
-	}
-	return h.toUserResponse(ctx, user), nil
-}
-
 // CreateOrganization implements `createOrganization`: POST /organizations.
 // Creates a WorkOS org for a signed-in-but-orgless user, adds them as its
 // first member, and re-scopes the session cookie to it.

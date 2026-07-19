@@ -1,4 +1,5 @@
 import { api, apiBaseUrl } from '$lib/api/client';
+import { authClient } from '$lib/auth-client';
 import type { components } from '$lib/api/schema';
 
 export type User = components['schemas']['UserResponse'];
@@ -44,13 +45,31 @@ class UserStore {
 
 export const userStore = new UserStore();
 
-// Full-page redirects to the backend's auth routes (not fetch calls).
-export function signIn() {
-	window.location.href = `${apiBaseUrl}/auth/login`;
+// Sign-in/out run against authd (Better Auth) directly; the backend only
+// consumes the resulting session cookie.
+export async function signIn() {
+	await authClient.signIn.social({
+		provider: 'github',
+		callbackURL: `${window.location.origin}/`
+	});
 }
 
-export function signOut() {
-	window.location.href = `${apiBaseUrl}/auth/logout`;
+export async function signOut() {
+	await authClient.signOut();
+	window.location.href = '/';
+}
+
+// Switch the session's active organization, then reload so every surface
+// (including the backend-derived /me) sees the new scope. The no-cache /me
+// primes the backend past its short session cache (it can't observe the
+// setActive, which goes browser → authd directly).
+export async function switchOrg(organizationId: string) {
+	await authClient.organization.setActive({ organizationId });
+	await fetch(`${apiBaseUrl}/me`, {
+		credentials: 'include',
+		headers: { 'Cache-Control': 'no-cache' }
+	});
+	window.location.reload();
 }
 
 // Human-friendly name for display: full name, falling back to email.

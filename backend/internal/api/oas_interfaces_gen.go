@@ -53,10 +53,6 @@ type GetOrganizationProfileRes interface {
 	getOrganizationProfileRes()
 }
 
-type GetPendingOrgsRes interface {
-	getPendingOrgsRes()
-}
-
 type ListInvitationsRes interface {
 	listInvitationsRes()
 }
@@ -79,10 +75,6 @@ type RegenerateOrganizationAvatarRes interface {
 
 type RevokeInvitationRes interface {
 	revokeInvitationRes()
-}
-
-type SelectOrgRes interface {
-	selectOrgRes()
 }
 
 type SubmitOssApplicationRes interface {
@@ -111,8 +103,4 @@ type UpdateOrganizationProfileRes interface {
 
 type UploadOrganizationAvatarRes interface {
 	uploadOrganizationAvatarRes()
-}
-
-type VerifyEmailRes interface {
-	verifyEmailRes()
 }
