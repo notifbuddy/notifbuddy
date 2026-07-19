@@ -1,6 +1,9 @@
 # Backend
 backend/bin/
 backend/.env
+# go build artifacts dropped at the module root (e.g. `go build ./cmd/nuke`)
+backend/nuke
+backend/server
 
 # Frontend
 frontend/node_modules/

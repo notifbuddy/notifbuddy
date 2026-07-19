@@ -12,6 +12,7 @@ Fully request-driven — no daemons, no cron — so it scales to zero.
 ```sh
 psql -d postgres -c "CREATE DATABASE authd;"
 cp .env.example .env   # fill BETTER_AUTH_SECRET (openssl rand -base64 32)
+                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app)
 npm install
 npm run migrate        # applies the Better Auth schema
 node --env-file=.env server.js
@@ -23,5 +24,7 @@ browser's cookie.
 
 ## Configuration
 
-See `.env.example`. GitHub login and Resend email are optional pairs — set
-both variables or neither; half a pair fails loudly at boot.
+See `.env.example`. GitHub OAuth is the only sign-in method — both
+`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are required. Resend email is an
+optional pair — set both variables or neither; half a pair fails loudly at
+boot.

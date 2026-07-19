@@ -20,10 +20,10 @@ if (!DATABASE_URL) throw new Error('authd: DATABASE_URL is required');
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL });
 
-// GitHub is optional (self-hosts may run email/password only), but half a
-// configuration is a loud error, never a silent disable.
-if (!!GITHUB_CLIENT_ID !== !!GITHUB_CLIENT_SECRET) {
-	throw new Error('authd: set both GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, or neither');
+// GitHub is the only sign-in method — no email/password. Missing creds is a
+// loud startup error, never a silent auth-less service.
+if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+	throw new Error('authd: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required');
 }
 
 export const auth = betterAuth({
@@ -48,27 +48,12 @@ export const auth = betterAuth({
 		},
 	},
 
-	emailAndPassword: {
-		enabled: true,
-		sendResetPassword: async ({ user, url }) => {
-			await sendEmail({
-				to: user.email,
-				subject: 'Reset your notifbuddy password',
-				text: `Reset your password: ${url}`,
-			});
+	socialProviders: {
+		github: {
+			clientId: GITHUB_CLIENT_ID,
+			clientSecret: GITHUB_CLIENT_SECRET,
 		},
 	},
-
-	...(GITHUB_CLIENT_ID
-		? {
-				socialProviders: {
-					github: {
-						clientId: GITHUB_CLIENT_ID,
-						clientSecret: GITHUB_CLIENT_SECRET,
-					},
-				},
-			}
-		: {}),
 
 	plugins: [
 		organization({

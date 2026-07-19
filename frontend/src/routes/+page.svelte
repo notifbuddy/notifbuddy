@@ -7,19 +7,10 @@
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import { authClient } from '$lib/auth-client';
 	import { userStore, signIn, switchOrg, type User } from '$lib/user.svelte';
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
-
-	// ---- Email + password (Better Auth) ----
-	let mode = $state<'signin' | 'signup'>('signin');
-	let email = $state('');
-	let password = $state('');
-	let fullName = $state('');
-	let authing = $state(false);
-	let authError = $state<string | null>(null);
 
 	// ---- Organization steps. A session with orgs but no active one gets the
 	// picker; a session with no orgs at all gets the create form. ----
@@ -41,27 +32,6 @@
 	$effect(() => {
 		if (user && !needsSelectOrg && !needsCreateOrg) goto('/dashboard/linear');
 	});
-
-	async function submitEmailAuth(e: SubmitEvent) {
-		e.preventDefault();
-		authing = true;
-		authError = null;
-		const { error } =
-			mode === 'signin'
-				? await authClient.signIn.email({ email: email.trim(), password })
-				: await authClient.signUp.email({
-						email: email.trim(),
-						password,
-						name: fullName.trim() || email.trim()
-					});
-		authing = false;
-		if (error) {
-			authError = error.message ?? 'Sign-in failed. Check your details and try again.';
-			return;
-		}
-		// Session cookie is set; /me now resolves and the effect routes onward.
-		await userStore.load(true);
-	}
 
 	async function chooseOrg(orgId: string) {
 		selectingOrgId = orgId;
@@ -159,8 +129,6 @@
 						Choose an organization
 					{:else if needsCreateOrg}
 						Create your organization
-					{:else if mode === 'signup'}
-						Create your account
 					{:else}
 						Streamline your notifications
 					{/if}
@@ -226,73 +194,11 @@
 					<!-- Still checking the session: skeleton in place of the action. -->
 					<Skeleton class="h-11 w-full rounded-md" />
 				{:else}
-					<!-- Signed out: email/password against authd, or GitHub. -->
-					<form class="flex flex-col gap-3" onsubmit={submitEmailAuth}>
-						{#if mode === 'signup'}
-							<input
-								class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
-								type="text"
-								placeholder="Your name"
-								autocomplete="name"
-								bind:value={fullName}
-								disabled={authing}
-							/>
-						{/if}
-						<input
-							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
-							type="email"
-							placeholder="you@company.com"
-							autocomplete="email"
-							bind:value={email}
-							disabled={authing}
-							required
-						/>
-						<input
-							class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
-							type="password"
-							placeholder="Password"
-							autocomplete={mode === 'signup' ? 'new-password' : 'current-password'}
-							minlength={8}
-							bind:value={password}
-							disabled={authing}
-							required
-						/>
-						<Button
-							type="submit"
-							size="lg"
-							class="font-medium"
-							disabled={authing || email.trim() === '' || password === ''}
-						>
-							{#if authing}
-								<LoaderIcon data-icon="inline-start" class="animate-spin" />
-								{mode === 'signup' ? 'Creating account…' : 'Signing in…'}
-							{:else}
-								{mode === 'signup' ? 'Create account' : 'Sign in'}
-							{/if}
-						</Button>
-					</form>
-					{#if authError}
-						<p class="text-destructive text-center text-sm">{authError}</p>
-					{/if}
-					<div class="text-muted-foreground/80 flex items-center gap-3 text-xs" aria-hidden="true">
-						<span class="bg-border h-px flex-1"></span>
-						or
-						<span class="bg-border h-px flex-1"></span>
-					</div>
-					<Button onclick={signIn} size="lg" variant="outline" class="font-medium">
+					<!-- Signed out: GitHub is the only sign-in method. -->
+					<Button onclick={signIn} size="lg" class="font-medium">
 						<GithubIcon data-icon="inline-start" size={18} />
 						Continue with GitHub
 					</Button>
-					<button
-						type="button"
-						class="text-muted-foreground hover:text-foreground text-center text-xs underline-offset-4 hover:underline"
-						onclick={() => {
-							mode = mode === 'signin' ? 'signup' : 'signin';
-							authError = null;
-						}}
-					>
-						{mode === 'signin' ? "New here? Create an account" : 'Already have an account? Sign in'}
-					</button>
 				{/if}
 			</div>
 		</section>
