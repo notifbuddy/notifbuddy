@@ -1,6 +1,8 @@
 FROM node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+# @better-auth/cli is a runtime dependency on purpose: the deploy pipeline's
+# migrate job runs `npm run migrate` inside this same image.
 RUN npm ci --omit=dev
 
 FROM node:24-slim
