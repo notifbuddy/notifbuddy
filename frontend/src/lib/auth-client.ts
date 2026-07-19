@@ -1,13 +1,13 @@
 // Better Auth browser client — the SPA talks to authd directly for sign-in,
 // sign-up, sign-out, and org switching; the Go backend only consumes the
-// resulting session cookie. PUBLIC_AUTH_URL must point at authd
-// (http://localhost:8787 in dev); like PUBLIC_API_BASE_URL, an unset value is
-// a browser-side 500, so it lives in frontend/.env.
+// resulting session cookie. The authd origin comes from runtime-config
+// (http://localhost:8787 in dev, via frontend/.env); an unresolvable value
+// throws there rather than failing later as an opaque fetch error.
 import { createAuthClient } from 'better-auth/client';
 import { organizationClient } from 'better-auth/client/plugins';
-import { PUBLIC_AUTH_URL } from '$env/static/public';
+import { authUrl } from '$lib/runtime-config';
 
 export const authClient = createAuthClient({
-	baseURL: PUBLIC_AUTH_URL,
+	baseURL: authUrl,
 	plugins: [organizationClient()]
 });
