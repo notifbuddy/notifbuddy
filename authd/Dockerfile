@@ -7,6 +7,6 @@ FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json auth.js email.js server.js ./
+COPY package.json auth.ts email.ts server.ts ./
 EXPOSE 8787
-CMD ["node", "server.js"]
+CMD ["node", "server.ts"]

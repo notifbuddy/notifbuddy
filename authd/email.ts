@@ -7,7 +7,7 @@ if (RESEND_API_KEY && !EMAIL_FROM) {
 	throw new Error('authd: EMAIL_FROM is required when RESEND_API_KEY is set');
 }
 
-export async function sendEmail({ to, subject, text }) {
+export async function sendEmail({ to, subject, text }: { to: string; subject: string; text: string }) {
 	if (!RESEND_API_KEY) {
 		console.log(`authd: [email disabled] to=${to} subject=${JSON.stringify(subject)}\n${text}`);
 		return;

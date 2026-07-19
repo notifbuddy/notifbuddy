@@ -5,7 +5,7 @@
 import { betterAuth } from 'better-auth';
 import { organization } from 'better-auth/plugins';
 import pg from 'pg';
-import { sendEmail } from './email.js';
+import { sendEmail } from './email.ts';
 
 const {
 	DATABASE_URL,

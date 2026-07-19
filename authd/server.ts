@@ -1,9 +1,9 @@
 // authd — plain Node HTTP server around Better Auth's handler. Everything is
 // request-scoped; the process holds no state worth keeping, so Cloud Run can
 // scale it to zero freely.
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { toNodeHandler } from 'better-auth/node';
-import { auth } from './auth.js';
+import { auth } from './auth.ts';
 
 const port = Number(process.env.PORT ?? 8787);
 const handler = toNodeHandler(auth);
@@ -13,7 +13,7 @@ const handler = toNodeHandler(auth);
 // credentials, so the origin is echoed, never *).
 const trustedOrigins = (process.env.TRUSTED_ORIGINS ?? 'http://localhost:5173').split(',');
 
-function applyCors(req, res) {
+function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
 	const origin = req.headers.origin;
 	if (!origin || !trustedOrigins.includes(origin)) return false;
 	res.setHeader('Access-Control-Allow-Origin', origin);

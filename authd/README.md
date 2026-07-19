@@ -15,7 +15,7 @@ cp .env.example .env   # fill BETTER_AUTH_SECRET (openssl rand -base64 32)
                        # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app)
 npm install
 npm run migrate        # applies the Better Auth schema
-node --env-file=.env server.js
+node --env-file=.env server.ts
 ```
 
 The dashboard SPA talks to authd directly (sign-in, org create); the Go
