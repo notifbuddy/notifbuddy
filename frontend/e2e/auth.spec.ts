@@ -7,8 +7,8 @@ test.describe('signed-in entry', () => {
 
 		await expect(page).toHaveURL(/\/dashboard\/linear$/);
 		await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-		// The org switcher is populated from /me (backed by the WorkOS membership
-		// fake), proving the whole identity round-trip works end to end.
+		// The org switcher is populated from /me (backed by the authd fake),
+		// proving the whole identity round-trip works end to end.
 		await expect(page.getByRole('button', { name: session.orgName })).toBeVisible();
 	});
 });

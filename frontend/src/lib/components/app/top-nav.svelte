@@ -28,7 +28,7 @@
 	import { page } from '$app/state';
 	import {
 		userStore,
-		signIn,
+		switchOrg,
 		signOut,
 		displayName,
 		initials,
@@ -52,11 +52,11 @@
 	const path = $derived(page.url.pathname);
 	const isActive = (url: string) => path === url || path.startsWith(url + '/');
 
-	// Switching org while signed in re-runs login scoped to that org (see the old
-	// org-switcher note). Picking the current one is a no-op.
+	// Switching org sets the session's active organization in authd and
+	// reloads. Picking the current one is a no-op.
 	function selectOrg(org: Organization) {
 		if (org.id === activeOrg?.id) return;
-		signIn();
+		switchOrg(org.id);
 	}
 </script>
 

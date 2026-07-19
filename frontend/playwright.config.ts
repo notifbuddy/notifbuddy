@@ -6,8 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
 // because it shares the backend's network namespace. See backend/e2e/run-ui.sh
 // and backend/e2e/docker-compose.e2e.yml.
 //
-// The browser authenticates with a forged wos_session cookie that fakeapis
-// seals onto the shared volume (see e2e/fixtures.ts + backend/e2e/fakeapis).
+// The browser authenticates with a forged session cookie that fakeapis mints
+// onto the shared volume (see e2e/fixtures.ts + backend/e2e/fakeapis).
 const PORT = Number(process.env.PORT ?? 5173);
 
 export default defineConfig({

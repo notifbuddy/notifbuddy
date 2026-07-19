@@ -23,13 +23,11 @@ logging:
 cors:
   allow_origin: "http://localhost:5173" # exact SPA origin (credentialed CORS: no "*")
 
-workos:
-  client_id: "client_01KW191FHXJTNC0X9X9W39DWMX"
-  api_key: "${WORKOS_API_KEY}" # SECRET — resolved from env
-  cookie_password: "${WORKOS_COOKIE_PASSWORD}" # SECRET — resolved from env (>=32 chars)
-  redirect_uri: "http://localhost:8080/auth/callback" # must match a dashboard redirect
-  login_provider: "GitHubOAuth" # skip AuthKit selector; required for single-provider setups. "" to show selector.
-  webhook_secret: "${WORKOS_WEBHOOK_SECRET}" # SECRET — verifies WorkOS-Signature (membership events → seat sync); empty disables the endpoint
+auth:
+  # authd (the Better Auth service, authd/ in this repo). The SPA signs in
+  # against it directly; this backend validates sessions by forwarding the
+  # browser's cookie to it.
+  base_url: "http://localhost:8787"
 
 app:
   post_login_url: "http://localhost:5173" # where the browser lands after login/logout

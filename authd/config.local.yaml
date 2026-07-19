@@ -1,0 +1,33 @@
+# authd configuration (local dev). Same pattern as backend/config.local.yaml:
+# non-sensitive values are set literally, SENSITIVE values reference an env var
+# with `${VAR}` — resolved at startup; a referenced-but-unset variable is a
+# hard error. Secrets live in authd/.env (run with `node --env-file=.env`).
+#
+# Override the config path with CONFIG_FILE=/path/to/config.yaml.
+
+server:
+  port: 8787 # PORT env (Cloud Run contract) wins when set
+
+auth:
+  base_url: "http://localhost:8787" # public base URL of this service
+  secret: "${BETTER_AUTH_SECRET}" # SECRET — signing/encryption key (openssl rand -base64 32)
+  cookie_domain: "" # empty locally; prod ".notifbuddy.com" so api.* sees the session cookie
+
+database:
+  # Dedicated database on the same homebrew postgres as the backend:
+  #   psql -d postgres -c "CREATE DATABASE authd;"
+  url: "postgres://localhost/authd"
+
+cors:
+  trusted_origins: # browser origins allowed to call authd (the dashboard SPA)
+    - "http://localhost:5173"
+
+github:
+  # GitHub OAuth — the only sign-in method (required). Create a GitHub OAuth
+  # app with callback <auth.base_url>/api/auth/callback/github
+  client_id: "${GITHUB_CLIENT_ID}"
+  client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
+
+email:
+  resend_api_key: "" # empty = invitation emails go to the console (dev sink)
+  from: ""

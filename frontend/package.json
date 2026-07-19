@@ -42,6 +42,7 @@
 	},
 	"dependencies": {
 		"@fontsource-variable/outfit": "^5.2.8",
+		"better-auth": "^1.6.23",
 		"jsonc-parser": "^3.3.1",
 		"mode-watcher": "^1.1.0",
 		"openapi-fetch": "^0.17.0",

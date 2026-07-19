@@ -51,12 +51,3 @@ func TestResolveEventOrg(t *testing.T) {
 		})
 	}
 }
-
-func TestWorkosEventOrg(t *testing.T) {
-	if got := workosEventOrg(map[string]any{"organization_id": "org_1"}); got != "org_1" {
-		t.Errorf("got %q, want org_1", got)
-	}
-	if got := workosEventOrg(map[string]any{"user_id": "user_1"}); got != "" {
-		t.Errorf("got %q, want empty", got)
-	}
-}

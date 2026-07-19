@@ -23,7 +23,7 @@ type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Logging    LoggingConfig    `yaml:"logging"`
 	CORS       CORSConfig       `yaml:"cors"`
-	WorkOS     WorkOSConfig     `yaml:"workos"`
+	Auth       AuthConfig       `yaml:"auth"`
 	App        AppConfig        `yaml:"app"`
 	Database   DatabaseConfig   `yaml:"database"`
 	Encryption EncryptionConfig `yaml:"encryption"`
@@ -79,21 +79,11 @@ type CORSConfig struct {
 	AllowOrigin string `yaml:"allow_origin"`
 }
 
-type WorkOSConfig struct {
-	// ClientID is the WorkOS application client ID (client_...). Public.
-	ClientID string `yaml:"client_id"`
-	// APIKey is the WorkOS API key (sk_...). SECRET — set to an env ref.
-	APIKey string `yaml:"api_key"`
-	// CookiePassword (>=32 chars) seals the session cookie. SECRET — env ref.
-	CookiePassword string `yaml:"cookie_password"`
-	// RedirectURI is the OAuth callback; must match a dashboard redirect.
-	RedirectURI string `yaml:"redirect_uri"`
-	// LoginProvider, when set, sends users straight to one AuthKit provider.
-	LoginProvider string `yaml:"login_provider"`
-	// WebhookSecret verifies incoming WorkOS webhook signatures
-	// (WorkOS-Signature header; organization_membership events drive seat
-	// sync). SECRET — env ref. Empty disables the endpoint.
-	WebhookSecret string `yaml:"webhook_secret"`
+type AuthConfig struct {
+	// BaseURL is where authd (the Better Auth service) is reachable from this
+	// backend, e.g. http://localhost:8787 locally or the Cloud Run URL in
+	// prod. Sessions are validated by forwarding the browser's cookie there.
+	BaseURL string `yaml:"base_url"`
 }
 
 type AppConfig struct {
@@ -228,7 +218,7 @@ func defaultConfig() Config {
 		Server:     ServerConfig{Addr: ":8080"},
 		Logging:    LoggingConfig{Format: "text", Level: "info"},
 		CORS:       CORSConfig{AllowOrigin: "http://localhost:5173"},
-		WorkOS:     WorkOSConfig{RedirectURI: "http://localhost:8080/auth/callback"},
+		Auth:       AuthConfig{BaseURL: "http://localhost:8787"},
 		App:        AppConfig{PostLoginURL: "http://localhost:5173"},
 		Encryption: EncryptionConfig{Provider: "local"},
 		Slack:      SlackConfig{CallbackURL: "http://localhost:8080/integrations/slack/callback"},
@@ -333,17 +323,8 @@ func expandEnvRef(value, fieldName string) (string, error) {
 // optional — those flows simply report "not configured" when blank — so only
 // the WorkOS essentials are required here.
 func (c *Config) validate() error {
-	if c.WorkOS.ClientID == "" {
-		return fmt.Errorf("workos.client_id is required")
-	}
-	if c.WorkOS.APIKey == "" {
-		return fmt.Errorf("workos.api_key is required (e.g. set it to $WORKOS_API_KEY)")
-	}
-	if c.WorkOS.CookiePassword == "" {
-		return fmt.Errorf("workos.cookie_password is required (e.g. set it to $WORKOS_COOKIE_PASSWORD)")
-	}
-	if len(c.WorkOS.CookiePassword) < 32 {
-		return fmt.Errorf("workos.cookie_password must be at least 32 characters (got %d)", len(c.WorkOS.CookiePassword))
+	if c.Auth.BaseURL == "" {
+		return fmt.Errorf("auth.base_url is required (authd's base URL, e.g. http://localhost:8787)")
 	}
 	// When an integration's OAuth app is configured (its client secret is set),
 	// its inbound webhook secret is mandatory. The webhook handlers fail closed

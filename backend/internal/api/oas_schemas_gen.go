@@ -586,13 +586,10 @@ func (*Error) disconnectIntegrationRes() {}
 func (*Error) getIntegrationStatusRes()  {}
 func (*Error) getLinearSettingsRes()     {}
 func (*Error) getMeRes()                 {}
-func (*Error) getPendingOrgsRes()        {}
 func (*Error) listInvitationsRes()       {}
 func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
 func (*Error) pingRes()                  {}
-func (*Error) selectOrgRes()             {}
-func (*Error) verifyEmailRes()           {}
 
 type GetBillingBadRequest Error
 
@@ -1797,24 +1794,6 @@ func (s *OssApplicationRequest) SetNote(val OptString) {
 	s.Note = val
 }
 
-// The organizations a user may choose between during org selection.
-// Ref: #/components/schemas/PendingOrganizations
-type PendingOrganizations struct {
-	Organizations []Organization `json:"organizations"`
-}
-
-// GetOrganizations returns the value of Organizations.
-func (s *PendingOrganizations) GetOrganizations() []Organization {
-	return s.Organizations
-}
-
-// SetOrganizations sets the value of Organizations.
-func (s *PendingOrganizations) SetOrganizations(val []Organization) {
-	s.Organizations = val
-}
-
-func (*PendingOrganizations) getPendingOrgsRes() {}
-
 // The response returned by the ping endpoint.
 // Ref: #/components/schemas/PongResponse
 type PongResponse struct {
@@ -1945,23 +1924,6 @@ func (s *SampleEvent) SetLabel(val string) {
 // SetRaw sets the value of Raw.
 func (s *SampleEvent) SetRaw(val string) {
 	s.Raw = val
-}
-
-// The organization the user chose during the org-selection step.
-// Ref: #/components/schemas/SelectOrgRequest
-type SelectOrgRequest struct {
-	// The ID of the organization to authenticate into.
-	OrganizationId string `json:"organizationId"`
-}
-
-// GetOrganizationId returns the value of OrganizationId.
-func (s *SelectOrgRequest) GetOrganizationId() string {
-	return s.OrganizationId
-}
-
-// SetOrganizationId sets the value of OrganizationId.
-func (s *SelectOrgRequest) SetOrganizationId(val string) {
-	s.OrganizationId = val
 }
 
 // A synced Slack workspace member (bot/app or human).
@@ -2444,25 +2406,6 @@ func (s *UserResponse) SetBilling(val OptBillingSummary) {
 
 func (*UserResponse) createOrganizationRes() {}
 func (*UserResponse) getMeRes()              {}
-func (*UserResponse) selectOrgRes()          {}
-func (*UserResponse) verifyEmailRes()        {}
-
-// The verification code the user received by email.
-// Ref: #/components/schemas/VerifyEmailRequest
-type VerifyEmailRequest struct {
-	// The one-time verification code WorkOS emailed to the user.
-	Code string `json:"code"`
-}
-
-// GetCode returns the value of Code.
-func (s *VerifyEmailRequest) GetCode() string {
-	return s.Code
-}
-
-// SetCode sets the value of Code.
-func (s *VerifyEmailRequest) SetCode(val string) {
-	s.Code = val
-}
 
 // A stored provider webhook delivery.
 // Ref: #/components/schemas/WebhookEvent

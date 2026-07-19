@@ -605,37 +605,6 @@ func encodeGetOrganizationProfileResponse(response GetOrganizationProfileRes, w 
 	}
 }
 
-func encodeGetPendingOrgsResponse(response GetPendingOrgsRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *PendingOrganizations:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(200)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *Error:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(401)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
 func encodeListInvitationsResponse(response ListInvitationsRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *InvitationListResponse:
@@ -856,37 +825,6 @@ func encodeRevokeInvitationResponse(response RevokeInvitationRes, w http.Respons
 	case *RevokeInvitationNotFound:
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(404)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeSelectOrgResponse(response SelectOrgRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *UserResponse:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(200)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *Error:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(401)
 
 		e := new(jx.Encoder)
 		response.Encode(e)
@@ -1296,37 +1234,6 @@ func encodeUploadOrganizationAvatarResponse(response UploadOrganizationAvatarRes
 	case *UploadOrganizationAvatarForbidden:
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(403)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeVerifyEmailResponse(response VerifyEmailRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *UserResponse:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(200)
-
-		e := new(jx.Encoder)
-		response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *Error:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(401)
 
 		e := new(jx.Encoder)
 		response.Encode(e)

@@ -52,20 +52,6 @@ func encodeCreateOrganizationRequest(
 	return nil
 }
 
-func encodeSelectOrgRequest(
-	req *SelectOrgRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeSubmitOssApplicationRequest(
 	req *OssApplicationRequest,
 	r *http.Request,
@@ -138,20 +124,6 @@ func encodeUpdateOrganizationProfileRequest(
 
 func encodeUploadOrganizationAvatarRequest(
 	req *UploadOrgAvatarRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeVerifyEmailRequest(
-	req *VerifyEmailRequest,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
