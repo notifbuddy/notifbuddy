@@ -69,6 +69,10 @@ existingSecret: ""
 postgresql:
   enabled: true
   image: postgres:16
+  # -- Pull policy for the Postgres image. Separate from `image.pullPolicy`,
+  # which applies to notifbuddy's own images: setting that to Never (to use
+  # side-loaded images) must not stop Kubernetes pulling this one.
+  pullPolicy: IfNotPresent
   # -- Volume size for the bundled Postgres.
   storage: 8Gi
   # -- StorageClass. Empty uses the cluster default.

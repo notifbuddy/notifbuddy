@@ -30,6 +30,13 @@ COPY --from=build /src/config.prod.yaml /app/config.prod.yaml
 COPY --from=build /src/config.local.yaml /app/config.local.yaml
 ENV CONFIG_FILE=config.prod.yaml
 
+# Runs unprivileged. Clusters that enforce the restricted Pod Security
+# Standard reject a container that could run as uid 0, and OpenShift assigns
+# an arbitrary non-root uid, so an image that needs root simply won't start
+# there. Nothing here does: the binary is static, the port is above 1024, and
+# every file it reads is world-readable.
+USER 65532:65532
+
 # Cloud Run sends traffic to $PORT (defaults to 8080); the config listens on :8080.
 EXPOSE 8080
 ENTRYPOINT ["/app/server"]

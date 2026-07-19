@@ -128,6 +128,56 @@ would work and the install is rejected rather than left half-broken.
 {{- end -}}
 
 {{/*
+Pod-level security context shared by all three services. Every image runs as a
+non-root user, which the restricted Pod Security Standard requires and
+OpenShift assumes.
+*/}}
+{{- define "notifbuddy.podSecurityContext" -}}
+runAsNonRoot: true
+seccompProfile:
+  type: RuntimeDefault
+{{- end -}}
+
+{{- define "notifbuddy.containerSecurityContext" -}}
+allowPrivilegeEscalation: false
+capabilities:
+  drop:
+    - ALL
+{{- end -}}
+
+{{/*
+Init container that blocks until the bundled Postgres accepts connections.
+
+Only rendered when the bundled database is in use: with an external database
+we have no image to probe with and no reason to assume it is starting at the
+same time we are. Without it the service still converges — it crash-loops
+until the database answers — but a cold install spends its first minute
+throwing connection errors, which reads like a broken deploy.
+*/}}
+{{- define "notifbuddy.waitForPostgres" -}}
+{{- if include "notifbuddy.bundledPostgres" . }}
+- name: wait-for-postgres
+  image: {{ .Values.postgresql.image | quote }}
+  imagePullPolicy: {{ .Values.postgresql.pullPolicy }}
+  securityContext:
+    {{- include "notifbuddy.containerSecurityContext" . | nindent 4 }}
+    # The Postgres image would start this as root, which the pod's
+    # runAsNonRoot forbids. pg_isready needs no privileges, so pin it to the
+    # postgres user the image already ships.
+    runAsUser: 999
+    runAsGroup: 999
+  command:
+    - sh
+    - -c
+    - |
+      until pg_isready -h {{ include "notifbuddy.postgresHost" . }} -p 5432 -U notifbuddy; do
+        echo "waiting for postgres"
+        sleep 2
+      done
+{{- end }}
+{{- end -}}
+
+{{/*
 Sensitive values, resolved once and reused by every template that needs them.
 
 Order: an existing Secret in the cluster wins (so upgrades keep what is already

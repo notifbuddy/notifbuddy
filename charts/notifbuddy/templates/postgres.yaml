@@ -53,11 +53,19 @@ spec:
       {{- end }}
     spec:
       securityContext:
+        # No runAsNonRoot here, unlike the three application pods: the official
+        # Postgres image starts as root to fix up permissions on the data
+        # directory and drops to the postgres user itself. fsGroup gives that
+        # user access to the mounted volume.
+        #
+        # A cluster enforcing the restricted Pod Security Standard will reject
+        # this pod — which is another reason to run a real Postgres in those
+        # environments and set database.url.
         fsGroup: 999
       containers:
         - name: postgres
           image: {{ .Values.postgresql.image | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.postgresql.pullPolicy }}
           env:
             - name: POSTGRES_USER
               value: notifbuddy

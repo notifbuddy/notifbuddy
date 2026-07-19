@@ -153,6 +153,29 @@ jobs:
               .then(r => { if (r.status !== 200) { console.error('status', r.status); process.exit(1); } })
               .catch(e => { console.error(e); process.exit(1); })"
 
+          echo "── every application container runs as a non-root uid"
+          for c in backend authd dashboard; do
+            uid=$(kubectl exec "deploy/nb-notifbuddy-$c" -c "$c" -- id -u)
+            test "$uid" -ne 0 || { echo "::error::$c runs as root"; exit 1; }
+            echo "   $c uid=$uid"
+          done
+
+          echo "── backend health route answers without a session"
+          status=$(kubectl exec deploy/nb-notifbuddy-authd -c authd -- node -e "
+            fetch('http://nb-notifbuddy-backend:8080/healthz')
+              .then(r => console.log(r.status)).catch(() => console.log('err'))")
+          test "$status" = "200" || { echo "::error::/healthz returned $status"; exit 1; }
+
+          echo "── authenticated routes still require a session"
+          status=$(kubectl exec deploy/nb-notifbuddy-authd -c authd -- node -e "
+            fetch('http://nb-notifbuddy-backend:8080/ping')
+              .then(r => console.log(r.status)).catch(() => console.log('err'))")
+          test "$status" = "401" || { echo "::error::/ping returned $status, expected 401"; exit 1; }
+
+          echo "── a cold install settles without crash-looping"
+          restarts=$(kubectl get pods --no-headers | awk '{sum += $4} END {print sum+0}')
+          test "$restarts" -eq 0 || { echo "::error::$restarts restarts on a cold install"; exit 1; }
+
           echo "── dashboard was configured with this release's hostnames"
           html=$(kubectl exec deploy/nb-notifbuddy-dashboard -- wget -qO- http://127.0.0.1:8080/)
           echo "$html" | grep -q 'https://api.example.com' \

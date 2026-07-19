@@ -37,10 +37,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      securityContext:
+        {{- include "notifbuddy.podSecurityContext" . | nindent 8 }}
       containers:
         - name: dashboard
           image: {{ include "notifbuddy.image" (dict "ctx" . "name" "dashboard") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
           # The dashboard is a static bundle, so these are written into the
           # page at container start rather than baked into the image — one
           # published image serves every install. The container refuses to

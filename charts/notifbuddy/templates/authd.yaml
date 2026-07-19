@@ -40,11 +40,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      # NOTE: no runAsNonRoot here — the authd image still runs as root. The
-      # dashboard image already runs as uid 101; giving authd and the backend
-      # the same treatment is a follow-up in their Dockerfiles, at which point
-      # this can be tightened for all three.
+      securityContext:
+        {{- include "notifbuddy.podSecurityContext" . | nindent 8 }}
       initContainers:
+        {{- include "notifbuddy.waitForPostgres" . | nindent 8 }}
         # Schema migration, as an init container rather than a Helm hook.
         #
         # A pre-install hook runs before the chart's own resources exist, so on
@@ -58,6 +57,8 @@ spec:
         - name: migrate
           image: {{ include "notifbuddy.image" (dict "ctx" . "name" "authd") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
           command: ["npm", "run", "migrate"]
           env:
             - name: DATABASE_URL
@@ -92,6 +93,8 @@ spec:
         - name: authd
           image: {{ include "notifbuddy.image" (dict "ctx" . "name" "authd") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
           env:
             - name: PORT
               value: "8787"
