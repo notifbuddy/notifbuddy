@@ -36,7 +36,9 @@ function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
 
 const server = createServer((req, res) => {
 	if (applyCors(req, res)) return;
-	if (req.url === '/healthz') {
+	// /health, not /healthz: Google's frontend reserves /healthz on run.app
+	// hosts and 404s it before the container ever sees the request.
+	if (req.url === '/health' || req.url === '/healthz') {
 		res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
 		return;
 	}
