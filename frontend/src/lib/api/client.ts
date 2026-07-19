@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch';
-import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import { apiBaseUrl } from '$lib/runtime-config';
 import type { paths } from './schema';
 
 // Fully typed API client. Every request/response is typed against the
@@ -11,11 +11,12 @@ import type { paths } from './schema';
 // with the credentialed CORS config on the backend (exact allow-origin +
 // Access-Control-Allow-Credentials: true).
 export const api = createClient<paths>({
-	baseUrl: PUBLIC_API_BASE_URL,
+	baseUrl: apiBaseUrl,
 	credentials: 'include'
 });
 
 // Base URL for full-page navigations to the backend's redirect auth routes
 // (/auth/login, /auth/logout). These are browser redirects, not fetch calls,
-// so they bypass the typed client.
-export const apiBaseUrl = PUBLIC_API_BASE_URL;
+// so they bypass the typed client. Re-exported here because callers have
+// always imported it from this module.
+export { apiBaseUrl };

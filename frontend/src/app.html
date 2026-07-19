@@ -5,6 +5,14 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<!-- Runtime configuration (API/authd origins), inline so it costs no
+		     request and still runs before the app modules, which read
+		     window.__notifbuddy at import time. Our own deploys serve this line
+		     untouched and fall back to the build-time PUBLIC_* vars; the
+		     self-hosted dashboard image rewrites the whole line at container
+		     start, keyed on the marker. Keep it on one line — the rewrite is a
+		     line-addressed sed. See src/lib/runtime-config.ts. -->
+		<script>window.__notifbuddy = {}; /* notifbuddy:runtime-config */</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
