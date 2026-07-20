@@ -1,0 +1,131 @@
+{{- if include "notifbuddy.bundledPostgres" . }}
+{{- $fullname := include "notifbuddy.fullname" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-postgres-init
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+data:
+  # Runs once, on an empty data directory. POSTGRES_DB creates the application
+  # database; the auth service gets its own so auth data never shares a schema
+  # with application data (the same split our hosted deployment runs).
+  init-authd-db.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+    CREATE DATABASE authd OWNER notifbuddy;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-postgres
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres
+  selector:
+    {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "postgres") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-postgres
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $fullname }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notifbuddy.podLabels" (dict "ctx" . "component" "postgres") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      securityContext:
+        # No runAsNonRoot here, unlike the three application pods: the official
+        # Postgres image starts as root to fix up permissions on the data
+        # directory and drops to the postgres user itself. fsGroup gives that
+        # user access to the mounted volume.
+        #
+        # A cluster enforcing the restricted Pod Security Standard will reject
+        # this pod — which is another reason to run a real Postgres in those
+        # environments and set database.url.
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: {{ .Values.postgresql.image | quote }}
+          imagePullPolicy: {{ .Values.postgresql.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: notifbuddy
+            - name: POSTGRES_DB
+              value: notifbuddy
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: POSTGRES_PASSWORD
+            # The image refuses to initialise into a non-empty directory, and
+            # a mounted volume always has lost+found.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "notifbuddy", "-d", "notifbuddy"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "notifbuddy", "-d", "notifbuddy"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: {{ $fullname }}-postgres-init
+            defaultMode: 0555
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.postgresql.storageClass }}
+        storageClassName: {{ .Values.postgresql.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.storage | quote }}
+{{- end }}

@@ -1,0 +1,212 @@
+name: Helm chart
+
+# Lints and renders the chart, validates the output against real Kubernetes
+# schemas, then actually installs it on a throwaway kind cluster.
+#
+# The images are built from the branch under test and side-loaded into kind
+# rather than pulled from GHCR. That tests the chart against the code in the
+# PR — and means there is no published tag to keep bumping here whenever a
+# release lands.
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - "backend/**"
+      - "authd/**"
+      - "frontend/**"
+      - ".github/workflows/chart-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - ".github/workflows/chart-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+
+      - name: helm lint
+        run: |
+          helm lint charts/notifbuddy \
+            --set domain=example.com --set github.clientId=a --set github.clientSecret=b
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+
+      # Each combination renders a materially different set of objects, so all
+      # of them get schema-checked rather than just the default one.
+      - name: Render and validate every supported shape
+        run: |
+          set -eu
+          base="--set github.clientId=a --set github.clientSecret=b"
+          render() {
+            name=$1; shift
+            echo "── $name"
+            helm template nb charts/notifbuddy "$@" \
+              | kubeconform -strict -summary -kubernetes-version 1.31.0
+          }
+          # shellcheck disable=SC2086
+          render "bundled postgres"   $base --set domain=example.com
+          # shellcheck disable=SC2086
+          render "external postgres"  $base --set domain=example.com \
+            --set database.url=postgres://h/app --set database.authUrl=postgres://h/authd
+          # shellcheck disable=SC2086
+          render "explicit hosts"     $base \
+            --set hosts.dashboard=nb.corp.io --set hosts.api=nb-api.corp.io --set hosts.auth=nb-auth.corp.io
+          # shellcheck disable=SC2086
+          render "all integrations"   $base --set domain=example.com \
+            --set integrations.slack.enabled=true --set integrations.slack.clientId=x \
+            --set integrations.slack.clientSecret=y --set integrations.slack.signingSecret=z \
+            --set integrations.linear.enabled=true --set integrations.linear.clientId=x \
+            --set integrations.linear.clientSecret=y --set integrations.linear.webhookSecret=z \
+            --set integrations.cloudflare.enabled=true --set integrations.cloudflare.accountId=x \
+            --set integrations.cloudflare.apiToken=y \
+            --set integrations.email.enabled=true --set integrations.email.resendApiKey=x \
+            --set integrations.email.from=a@b.c
+          render "ingress disabled"   --set github.clientId=a --set github.clientSecret=b \
+            --set domain=example.com --set ingress.enabled=false
+
+      # Misconfiguration should be rejected at render time with a message that
+      # names the knob, not accepted and left to fail in the cluster.
+      - name: Misconfiguration is refused
+        run: |
+          set -eu
+          refuses() {
+            name=$1; shift
+            if helm template nb charts/notifbuddy "$@" >/dev/null 2>&1; then
+              echo "::error::expected '$name' to be rejected, but it rendered"
+              exit 1
+            fi
+            echo "── refused: $name"
+          }
+          refuses "no domain and no hosts"        --set github.clientId=a --set github.clientSecret=b
+          refuses "no github clientId"            --set domain=example.com --set github.clientSecret=b
+          refuses "no github clientSecret"        --set domain=example.com --set github.clientId=a
+          refuses "external db without authUrl"   --set domain=example.com --set github.clientId=a \
+            --set github.clientSecret=b --set database.url=postgres://h/app
+          refuses "slack without signingSecret"   --set domain=example.com --set github.clientId=a \
+            --set github.clientSecret=b --set integrations.slack.enabled=true \
+            --set integrations.slack.clientSecret=y
+          refuses "hosts with no common parent"   --set github.clientId=a --set github.clientSecret=b \
+            --set hosts.dashboard=app.a.com --set hosts.api=api.b.com --set hosts.auth=auth.c.com
+
+  install:
+    name: install on kind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Build images from this branch
+        run: |
+          docker build -t notifbuddy/backend:ci backend
+          docker build -t notifbuddy/authd:ci authd
+          docker build -t notifbuddy/dashboard:ci -f frontend/Dockerfile .
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: chart-ci
+
+      - name: Load images into the cluster
+        run: |
+          for i in backend authd dashboard; do
+            kind load docker-image "notifbuddy/$i:ci" --name chart-ci
+          done
+
+      - name: helm install
+        run: |
+          helm install nb charts/notifbuddy \
+            --set domain=example.com \
+            --set github.clientId=abc --set github.clientSecret=def \
+            --set image.registry=notifbuddy --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --wait --timeout 6m
+
+      - name: Verify the release actually works
+        run: |
+          set -eu
+          echo "── authd schema was migrated"
+          tables=$(kubectl exec nb-notifbuddy-postgres-0 -- \
+            psql -U notifbuddy -d authd -tAc \
+            "select count(*) from pg_tables where schemaname='public'")
+          test "$tables" -ge 8 || { echo "::error::authd migration did not run (found $tables tables)"; exit 1; }
+
+          echo "── backend schema was migrated"
+          apptables=$(kubectl exec nb-notifbuddy-postgres-0 -- \
+            psql -U notifbuddy -d notifbuddy -tAc \
+            "select count(*) from pg_tables where schemaname='public'")
+          test "$apptables" -ge 10 || { echo "::error::backend migration did not run (found $apptables tables)"; exit 1; }
+
+          echo "── authd serves an anonymous session"
+          kubectl exec deploy/nb-notifbuddy-authd -c authd -- node -e "
+            fetch('http://127.0.0.1:8787/api/auth/get-session')
+              .then(r => { if (r.status !== 200) { console.error('status', r.status); process.exit(1); } })
+              .catch(e => { console.error(e); process.exit(1); })"
+
+          echo "── every application container runs as a non-root uid"
+          for c in backend authd dashboard; do
+            uid=$(kubectl exec "deploy/nb-notifbuddy-$c" -c "$c" -- id -u)
+            test "$uid" -ne 0 || { echo "::error::$c runs as root"; exit 1; }
+            echo "   $c uid=$uid"
+          done
+
+          echo "── backend health route answers without a session"
+          status=$(kubectl exec deploy/nb-notifbuddy-authd -c authd -- node -e "
+            fetch('http://nb-notifbuddy-backend:8080/healthz')
+              .then(r => console.log(r.status)).catch(() => console.log('err'))")
+          test "$status" = "200" || { echo "::error::/healthz returned $status"; exit 1; }
+
+          echo "── authenticated routes still require a session"
+          status=$(kubectl exec deploy/nb-notifbuddy-authd -c authd -- node -e "
+            fetch('http://nb-notifbuddy-backend:8080/ping')
+              .then(r => console.log(r.status)).catch(() => console.log('err'))")
+          test "$status" = "401" || { echo "::error::/ping returned $status, expected 401"; exit 1; }
+
+          echo "── a cold install settles without crash-looping"
+          restarts=$(kubectl get pods --no-headers | awk '{sum += $4} END {print sum+0}')
+          test "$restarts" -eq 0 || { echo "::error::$restarts restarts on a cold install"; exit 1; }
+
+          echo "── dashboard was configured with this release's hostnames"
+          html=$(kubectl exec deploy/nb-notifbuddy-dashboard -- wget -qO- http://127.0.0.1:8080/)
+          echo "$html" | grep -q 'https://api.example.com' \
+            || { echo "::error::dashboard shell missing the API origin"; exit 1; }
+          echo "$html" | grep -q 'https://auth.example.com' \
+            || { echo "::error::dashboard shell missing the auth origin"; exit 1; }
+
+      # The generated secrets have to survive an upgrade: regenerating them
+      # logs every user out and makes stored integration tokens undecryptable.
+      - name: Secrets survive an upgrade
+        run: |
+          set -eu
+          before=$(kubectl get secret nb-notifbuddy -o jsonpath='{.data.BETTER_AUTH_SECRET}')
+          beforepg=$(kubectl get secret nb-notifbuddy -o jsonpath='{.data.POSTGRES_PASSWORD}')
+          helm upgrade nb charts/notifbuddy \
+            --set domain=example.com \
+            --set github.clientId=abc --set github.clientSecret=def \
+            --set image.registry=notifbuddy --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --wait --timeout 6m
+          after=$(kubectl get secret nb-notifbuddy -o jsonpath='{.data.BETTER_AUTH_SECRET}')
+          afterpg=$(kubectl get secret nb-notifbuddy -o jsonpath='{.data.POSTGRES_PASSWORD}')
+          test "$before" = "$after" || { echo "::error::BETTER_AUTH_SECRET rotated on upgrade"; exit 1; }
+          test "$beforepg" = "$afterpg" || { echo "::error::POSTGRES_PASSWORD rotated on upgrade"; exit 1; }
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -o wide || true
+          kubectl describe pods || true
+          for c in backend authd dashboard postgres; do
+            echo "───────── $c"
+            kubectl logs -l "app.kubernetes.io/component=$c" --tail=50 --all-containers || true
+          done

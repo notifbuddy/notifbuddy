@@ -1,0 +1,85 @@
+{{- $fullname := include "notifbuddy.fullname" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-dashboard
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+  selector:
+    {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "dashboard") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-dashboard
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  selector:
+    matchLabels:
+      {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "dashboard") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notifbuddy.podLabels" (dict "ctx" . "component" "dashboard") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "notifbuddy.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: dashboard
+          image: {{ include "notifbuddy.image" (dict "ctx" . "name" "dashboard") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
+          # The dashboard is a static bundle, so these are written into the
+          # page at container start rather than baked into the image — one
+          # published image serves every install. The container refuses to
+          # start if either is missing.
+          env:
+            - name: API_BASE_URL
+              value: "https://{{ include "notifbuddy.host.api" . }}"
+            - name: AUTH_URL
+              value: "https://{{ include "notifbuddy.host.auth" . }}"
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

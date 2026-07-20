@@ -1,0 +1,167 @@
+# notifbuddy — self-hosted.
+#
+# Minimal install:
+#
+#   helm install notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+#     --set domain=example.com \
+#     --set github.clientId=... \
+#     --set github.clientSecret=...
+#
+# That brings up the dashboard, API, auth service and a Postgres, with the
+# integrations switched off until you configure them.
+
+# -- Parent domain everything is served under. Required unless every entry in
+# `hosts` is set explicitly.
+#
+# The session cookie is issued on this domain so the dashboard, API and auth
+# service all see it — which is why the three hostnames must share a parent.
+domain: ""
+
+hosts:
+  # -- Dashboard hostname. Defaults to app.<domain>.
+  dashboard: ""
+  # -- API hostname. Defaults to api.<domain>.
+  api: ""
+  # -- Auth service hostname. Defaults to auth.<domain>.
+  auth: ""
+
+# GitHub OAuth — the only sign-in method, so this is required.
+#
+# Create an OAuth app at https://github.com/settings/developers with the
+# callback URL https://<auth host>/api/auth/callback/github
+github:
+  # -- GitHub OAuth client ID.
+  clientId: ""
+  # -- GitHub OAuth client secret. Ignored when `existingSecret` is set.
+  clientSecret: ""
+
+image:
+  # -- Registry and org holding the three images.
+  registry: ghcr.io/notifbuddy
+  # -- Image tag. Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+  # -- Image pull secrets, if you mirror the images somewhere private.
+  pullSecrets: []
+
+# -- Name of a Secret you manage yourself, holding every sensitive value.
+#
+# **Set this if you deploy with ArgoCD, Flux, or anything else that renders
+# with `helm template`.** Left empty, the chart generates the secrets it needs
+# on first install and reads them back on upgrade — but a GitOps renderer has
+# no cluster access, so it cannot read them back and will generate fresh values
+# on every sync. That silently rotates the session key and the integration
+# encryption key: everyone gets logged out and stored integration tokens stop
+# decrypting.
+#
+# Keys read from it, when set: BETTER_AUTH_SECRET, INTEGRATION_ENC_KEY,
+# GITHUB_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, and any integration
+# secrets you enable below.
+existingSecret: ""
+
+# Bundled Postgres.
+#
+# **Evaluation only.** It is a single replica with no backups, no failover and
+# no supported major-version upgrade path — bumping the image tag over an
+# existing volume is a data-loss trap. For anything you care about, run
+# Postgres separately (CloudNativePG is the usual answer on Kubernetes) and
+# set `database.url` / `database.authUrl` below, which switches this off.
+postgresql:
+  enabled: true
+  image: postgres:16
+  # -- Pull policy for the Postgres image. Separate from `image.pullPolicy`,
+  # which applies to notifbuddy's own images: setting that to Never (to use
+  # side-loaded images) must not stop Kubernetes pulling this one.
+  pullPolicy: IfNotPresent
+  # -- Volume size for the bundled Postgres.
+  storage: 8Gi
+  # -- StorageClass. Empty uses the cluster default.
+  storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+database:
+  # -- External Postgres URL for the application database. Setting this
+  # disables the bundled Postgres.
+  url: ""
+  # -- External Postgres URL for the auth database. Auth data is kept in its
+  # own database so it never shares a schema with application data.
+  authUrl: ""
+
+ingress:
+  enabled: true
+  # -- IngressClass name, e.g. nginx or traefik.
+  className: ""
+  # -- Annotations applied to the Ingress. Point cert-manager at your issuer
+  # here, e.g. cert-manager.io/cluster-issuer: letsencrypt-prod
+  annotations: {}
+  tls:
+    enabled: true
+    # -- Secret holding the certificate. Empty lets cert-manager create
+    # <release>-tls from the annotations above.
+    secretName: ""
+
+backend:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+authd:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+dashboard:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+logging:
+  # -- text or json.
+  format: json
+  # -- debug, info, warn or error.
+  level: info
+
+# Optional integrations. Each is off until its credentials are set, and the
+# app reports it as "not configured" rather than failing.
+integrations:
+  slack:
+    enabled: false
+    clientId: ""
+    clientSecret: ""
+    # -- Required when Slack is enabled: the app refuses to start without it,
+    # because the webhook handler fails closed and would drop every event.
+    signingSecret: ""
+  linear:
+    enabled: false
+    clientId: ""
+    clientSecret: ""
+    # -- Required when Linear is enabled, for the same reason as Slack's.
+    webhookSecret: ""
+  # Cloudflare Workers AI parses @mentions into intents. Without it every
+  # mention resolves to "no action" — the rest of the product still works.
+  cloudflare:
+    enabled: false
+    accountId: ""
+    apiToken: ""
+    model: "@cf/meta/llama-3.1-8b-instruct"
+  # Transactional email, used for organisation invitations. Without it,
+  # invitations are logged by the auth service instead of sent.
+  email:
+    enabled: false
+    resendApiKey: ""
+    from: ""
+
+# -- Extra pod annotations, applied to all three workloads.
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,161 @@
+{{- $fullname := include "notifbuddy.fullname" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-authd
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 8787
+      targetPort: http
+      name: http
+  selector:
+    {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "authd") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-authd
+  labels:
+    {{- include "notifbuddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.authd.replicas }}
+  selector:
+    matchLabels:
+      {{- include "notifbuddy.selectorLabels" (dict "ctx" . "component" "authd") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notifbuddy.podLabels" (dict "ctx" . "component" "authd") | nindent 8 }}
+      annotations:
+        # Restart when the rendered config changes; a ConfigMap edit alone
+        # would otherwise leave the running pods on the old settings.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-authd.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "notifbuddy.podSecurityContext" . | nindent 8 }}
+      initContainers:
+        {{- include "notifbuddy.waitForPostgres" . | nindent 8 }}
+        # Schema migration, as an init container rather than a Helm hook.
+        #
+        # A pre-install hook runs before the chart's own resources exist, so on
+        # a fresh install with the bundled Postgres there would be no database
+        # to migrate against. Running here also means ArgoCD needs no sync-wave
+        # ordering: the pod simply crash-loops until Postgres answers, then
+        # migrates and starts. The migration is idempotent.
+        #
+        # It is safe to run repeatedly, but not concurrently — see the replica
+        # note in values.yaml before scaling this deployment up.
+        - name: migrate
+          image: {{ include "notifbuddy.image" (dict "ctx" . "name" "authd") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
+          command: ["npm", "run", "migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: AUTHD_DATABASE_URL
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: BETTER_AUTH_SECRET
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: GITHUB_CLIENT_SECRET
+            {{- if .Values.integrations.email.enabled }}
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: RESEND_API_KEY
+            {{- end }}
+            - name: CONFIG_FILE
+              value: /config/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      containers:
+        - name: authd
+          image: {{ include "notifbuddy.image" (dict "ctx" . "name" "authd") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "notifbuddy.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: PORT
+              value: "8787"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: AUTHD_DATABASE_URL
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: BETTER_AUTH_SECRET
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: GITHUB_CLIENT_SECRET
+            {{- if .Values.integrations.email.enabled }}
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "notifbuddy.secretName" . }}
+                  key: RESEND_API_KEY
+            {{- end }}
+            - name: CONFIG_FILE
+              value: /config/config.yaml
+          ports:
+            - name: http
+              containerPort: 8787
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.authd.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-authd
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

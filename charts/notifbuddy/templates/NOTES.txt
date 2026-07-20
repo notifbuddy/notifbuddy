@@ -1,0 +1,53 @@
+notifbuddy {{ .Chart.AppVersion }} is installing.
+
+  Dashboard  https://{{ include "notifbuddy.host.dashboard" . }}
+  API        https://{{ include "notifbuddy.host.api" . }}
+  Auth       https://{{ include "notifbuddy.host.auth" . }}
+
+Point all three hostnames at your ingress controller, then finish the GitHub
+OAuth app by setting its callback URL to:
+
+  https://{{ include "notifbuddy.host.auth" . }}/api/auth/callback/github
+
+Watch it come up with:
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }} -w
+
+{{ if include "notifbuddy.bundledPostgres" . }}
+────────────────────────────────────────────────────────────────────────
+  The bundled PostgreSQL is running. It is for evaluation only: one
+  replica, no backups, no failover, and no supported major-version
+  upgrade path.
+
+  Before you put real data in it, move to a Postgres you operate
+  (CloudNativePG is the usual choice on Kubernetes) and set:
+
+      database.url       postgres://.../notifbuddy
+      database.authUrl   postgres://.../authd
+
+  Setting those switches the bundled one off.
+────────────────────────────────────────────────────────────────────────
+{{ end }}
+{{- if not .Values.existingSecret }}
+────────────────────────────────────────────────────────────────────────
+  This release GENERATED its own secrets (session key, integration
+  encryption key, database password) and stores them in the Secret
+  "{{ include "notifbuddy.fullname" . }}". Upgrades with `helm upgrade`
+  read them back, so they stay stable.
+
+  If you deploy this chart with ArgoCD, Flux, or anything else that
+  renders with `helm template`, you MUST set `existingSecret` instead.
+  Those renderers have no cluster access, cannot read the values back,
+  and will generate fresh ones on every sync — silently logging everyone
+  out and making stored integration tokens undecryptable.
+
+  Back it up now:
+
+      kubectl -n {{ .Release.Namespace }} get secret {{ include "notifbuddy.fullname" . }} -o yaml
+────────────────────────────────────────────────────────────────────────
+{{- end }}
+{{- if not .Values.integrations.slack.enabled }}
+
+Slack is not configured, so channel creation is inactive. See
+https://docs.notifbuddy.com/self-host for the setup steps.
+{{- end }}

@@ -205,11 +205,23 @@ func main() {
 
 	handler := httpapi.WithRequestLog(httpapi.WithCORS(authSvc.WithSession(mux), cfg.CORS.AllowOrigin))
 
+	// Liveness/readiness, deliberately outside the middleware chain: no
+	// session, no CORS, and no request log entry every few seconds. Every
+	// other route needs a session (/ping included, which answers 401), so
+	// without this there is nothing an orchestrator can probe over HTTP.
+	//
+	// Both spellings: Kubernetes convention is /healthz, but Google's frontend
+	// reserves that path on run.app hosts and 404s it before the container.
+	root := http.NewServeMux()
+	root.HandleFunc("GET /healthz", handleHealth)
+	root.HandleFunc("GET /health", handleHealth)
+	root.Handle("/", handler)
+
 	// Consumers are already live (bus.Start above), so serve HTTP. On
 	// SIGINT/SIGTERM: stop accepting HTTP (no new publishes, and on gcp no
 	// new push deliveries), then close the bus (drains consumers, flushes
 	// publishers), then the deferred st.Close() releases the pool.
-	httpSrv := &http.Server{Addr: cfg.Server.Addr, Handler: handler}
+	httpSrv := &http.Server{Addr: cfg.Server.Addr, Handler: root}
 	go func() {
 		slog.Info("listening", "addr", cfg.Server.Addr, "cors_allow_origin", cfg.CORS.AllowOrigin)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -232,6 +244,16 @@ func main() {
 }
 
 // fatal is the slog replacement for log.Fatalf: log at error level, then exit.
+// handleHealth answers liveness/readiness probes. It reports only that the
+// process is serving: config has validated and migrations have run by the time
+// the listener is up, and a probe that also pinged the database would take the
+// service out of rotation during a blip it could otherwise ride out.
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok\n"))
+}
+
 func fatal(msg string, err error) {
 	slog.Error(msg, "error", err)
 	os.Exit(1)
