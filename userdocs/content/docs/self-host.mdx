@@ -211,7 +211,7 @@ helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
   --namespace notifbuddy --reuse-values \
   --set integrations.email.enabled=true \
   --set integrations.email.resendApiKey=<secret> \
-  --set integrations.email.from='notifbuddy <invites@example.com>'
+  --set integrations.email.from='notifbuddy <invites@notifbuddymail.example.com>'
 ```
 
 ## Run your own PostgreSQL
