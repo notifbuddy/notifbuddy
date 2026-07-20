@@ -3,11 +3,18 @@ name: notifbuddy
 description: Slack channels for your Linear issues — self-hosted.
 type: application
 
-# version is the chart's own version; appVersion is the image tag it deploys.
-# Both move when we cut a release. appVersion carries the leading "v" so the
-# git tag, the published image tag and this string are all identical.
-version: 0.1.0
-appVersion: "v0.1.0-beta"
+# PLACEHOLDERS. Both are set from the git tag when the chart is published:
+# version is the tag without its leading "v", appVersion is the tag verbatim.
+# Nothing here needs bumping by hand, and these values are deliberately not a
+# real release — a git checkout is not a released artifact.
+#
+# Installing from a checkout therefore needs an explicit image tag:
+#
+#   helm install notifbuddy ./charts/notifbuddy --set image.tag=v0.2.0 ...
+#
+# Released charts come from oci://ghcr.io/notifbuddy/charts/notifbuddy.
+version: 0.0.0
+appVersion: "0.0.0-dev"
 
 home: https://notifbuddy.com
 sources:
@@ -26,11 +33,13 @@ maintainers:
 
 annotations:
   artifacthub.io/license: MIT
-  artifacthub.io/prerelease: "true"
+  # Artifact Hub scans these for vulnerabilities, so the tags have to be the
+  # ones this chart actually deploys. The placeholder below is rewritten to
+  # the release tag at package time, alongside version and appVersion.
   artifacthub.io/images: |
     - name: backend
-      image: ghcr.io/notifbuddy/backend:v0.1.0-beta
+      image: ghcr.io/notifbuddy/backend:0.0.0-dev
     - name: authd
-      image: ghcr.io/notifbuddy/authd:v0.1.0-beta
+      image: ghcr.io/notifbuddy/authd:0.0.0-dev
     - name: dashboard
-      image: ghcr.io/notifbuddy/dashboard:v0.1.0-beta
+      image: ghcr.io/notifbuddy/dashboard:0.0.0-dev
