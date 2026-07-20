@@ -7,18 +7,18 @@ The Helm chart runs notifbuddy on your own cluster. It deploys the dashboard,
 the API, the auth service, and — for evaluation — a PostgreSQL.
 
 The chart lives at `oci://ghcr.io/notifbuddy/charts/notifbuddy` and is listed on
-[Artifact Hub](https://artifacthub.io/packages/search?repo=notifbuddy).
+[Artifact Hub](https://artifacthub.io/packages/helm/notifbuddy/notifbuddy).
 
 <Callout type="warn">
-  notifbuddy is in beta. Pin a chart version, and read the notes on the bundled
-  PostgreSQL and on generated secrets before you put real data in it.
+  notifbuddy is in beta. App will not be backwards compatible with previous
+  versions. Look at upgrade notes when running a `helm upgrade`.
 </Callout>
 
 ## Before you start
 
 You need three things in place.
 
-- **A Kubernetes cluster** with an ingress controller, and something that
+- A Kubernetes cluster with an ingress controller, and something that
   issues TLS certificates. Point cert-manager at your issuer through
   `ingress.annotations`.
 - **Three hostnames under one parent domain.** The chart serves the dashboard,
@@ -64,17 +64,17 @@ to share a parent domain.
 Sign-in works at this point. Channel creation stays inactive until you connect
 Slack and Linear.
 
-## Connect Slack and Linear
+## Connecting applications
 
 Each self-hosted install uses its own Slack and Linear apps, so create them in
 your own workspace and point them at your API hostname.
 
-| Setting | URL |
-| --- | --- |
-| Slack OAuth redirect | `https://api.example.com/integrations/slack/callback` |
-| Slack Events request URL | `https://api.example.com/integrations/slack/webhook` |
-| Linear OAuth redirect | `https://api.example.com/integrations/linear/callback` |
-| Linear webhook URL | `https://api.example.com/integrations/linear/webhook` |
+| Setting            | URL                                                    |
+| ------------------ | ------------------------------------------------------ |
+| Slack Integration  | `https://api.example.com/integrations/slack/callback`  |
+| Slack Webhook      | `https://api.example.com/integrations/slack/webhook`   |
+| Linear Integration | `https://api.example.com/integrations/linear/callback` |
+| Linear Webhook     | `https://api.example.com/integrations/linear/webhook`  |
 
 Then enable both integrations.
 
@@ -98,20 +98,83 @@ closed, so an install missing them would drop every event silently.
 Once both are connected, configure channel rules from the dashboard — see
 [Getting started](/getting-started).
 
-<details>
-<summary>Slack scopes the chart requests</summary>
+### Slack
 
-Bot scopes: `app_mentions:read`, `channels:manage`, `channels:history`,
-`channels:read`, `commands`, `groups:history`, `groups:write`,
-`reactions:write`, `reactions:read`, `files:read`, `files:write`, `chat:write`,
-`chat:write.public`, `chat:write.customize`, `im:history`, `im:read`,
-`im:write`, `users:read`, `users:read.email`, `emoji:read`.
+Create the app from a manifest: go to [Slack apps](https://api.slack.com/apps),
+select **Create New App**, choose **From a manifest**, pick your workspace, and
+paste the YAML below. Replace `api.example.com` with your own API hostname.
 
-User scopes: `chat:write`, `channels:write`.
+The manifest declares the scopes the chart requests and turns on event
+subscriptions, so there's nothing to switch on afterwards. Your API has to be
+reachable at that hostname first: Slack sends a one-time verification challenge
+to the request URL and rejects the manifest if nothing answers.
 
-Linear scopes: `read`, `write`.
+```yaml
+display_information:
+  name: notifbuddy
+  description: Two-way Linear ⇄ Slack sync
+  background_color: "#2a2925"
+features:
+  bot_user:
+    display_name: notifbuddy
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://api.example.com/integrations/slack/callback
+  scopes:
+    user:
+      - chat:write
+      - channels:write
+    bot:
+      - app_mentions:read
+      - channels:manage
+      - channels:history
+      - channels:read
+      - commands
+      - groups:history
+      - groups:write
+      - reactions:write
+      - chat:write
+      - chat:write.public
+      - chat:write.customize
+      - files:read # download a message's attachments to mirror into Linear
+      - files:write # share mirrored Linear attachments into the channel
+      - im:history
+      - im:read
+      - im:write
+      - users:read
+      - users:read.email
+      - reactions:read
+      - emoji:read
+  pkce_enabled: false
+settings:
+  event_subscriptions:
+    request_url: https://api.example.com/integrations/slack/webhook
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_mcp_enabled: false
+```
 
-</details>
+The client ID, client secret, and signing secret are on the app's **Basic
+Information** page.
+
+Adding a scope later requires reinstalling the app to every connected
+workspace before the new permissions take effect.
+
+### Linear
+
+Create an OAuth application in your Linear workspace settings, under **API** >
+**OAuth applications**. Set the redirect and webhook URLs from the table above,
+and request the `read` and `write` scopes.
+
+Enable webhooks on the application so Linear delivers issue and comment events,
+and copy the signing secret it generates into
+`integrations.linear.webhookSecret`.
 
 ### Optional integrations
 
