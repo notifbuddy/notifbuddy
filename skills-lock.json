@@ -13,6 +13,12 @@
       "skillPath": "skills/daisyui/SKILL.md",
       "computedHash": "92b9228e8f5325c1d44a3aa820f2af310743307ea978bb86faff118c6864e9ea"
     },
+    "docs-writer": {
+      "source": "google-gemini/gemini-cli",
+      "sourceType": "github",
+      "skillPath": ".gemini/skills/docs-writer/SKILL.md",
+      "computedHash": "ddb3671168efa5f2fe481740a57ca147619ffffe2cf764ada6229bde01fed3df"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
