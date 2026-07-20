@@ -63,7 +63,8 @@ existingSecret: ""
 #
 # **Evaluation only.** It is a single replica with no backups, no failover and
 # no supported major-version upgrade path — bumping the image tag over an
-# existing volume is a data-loss trap. For anything you care about, run
+# existing volume leaves Postgres refusing to start, with no pg_upgrade step
+# to get you across. For anything you care about, run
 # Postgres separately (CloudNativePG is the usual answer on Kubernetes) and
 # set `database.url` / `database.authUrl` below, which switches this off.
 postgresql:
