@@ -71,9 +71,9 @@ each integration you enable.
 
 On by default so a trial is one command. It is **evaluation only**: a single
 replica, no backups, no failover, and no supported major-version upgrade path
-— bumping the image tag over an existing volume is a data-loss trap. It also
-runs as root, so clusters enforcing the restricted Pod Security Standard will
-reject it.
+— bumping the image tag over an existing volume leaves Postgres refusing to
+start, with no pg_upgrade step to get you across. It also runs as root, so
+clusters enforcing the restricted Pod Security Standard will reject it.
 
 For anything you intend to keep, run PostgreSQL yourself — [CloudNativePG] is
 the usual answer on Kubernetes — and set `database.url` and `database.authUrl`.
