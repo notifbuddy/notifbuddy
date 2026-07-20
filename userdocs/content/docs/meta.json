@@ -1,4 +1,11 @@
 {
   "title": "Docs",
-  "pages": ["index", "getting-started", "integrations", "templates", "changelog"]
+  "pages": [
+    "index",
+    "getting-started",
+    "integrations",
+    "templates",
+    "self-host",
+    "changelog"
+  ]
 }
