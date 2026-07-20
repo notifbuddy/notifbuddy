@@ -12,6 +12,11 @@
 # publishing it requires write access to the registry.
 repositoryID: "d42d0988-0828-411e-9588-63d111b343f2"
 
+# Artifact Hub matches the account claiming the repository against this list,
+# so the registering account's address has to stay here. support@ is listed
+# too, as the address to contact about the chart.
 owners:
   - name: notifbuddy
     email: prashant@notifbuddy.com
+  - name: notifbuddy support
+    email: support@notifbuddy.com
