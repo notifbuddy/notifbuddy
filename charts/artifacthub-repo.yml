@@ -1,0 +1,22 @@
+# Artifact Hub repository metadata.
+#
+# Pushed to the OCI registry as an artifact tagged "artifacthub.io" alongside
+# the chart (see the chart job in .github/workflows/release.yml). Artifact Hub
+# reads it to verify that this repository belongs to us — without it the
+# listing works, but shows as unverified and unclaimed.
+#
+# repositoryID is issued by Artifact Hub when the repository is registered
+# (Control Panel > Repositories, kind: Helm charts, OCI URL
+# oci://ghcr.io/notifbuddy/charts/notifbuddy). It identifies the repository
+# this file claims — it is not a secret, and it only proves ownership because
+# publishing it requires write access to the registry.
+repositoryID: "d42d0988-0828-411e-9588-63d111b343f2"
+
+# Artifact Hub matches the account claiming the repository against this list,
+# so the registering account's address has to stay here. support@ is listed
+# too, as the address to contact about the chart.
+owners:
+  - name: notifbuddy
+    email: prashant@notifbuddy.com
+  - name: notifbuddy support
+    email: support@notifbuddy.com
