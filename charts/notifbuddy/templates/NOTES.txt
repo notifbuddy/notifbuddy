@@ -49,5 +49,5 @@ Watch it come up with:
 {{- if not .Values.integrations.slack.enabled }}
 
 Slack is not configured, so channel creation is inactive. See
-https://notifbuddy.com/docs/self-host for the setup steps.
+https://docs.notifbuddy.com/self-host for the setup steps.
 {{- end }}
