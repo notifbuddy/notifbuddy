@@ -1,0 +1,307 @@
+---
+title: Self-hosting
+description: Run notifbuddy on your own Kubernetes cluster with the Helm chart.
+---
+
+The Helm chart runs notifbuddy on your own cluster. It deploys the dashboard,
+the API, the auth service, and — for evaluation — a PostgreSQL.
+
+The chart lives at `oci://ghcr.io/notifbuddy/charts/notifbuddy` and is listed on
+[Artifact Hub](https://artifacthub.io/packages/helm/notifbuddy/notifbuddy).
+
+<Callout type="warn">
+  notifbuddy is in beta. App will not be backwards compatible with previous
+  versions. Look at upgrade notes when running a `helm upgrade`.
+</Callout>
+
+## Before you start
+
+You need three things in place.
+
+- A Kubernetes cluster with an ingress controller, and something that
+  issues TLS certificates. Point cert-manager at your issuer through
+  `ingress.annotations`.
+- **Three hostnames under one parent domain.** The chart serves the dashboard,
+  the API, and the auth service on `app.`, `api.`, and `auth.` by default. The
+  session cookie is issued on the parent domain so all three see it, so the
+  chart refuses to install if the hostnames share no common parent.
+- **A GitHub OAuth app.** It's the only sign-in method.
+
+### Create the GitHub OAuth app
+
+Create the app first — the install command needs its credentials.
+
+1. Go to [GitHub developer settings](https://github.com/settings/developers)
+   and select **New OAuth App**.
+2. Set the homepage URL to `https://app.example.com`.
+3. Set the authorization callback URL to
+   `https://auth.example.com/api/auth/callback/github`.
+4. Copy the client ID, then generate a client secret and copy that too.
+
+## Install
+
+Install the chart with your domain and the GitHub credentials.
+
+```bash
+helm install notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --create-namespace \
+  --set domain=example.com \
+  --set github.clientId=Ov23liExample \
+  --set github.clientSecret=<secret>
+```
+
+Point `app.example.com`, `api.example.com`, and `auth.example.com` at your
+ingress controller, then watch the pods come up.
+
+```bash
+kubectl -n notifbuddy get pods -w
+```
+
+To use hostnames that don't follow the `app.`/`api.`/`auth.` pattern, set
+`hosts.dashboard`, `hosts.api`, and `hosts.auth` individually. They still have
+to share a parent domain.
+
+Sign-in works at this point. Channel creation stays inactive until you connect
+Slack and Linear.
+
+## Connecting applications
+
+Each self-hosted install uses its own Slack and Linear apps, so create them in
+your own workspace and point them at your API hostname.
+
+| Setting            | URL                                                    |
+| ------------------ | ------------------------------------------------------ |
+| Slack Integration  | `https://api.example.com/integrations/slack/callback`  |
+| Slack Webhook      | `https://api.example.com/integrations/slack/webhook`   |
+| Linear Integration | `https://api.example.com/integrations/linear/callback` |
+| Linear Webhook     | `https://api.example.com/integrations/linear/webhook`  |
+
+Then enable both integrations.
+
+```bash
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set integrations.slack.enabled=true \
+  --set integrations.slack.clientId=<id> \
+  --set integrations.slack.clientSecret=<secret> \
+  --set integrations.slack.signingSecret=<signing secret> \
+  --set integrations.linear.enabled=true \
+  --set integrations.linear.clientId=<id> \
+  --set integrations.linear.clientSecret=<secret> \
+  --set integrations.linear.webhookSecret=<webhook secret>
+```
+
+The signing secret and the webhook secret are required when the integration is
+enabled. The API refuses to start without them: webhook verification fails
+closed, so an install missing them would drop every event silently.
+
+Once both are connected, configure channel rules from the dashboard — see
+[Getting started](/getting-started).
+
+### Slack
+
+Create the app from a manifest: go to [Slack apps](https://api.slack.com/apps),
+select **Create New App**, choose **From a manifest**, pick your workspace, and
+paste the YAML below. Replace `api.example.com` with your own API hostname.
+
+The manifest declares the scopes the chart requests and turns on event
+subscriptions, so there's nothing to switch on afterwards. Your API has to be
+reachable at that hostname first: Slack sends a one-time verification challenge
+to the request URL and rejects the manifest if nothing answers.
+
+```yaml
+display_information:
+  name: notifbuddy
+  description: Two-way Linear ⇄ Slack sync
+  background_color: "#2a2925"
+features:
+  bot_user:
+    display_name: notifbuddy
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://api.example.com/integrations/slack/callback
+  scopes:
+    user:
+      - chat:write
+      - channels:write
+    bot:
+      - app_mentions:read
+      - channels:manage
+      - channels:history
+      - channels:read
+      - commands
+      - groups:history
+      - groups:write
+      - reactions:write
+      - chat:write
+      - chat:write.public
+      - chat:write.customize
+      - files:read # download a message's attachments to mirror into Linear
+      - files:write # share mirrored Linear attachments into the channel
+      - im:history
+      - im:read
+      - im:write
+      - users:read
+      - users:read.email
+      - reactions:read
+      - emoji:read
+  pkce_enabled: false
+settings:
+  event_subscriptions:
+    request_url: https://api.example.com/integrations/slack/webhook
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_mcp_enabled: false
+```
+
+The client ID, client secret, and signing secret are on the app's **Basic
+Information** page.
+
+Adding a scope later requires reinstalling the app to every connected
+workspace before the new permissions take effect.
+
+### Linear
+
+Create an OAuth application in your Linear workspace settings, under **API** >
+**OAuth applications**. Set the redirect and webhook URLs from the table above,
+and request the `read` and `write` scopes.
+
+Enable webhooks on the application so Linear delivers issue and comment events,
+and copy the signing secret it generates into
+`integrations.linear.webhookSecret`.
+
+### Cloudflare Workers AI
+
+Used for supporting NLPs for @notifbuddy actions. It can be disabled by
+not configuring the creds for this. It is recommended to enable this for
+a better experience.
+
+For generating the creds-
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) > Select your account if required
+2. On the left nav, **AI** > **Workers AI**
+3. Find **REST API** button on the page > **Create a Workers AI API Token** Button > **Create API Token**
+4. **Copy API Token**
+
+Use
+
+```bash
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set integrations.cloudflare.enabled=true \
+  --set integrations.cloudflare.accountId=<account id> \
+  --set integrations.cloudflare.apiToken=<secret>
+```
+
+### Resend
+
+Used for inviting users to notifbuddy. Generating the key for this
+is the easiest, you just have to sign up on Resend and copy the key
+from there. You'll need a domain to be attached for this, it is
+recommended that you use a subdomain like `notifbuddymail.example.com`.
+
+```bash
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set integrations.email.enabled=true \
+  --set integrations.email.resendApiKey=<secret> \
+  --set integrations.email.from='notifbuddy <invites@notifbuddymail.example.com>'
+```
+
+## Run your own PostgreSQL
+
+The chart bundles a PostgreSQL so a trial is one command.
+
+<Callout type="warn">
+  The bundled PostgreSQL is for evaluation only. It's a single replica with no
+  backups, no failover, and no supported major-version upgrade path. It also
+  runs as root, so clusters enforcing the restricted Pod Security Standard
+  reject it.
+</Callout>
+
+For anything you intend to keep, run PostgreSQL yourself.
+[CloudNativePG](https://cloudnative-pg.io) is the usual answer on Kubernetes.
+Create two databases and set both URLs — auth data is kept in its own database
+so it never shares a schema with application data.
+
+```bash
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set database.url=postgres://notifbuddy:...@postgres:5432/notifbuddy \
+  --set database.authUrl=postgres://notifbuddy:...@postgres:5432/authd
+```
+
+Setting those switches the bundled instance off.
+
+## Deploying with ArgoCD or Flux
+
+If you deploy through GitOps, you must set `existingSecret` and manage the
+sensitive values yourself.
+
+<Callout type="warn">
+  Left unset, the chart generates its own secrets on first install and reads
+  them back from the cluster on upgrade. A GitOps renderer runs `helm template`
+  with no cluster access, so it can't read them back and generates fresh values
+  on every sync. That silently rotates the session key and the token-encryption
+  key: everyone gets logged out, and stored integration tokens stop decrypting.
+</Callout>
+
+The Secret must carry `BETTER_AUTH_SECRET`, `INTEGRATION_ENC_KEY`,
+`GITHUB_CLIENT_SECRET`, `DATABASE_URL`, and `AUTHD_DATABASE_URL`, plus a key
+for each integration you enable: `SLACK_CLIENT_SECRET`,
+`SLACK_SIGNING_SECRET`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`,
+`CF_API_TOKEN`, and `RESEND_API_KEY`. If you also keep the bundled PostgreSQL,
+add `POSTGRES_PASSWORD` — but run your own PostgreSQL instead, as above.
+
+On a `helm install` that generated its own secrets, back the Secret up before
+anything else touches the cluster.
+
+```bash
+kubectl -n notifbuddy get secret notifbuddy -o yaml
+```
+
+## Upgrading
+
+The chart version and the application version move together: both come from
+the same release tag, so chart `0.3.0` deploys application `v0.3.0`. Pick a
+version and you've pinned everything.
+
+```bash
+# newest release
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values
+
+# or pin one
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values --version 0.3.0
+```
+
+Without `--version`, Helm resolves the highest version in the registry, so an
+upgrade moves you to the newest application release too. To hold an
+application version while changing values, pass the `--version` you're already
+on.
+
+Schema migrations run automatically: the API migrates at startup, and the auth
+service migrates from an init container. Generated secrets are read back and
+preserved.
+
+## Values reference
+
+This page covers the values a typical install sets. For the full set, read
+[values.yaml](https://github.com/notifbuddy/notifbuddy/blob/main/charts/notifbuddy/values.yaml)
+or the
+[chart README](https://github.com/notifbuddy/notifbuddy/blob/main/charts/notifbuddy/README.md),
+which documents every key with its default.
+
+## Next steps
+
+- [Getting started](/getting-started) — connect your workspace and configure
+  channel rules.
+- [Templates](/templates) — the expression syntax for channel names and
+  creation conditions.
