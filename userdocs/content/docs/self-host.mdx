@@ -176,14 +176,43 @@ Enable webhooks on the application so Linear delivers issue and comment events,
 and copy the signing secret it generates into
 `integrations.linear.webhookSecret`.
 
-### Optional integrations
+### Cloudflare Workers AI
 
-Two more integrations are off by default. Both degrade rather than fail.
+Used for supporting NLPs for @notifbuddy actions. It can be disabled by
+not configuring the creds for this. It is recommended to enable this for
+a better experience.
 
-- **Cloudflare Workers AI** (`integrations.cloudflare.*`) parses @mentions into
-  intents. Without it, every mention resolves to no action.
-- **Resend** (`integrations.email.*`) sends organization invitation emails.
-  Without it, the auth service logs invitations instead of sending them.
+For generating the creds-
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) > Select your account if required
+2. On the left nav, **AI** > **Workers AI**
+3. Find **REST API** button on the page > **Create a Workers AI API Token** Button > **Create API Token**
+4. **Copy API Token**
+
+Use
+
+```
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set integrations.cloudflare.enabled=true \
+  --set integrations.cloudflare.accountId=<account id> \
+  --set integrations.cloudflare.apiToken=<secret>
+```
+
+### Resend
+
+Used for inviting users to notifbuddy. Generating the key for this
+is the easiest, you just have to sign up on Resend and copy the key
+from there. You'll need a domain to be attached for this, it is
+recommended that you use a subdomain like `notifbuddymail.example.com`.
+
+```
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --namespace notifbuddy --reuse-values \
+  --set integrations.email.enabled=true \
+  --set integrations.email.resendApiKey=<secret> \
+  --set integrations.email.from='notifbuddy <invites@example.com>'
+```
 
 ## Run your own PostgreSQL
 
@@ -191,9 +220,9 @@ The chart bundles a PostgreSQL so a trial is one command.
 
 <Callout type="warn">
   The bundled PostgreSQL is for evaluation only. It's a single replica with no
-  backups, no failover, and no supported major-version upgrade path — bumping
-  the image tag over an existing volume loses data. It also runs as root, so
-  clusters enforcing the restricted Pod Security Standard reject it.
+  backups, no failover, and no supported major-version upgrade path. It also
+  runs as root, so clusters enforcing the restricted Pod Security Standard
+  reject it.
 </Callout>
 
 For anything you intend to keep, run PostgreSQL yourself.
