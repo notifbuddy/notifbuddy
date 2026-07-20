@@ -191,7 +191,7 @@ For generating the creds-
 
 Use
 
-```
+```bash
 helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
   --namespace notifbuddy --reuse-values \
   --set integrations.cloudflare.enabled=true \
@@ -206,7 +206,7 @@ is the easiest, you just have to sign up on Resend and copy the key
 from there. You'll need a domain to be attached for this, it is
 recommended that you use a subdomain like `notifbuddymail.example.com`.
 
-```
+```bash
 helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
   --namespace notifbuddy --reuse-values \
   --set integrations.email.enabled=true \
