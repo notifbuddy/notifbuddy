@@ -5,12 +5,12 @@
 # reads it to verify that this repository belongs to us — without it the
 # listing works, but shows as unverified and unclaimed.
 #
-# repositoryID comes from Artifact Hub itself: add the repository at
-# https://artifacthub.io/control-panel/repositories (kind: Helm charts, OCI
-# URL oci://ghcr.io/notifbuddy/charts/notifbuddy), then copy the generated ID
-# here. Until it is filled in, the release workflow skips this upload rather
-# than pushing a file that would claim nothing.
-repositoryID: ""
+# repositoryID is issued by Artifact Hub when the repository is registered
+# (Control Panel > Repositories, kind: Helm charts, OCI URL
+# oci://ghcr.io/notifbuddy/charts/notifbuddy). It identifies the repository
+# this file claims — it is not a secret, and it only proves ownership because
+# publishing it requires write access to the registry.
+repositoryID: "d42d0988-0828-411e-9588-63d111b343f2"
 
 owners:
   - name: notifbuddy
