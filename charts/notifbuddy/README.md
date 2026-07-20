@@ -79,14 +79,39 @@ For anything you intend to keep, run PostgreSQL yourself — [CloudNativePG] is
 the usual answer on Kubernetes — and set `database.url` and `database.authUrl`.
 Setting them disables the bundled instance.
 
-## Upgrading
+## Versions and upgrading
+
+The chart version and the application version move together: both come from
+the same release tag, so chart `0.3.0` deploys application `v0.3.0`. Pick a
+version and you have pinned everything.
 
 ```console
+# newest release
 helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy --reuse-values
+
+# or pin one
+helm upgrade notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
+  --version 0.3.0 --reuse-values
 ```
+
+Without `--version`, Helm resolves the highest version in the registry, so an
+upgrade moves you to the newest application release too. To hold an
+application version while changing values, pass the `--version` you are
+already on. To run an image other than the one the chart shipped with, set
+`image.tag` — that overrides the chart's own idea of the version.
 
 Schema migrations run automatically: the API migrates at startup, and the auth
 service migrates from an init container. Generated secrets are read back and
 preserved.
+
+### Installing from a git checkout
+
+The versions in `Chart.yaml` are placeholders, filled in only when a release is
+published — a checkout is not a released artifact. Installing from one needs an
+explicit image tag:
+
+```console
+helm install notifbuddy ./charts/notifbuddy --set image.tag=v0.3.0 ...
+```
 
 [CloudNativePG]: https://cloudnative-pg.io

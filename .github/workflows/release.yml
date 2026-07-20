@@ -34,7 +34,37 @@ env:
   REGISTRY: ghcr.io/notifbuddy
 
 jobs:
+  # Runs before anything is published, so a bad tag costs nothing. Everything
+  # else depends on it.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      # Releases are plain vMAJOR.MINOR.PATCH. The chart version is derived
+      # from this tag, and Helm hides prerelease versions from `helm search`
+      # and from `helm upgrade` unless --devel is passed — so a tag like
+      # v1.2.3-beta would publish a chart that ordinary commands cannot see.
+      - name: Tag must be a plain release version
+        run: |
+          tag="${{ github.ref_name }}"
+          case "$tag" in
+          v[0-9]*.[0-9]*.[0-9]*) ;;
+          *)
+            echo "::error::tag '$tag' is not vMAJOR.MINOR.PATCH"
+            exit 1
+            ;;
+          esac
+          # The glob above still admits suffixes, so reject anything trailing:
+          # prerelease (-beta, -rc.1) or build metadata (+something).
+          case "$tag" in
+          *-* | *+*)
+            echo "::error::tag '$tag' carries a prerelease or build suffix. Releases are plain versions like v1.2.3 — Helm would hide a prerelease chart from helm search and helm upgrade."
+            exit 1
+            ;;
+          esac
+          echo "releasing $tag"
+
   build:
+    needs: validate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -177,27 +207,43 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      # The chart's own version is hand-maintained in Chart.yaml and moves
-      # independently of the app. Republishing over an existing version would
-      # silently change what an existing pin resolves to, so refuse instead.
+      # Chart version and appVersion both come from the tag: the chart version
+      # is the tag without its "v", the appVersion is the tag verbatim. They
+      # move in lockstep, so `helm upgrade` with no --version resolves to the
+      # newest chart and therefore to the newest images, and there is no
+      # Chart.yaml field to forget to bump. The committed values are
+      # placeholders — a git checkout is not a released artifact.
+      - name: Derive versions from the tag
+        run: |
+          tag="${{ github.ref_name }}"
+          echo "CHART_VERSION=${tag#v}" >>"$GITHUB_ENV"
+          echo "APP_VERSION=$tag" >>"$GITHUB_ENV"
+
+      # Re-running a release, or moving a tag, would otherwise republish over
+      # a version people have already pinned and silently change what it
+      # resolves to.
       - name: Refuse to overwrite a published chart version
         run: |
-          version=$(helm show chart charts/notifbuddy | awk '/^version:/ {print $2}')
-          echo "chart version: $version"
           if helm show chart "oci://${{ env.REGISTRY }}/charts/notifbuddy" \
-               --version "$version" >/dev/null 2>&1; then
-            echo "::error::chart version $version is already published — bump version in charts/notifbuddy/Chart.yaml"
+               --version "$CHART_VERSION" >/dev/null 2>&1; then
+            echo "::error::chart $CHART_VERSION is already published — releases are immutable, cut a new tag"
             exit 1
           fi
-          echo "CHART_VERSION=$version" >>"$GITHUB_ENV"
 
-      # appVersion comes from the tag being released rather than the committed
-      # value, so a published chart always points at images from the same
-      # release and cannot drift from Chart.yaml being forgotten.
+      # helm package sets version and appVersion for us, but not annotations —
+      # and artifacthub.io/images drives Artifact Hub's vulnerability scanning,
+      # so its tags have to be the ones this chart deploys.
+      - name: Point the image annotations at this release
+        run: |
+          sed -i "s|:0.0.0-dev|:$APP_VERSION|g" charts/notifbuddy/Chart.yaml
+          grep -q ":$APP_VERSION" charts/notifbuddy/Chart.yaml \
+            || { echo "::error::image annotations were not rewritten"; exit 1; }
+
       - name: Package
         run: |
           helm package charts/notifbuddy \
-            --app-version "${{ github.ref_name }}" \
+            --version "$CHART_VERSION" \
+            --app-version "$APP_VERSION" \
             --destination /tmp/chart
 
       - name: Push
@@ -211,8 +257,8 @@ jobs:
           echo "$out"
           echo "$out" | grep -qx "version: $CHART_VERSION" \
             || { echo "::error::published chart version is not $CHART_VERSION"; exit 1; }
-          echo "$out" | grep -qx "appVersion: ${{ github.ref_name }}" \
-            || { echo "::error::published appVersion is not ${{ github.ref_name }}"; exit 1; }
+          echo "$out" | grep -qx "appVersion: $APP_VERSION" \
+            || { echo "::error::published appVersion is not $APP_VERSION"; exit 1; }
 
       # Artifact Hub ownership metadata, pushed as an OCI artifact next to the
       # chart. Skipped until repositoryID is filled in — see the file.
