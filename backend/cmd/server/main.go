@@ -167,12 +167,13 @@ func main() {
 	// the sealed OAuth state rather than the session, but running them under the
 	// same middleware is harmless.
 	// gateBilling wraps a browser-redirect handler so locked orgs (expired
-	// trial, no subscription) get a 402 instead of connecting integrations.
-	gateBilling := func(next http.HandlerFunc) http.HandlerFunc {
+	// trial, no subscription) bounce back to the SPA instead of connecting.
+	// Richer billing UX is NOT-33; here we only avoid a plain-text 402 page.
+	gateBilling := func(provider string, next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if orgID, _ := auth.OrgUserFromRequest(r); orgID != "" {
 				if status, err := billingSvc.StatusForOrg(r.Context(), orgID); err == nil && status.Locked {
-					http.Error(w, "trial expired — subscribe to keep using NotifBuddy", http.StatusPaymentRequired)
+					intgSvc.RedirectBrowserError(w, r, provider)
 					return
 				}
 			}
@@ -184,10 +185,10 @@ func main() {
 	// service) — the SPA talks to it directly; this backend only validates
 	// the resulting session cookie via the auth middleware.
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /integrations/slack/connect", gateBilling(intgSvc.HandleSlackConnect))
+	mux.HandleFunc("GET /integrations/slack/connect", gateBilling("slack", intgSvc.HandleSlackConnect))
 	mux.HandleFunc("GET /integrations/slack/callback", intgSvc.HandleSlackCallback)
 	mux.HandleFunc("POST /integrations/slack/webhook", intgSvc.HandleSlackWebhook)
-	mux.HandleFunc("GET /integrations/linear/connect", gateBilling(intgSvc.HandleLinearConnect))
+	mux.HandleFunc("GET /integrations/linear/connect", gateBilling("linear", intgSvc.HandleLinearConnect))
 	mux.HandleFunc("GET /integrations/linear/callback", intgSvc.HandleLinearCallback)
 	mux.HandleFunc("POST /integrations/linear/webhook", intgSvc.HandleLinearWebhook)
 	// Signed public proxy for private Linear uploads, so Slack can render

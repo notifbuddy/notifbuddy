@@ -110,7 +110,7 @@ is sent on every credentialed fetch. Specs live in `frontend/e2e/`.
 | Linear settings | full create → read → update → delete lifecycle against real Postgres + cross-tenant isolation |
 | Template engine | settings-test renders a sample event's identifier; bad event JSON → 400 |
 | Linear webhook | HMAC verification — bad/missing signature 401, valid 202, typeless 400 |
-| Slack OAuth connect | authed+org-scoped starts the flow with a sealed state; org-less/anonymous cannot |
+| Slack OAuth connect | authed+org-scoped starts the flow with a sealed state; org-less/anonymous 302 to SPA `status=error` (not Slack) |
 
 ### Dashboard (Playwright, `frontend/e2e/`)
 

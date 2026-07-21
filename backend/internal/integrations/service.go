@@ -154,6 +154,13 @@ func (s *Service) redirectAfter(provider, status string) string {
 	return fmt.Sprintf("%s/settings/integrations?provider=%s&status=%s", base, provider, status)
 }
 
+// RedirectBrowserError 302s the browser to the SPA integrations page with
+// status=error. Prefer this over http.Error on connect/callback routes so users
+// never land on a bare API text page (NOT-32).
+func (s *Service) RedirectBrowserError(w http.ResponseWriter, r *http.Request, provider string) {
+	http.Redirect(w, r, s.redirectAfter(provider, "error"), http.StatusFound)
+}
+
 // accountLabel derives a human label (Slack team / Linear workspace name) from
 // the stored metadata.
 func accountLabel(in store.Integration) string {
