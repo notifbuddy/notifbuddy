@@ -1,7 +1,6 @@
 <script lang="ts">
-	// The shared body of each app's routes/+error.svelte. SvelteKit only
-	// discovers route files inside an app's own routes/ directory, so those
-	// files still exist per app — as thin shims over this component.
+	// Shared body of landing's routes/+error.svelte. Dashboard uses its own
+	// SignalErrorBoard (shadcn Empty/Button/Badge) instead.
 	import { page } from '$app/state';
 	import ErrorPage from './error-page.svelte';
 

@@ -82,7 +82,7 @@ func TestSlackConnect_StartsOAuth(t *testing.T) {
 
 // TestSlackConnect_OrglessSession asserts a signed-in-but-org-less caller cannot
 // start a connect (there is no org to attach the integration to). Errors bounce
-// to the SPA integrations page (NOT-32) instead of a plain-text API response.
+// to the SPA branded /interrupted page (NOT-37) instead of a plain-text API response.
 func TestSlackConnect_OrglessSession(t *testing.T) {
 	s := newSession(t, "user_noorg", "noorg@e2e.test", "", "")
 	r := getJSON(t, s, "/integrations/slack/connect")
@@ -91,13 +91,13 @@ func TestSlackConnect_OrglessSession(t *testing.T) {
 		t.Fatalf("org-less caller started the Slack OAuth flow: %q", loc)
 	}
 	requireStatus(t, r, http.StatusFound)
-	if !strings.Contains(loc, "/settings/integrations") || !strings.Contains(loc, "status=error") {
-		t.Fatalf("Location = %q, want dashboard integrations redirect with status=error", loc)
+	if !strings.Contains(loc, "/interrupted?") || !strings.Contains(loc, "code=no_org") {
+		t.Fatalf("Location = %q, want dashboard /interrupted redirect with code=no_org", loc)
 	}
 }
 
 // TestSlackConnect_Unauthenticated asserts an anonymous connect does not start
-// an OAuth flow (no redirect to Slack); errors bounce to the SPA (NOT-32).
+// an OAuth flow (no redirect to Slack); errors bounce to the SPA /interrupted (NOT-37).
 func TestSlackConnect_Unauthenticated(t *testing.T) {
 	r := getJSON(t, nil, "/integrations/slack/connect")
 	loc := r.header.Get("Location")
@@ -105,7 +105,7 @@ func TestSlackConnect_Unauthenticated(t *testing.T) {
 		t.Fatalf("anonymous caller was redirected into the Slack OAuth flow: %q", loc)
 	}
 	requireStatus(t, r, http.StatusFound)
-	if !strings.Contains(loc, "/settings/integrations") || !strings.Contains(loc, "status=error") {
-		t.Fatalf("Location = %q, want dashboard integrations redirect with status=error", loc)
+	if !strings.Contains(loc, "/interrupted?") || !strings.Contains(loc, "code=no_org") {
+		t.Fatalf("Location = %q, want dashboard /interrupted redirect with code=no_org", loc)
 	}
 }

@@ -22,12 +22,12 @@ func (s *Service) slackConfigured() bool {
 // with the configured bot scopes and a sealed state.
 func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 	if !s.Enabled() || !s.slackConfigured() {
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusServiceUnavailable, ErrNotConfigured)
 		return
 	}
 	orgID, userID := s.resolve(r)
 	if orgID == "" {
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusUnauthorized, ErrNoOrg)
 		return
 	}
 	level := store.LevelWorkspace
@@ -38,7 +38,7 @@ func (s *Service) HandleSlackConnect(w http.ResponseWriter, r *http.Request) {
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: nonce})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: seal slack state", "error", err)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusInternalServerError, ErrStartFailed)
 		return
 	}
 	// Bind this flow to the initiating browser; the callback requires the cookie
@@ -65,12 +65,12 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
 		slog.WarnContext(r.Context(), "integrations: slack callback error", "error", e)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusBadRequest, ErrOAuthDenied)
 		return
 	}
 	st, err := s.openState(q.Get("state"))
 	if err != nil || st.OrgID == "" {
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusBadRequest, ErrInvalidState)
 		return
 	}
 	// Bind to the initiating browser: reject a callback whose state nonce does
@@ -78,20 +78,20 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	// state has expired.
 	if err := s.verifyState(r, "slack", st); err != nil {
 		slog.WarnContext(r.Context(), "integrations: slack oauth state binding failed", "error", err)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusBadRequest, ErrInvalidState)
 		return
 	}
 	s.clearStateCookie(w, "slack")
 	code := q.Get("code")
 	if code == "" {
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusBadRequest, ErrMissingCode)
 		return
 	}
 
 	access, err := s.slackExchangeCode(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: slack exchange", "error", err)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusBadGateway, ErrToken)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	if st.Level == string(store.LevelUser) {
 		if access.AuthedUser.AccessToken == "" {
 			slog.ErrorContext(r.Context(), "integrations: slack user callback missing authed_user token")
-			s.RedirectBrowserError(w, r, "slack")
+			s.RedirectBrowserError(w, r, "slack", http.StatusBadGateway, ErrToken)
 			return
 		}
 		in.Level = store.LevelUser
@@ -132,14 +132,14 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 	encToken, err := s.enc.Encrypt([]byte(rawToken))
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: encrypt slack token", "error", err)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusInternalServerError, ErrToken)
 		return
 	}
 	in.EncryptedToken = encToken
 
 	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
 		slog.ErrorContext(r.Context(), "integrations: store slack token", "error", err)
-		s.RedirectBrowserError(w, r, "slack")
+		s.RedirectBrowserError(w, r, "slack", http.StatusInternalServerError, ErrStore)
 		return
 	}
 

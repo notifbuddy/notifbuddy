@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"xolo/backend/internal/config"
@@ -146,19 +148,44 @@ func (s *Service) Disconnect(ctx context.Context, orgID, userID, provider, level
 	return s.store.DeleteIntegration(ctx, orgID, store.Provider(provider), lvl, uid)
 }
 
-// redirectAfter builds the URL the browser returns to after a connect/callback,
-// pointing at the SPA's integrations settings page with provider + status query
-// flags so the UI can refresh and report the outcome.
+// redirectAfter builds the URL the browser returns to after a successful
+// connect/callback, pointing at the SPA's integrations settings page with
+// provider + status query flags so the UI can refresh and report the outcome.
 func (s *Service) redirectAfter(provider, status string) string {
 	base := s.cfg.App.PostLoginURL
 	return fmt.Sprintf("%s/settings/integrations?provider=%s&status=%s", base, provider, status)
 }
 
-// RedirectBrowserError 302s the browser to the SPA integrations page with
-// status=error. Prefer this over http.Error on connect/callback routes so users
-// never land on a bare API text page (NOT-32).
-func (s *Service) RedirectBrowserError(w http.ResponseWriter, r *http.Request, provider string) {
-	http.Redirect(w, r, s.redirectAfter(provider, "error"), http.StatusFound)
+// Stable browser-error codes for /interrupted?code=… (SPA maps these to copy).
+// Never put raw exception text in the URL.
+const (
+	ErrNotConfigured = "not_configured"
+	ErrNoOrg         = "no_org"
+	ErrStartFailed   = "start_failed"
+	ErrOAuthDenied   = "oauth_denied"
+	ErrInvalidState  = "invalid_state"
+	ErrMissingCode   = "missing_code"
+	ErrToken         = "token"
+	ErrStore         = "store"
+	ErrBillingLocked = "billing_locked"
+)
+
+// redirectErrorURL builds the SPA branded error page URL (NOT-37).
+func (s *Service) redirectErrorURL(provider string, status int, code string) string {
+	q := url.Values{}
+	q.Set("status", strconv.Itoa(status))
+	q.Set("code", code)
+	if provider != "" {
+		q.Set("provider", provider)
+	}
+	return s.cfg.App.PostLoginURL + "/interrupted?" + q.Encode()
+}
+
+// RedirectBrowserError 302s the browser to the SPA Quiet error page with
+// status + stable code. Prefer this over http.Error on connect/callback routes
+// so users never land on a bare API text page (NOT-32 / NOT-37).
+func (s *Service) RedirectBrowserError(w http.ResponseWriter, r *http.Request, provider string, status int, code string) {
+	http.Redirect(w, r, s.redirectErrorURL(provider, status, code), http.StatusFound)
 }
 
 // accountLabel derives a human label (Slack team / Linear workspace name) from

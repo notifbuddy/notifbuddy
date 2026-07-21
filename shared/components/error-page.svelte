@@ -1,18 +1,39 @@
 <script lang="ts">
-	// The branded error page — the "signal lost" board, shared by both apps
-	// via the `$shared` alias. On the landing site it's rendered by
-	// routes/404/+page.svelte (prerendered to build/404.html, which Cloudflare
-	// serves for unmatched paths) and routes/+error.svelte; in the dashboard
-	// SPA by routes/+error.svelte. Theme tokens (--primary etc.) come from
-	// whichever app renders it — both share the same QraftHive values, so the
-	// page looks identical on either surface.
+	// The branded error page — Quiet "signal lost" board for apps without
+	// shadcn-svelte (landing). Dashboard kit/API errors use SignalErrorBoard
+	// (Empty + Button + Badge) instead. Keep the layout and copy in sync.
 	import Logo from './logo.svelte';
 
 	let {
 		status = 404,
-		privacyHref = '/privacy'
-	}: { status?: number; privacyHref?: string } = $props();
+		privacyHref = '/privacy',
+		detail,
+		homeHref = '/',
+		ctaLabel = 'Back to the signal',
+		title,
+		code,
+		supportLabel = 'reach out to support'
+	}: {
+		status?: number;
+		privacyHref?: string;
+		detail?: string;
+		homeHref?: string;
+		ctaLabel?: string;
+		title?: string;
+		code?: string | null;
+		supportLabel?: string;
+	} = $props();
+
 	const notFound = $derived(status === 404);
+	const resolvedTitle = $derived(
+		title ?? (notFound ? 'Unable to find this page' : 'Unable to load this page')
+	);
+	const resolvedDetail = $derived(
+		detail ??
+			(notFound
+				? "This page isn't syncing here — it may have moved, or it never existed. Nothing gets lost for long, though."
+				: 'An unexpected error interrupted the signal. Give it a moment and try again.')
+	);
 </script>
 
 <div class="landing flex min-h-svh flex-col">
@@ -21,64 +42,56 @@
 	</header>
 
 	<main
-		class="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-6 px-4 py-10 text-center sm:px-6"
+		class="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center sm:px-6"
 	>
-		<!-- The lost signal: source nodes feed a path that breaks up before it
-		     reaches its destination ring; the brand's clay dot sits fallen just
-		     beneath, still breathing. Decorative — the text carries the meaning. -->
-		<svg class="lost-signal w-full max-w-sm" viewBox="0 0 420 130" fill="none" aria-hidden="true">
-			<!-- source nodes (the tools) -->
+		<svg class="lost-signal mb-2 w-full max-w-sm" viewBox="0 0 420 130" fill="none" aria-hidden="true">
 			<circle cx="24" cy="35" r="5" class="node" />
 			<circle cx="24" cy="65" r="5" class="node" />
 			<circle cx="24" cy="95" r="5" class="node" />
-			<!-- paths converging into one signal -->
 			<path class="path" d="M29 35 C 90 35, 120 62, 170 65" />
 			<path class="path" d="M29 65 L 170 65" />
 			<path class="path" d="M29 95 C 90 95, 120 68, 170 65" />
-			<!-- the one signal, holding steady… -->
 			<path class="path" d="M170 65 L 264 65" />
-			<!-- …then breaking up -->
 			<path class="path broken" d="M272 65 L 344 65" />
-			<!-- the destination that never received it -->
 			<circle cx="372" cy="65" r="17" class="ring" />
-			<!-- the fallen signal dot -->
 			<circle cx="352" cy="103" r="7" class="dot" />
 		</svg>
 
-		<p class="eyebrow font-mono text-xs tracking-[0.18em] uppercase">
-			<span class="eyebrow-pip" aria-hidden="true"></span>
-			http {status} — {notFound ? 'signal lost' : 'signal interrupted'}
-		</p>
-
-		<h1 class="text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl">
-			{#if notFound}
-				All the noise.<br />No signal<span class="text-primary">.</span>
-			{:else}
-				Something broke<br />the sync<span class="text-primary">.</span>
+		<div class="flex flex-wrap items-center justify-center gap-2">
+			<span
+				class="border-border bg-input/20 text-foreground inline-flex h-5 items-center rounded-full border px-2 text-[0.625rem] font-medium"
+			>
+				http {status}
+			</span>
+			{#if code}
+				<span
+					class="bg-secondary text-secondary-foreground inline-flex h-5 items-center rounded-full px-2 text-[0.625rem] font-medium"
+				>
+					{code}
+				</span>
 			{/if}
+		</div>
+
+		<h1 class="text-balance text-2xl font-medium tracking-tight sm:text-3xl">
+			{resolvedTitle}<span class="text-primary">.</span>
 		</h1>
 
-		<p class="text-muted-foreground max-w-md text-base leading-relaxed text-pretty">
-			{#if notFound}
-				This page isn't syncing here — it may have moved, or it never existed. Nothing gets lost
-				for long, though.
-			{:else}
-				An unexpected error interrupted the signal. Give it a moment and try again.
-			{/if}
+		<p class="text-muted-foreground max-w-md text-sm/relaxed text-pretty">
+			{resolvedDetail}
 		</p>
 
-		<div class="flex flex-col items-center gap-3 sm:flex-row">
+		<div class="flex flex-col items-center gap-2 sm:flex-row">
 			<a
-				href="/"
-				class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors"
+				href={homeHref}
+				class="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex h-8 items-center justify-center rounded-md px-2.5 text-xs/relaxed font-medium transition-colors"
 			>
-				Back to the signal
+				{ctaLabel}
 			</a>
 			<a
 				href="mailto:support@notifbuddy.com"
-				class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+				class="text-primary inline-flex h-6 items-center px-2 text-xs/relaxed font-medium underline-offset-4 hover:underline"
 			>
-				report a broken link
+				{supportLabel}
 			</a>
 		</div>
 	</main>
@@ -88,14 +101,13 @@
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
 		<a
-			class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+			class="text-muted-foreground/70 hover:text-muted-foreground text-xs/relaxed font-medium underline-offset-4 hover:underline"
 			href={privacyHref}>privacy</a
 		>
 	</footer>
 </div>
 
 <style>
-	/* Same soft clay radial as the landing hero, one hue only. */
 	.landing {
 		background:
 			radial-gradient(
@@ -106,32 +118,6 @@
 			var(--background);
 	}
 
-	.eyebrow {
-		color: color-mix(in oklab, var(--foreground) 60%, transparent);
-		display: inline-flex;
-		align-items: center;
-		gap: 0.6rem;
-	}
-	/* The brand's signal dot, breathing slowly — same pulse as the hero pip. */
-	.eyebrow-pip {
-		width: 7px;
-		height: 7px;
-		border-radius: 999px;
-		background: var(--primary);
-		box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 70%, transparent);
-		animation: pip-breathe 3.5s ease-in-out infinite;
-	}
-	@keyframes pip-breathe {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.35;
-		}
-	}
-
-	/* Lost-signal diagram: quiet foreground linework, clay reserved for the dot. */
 	.lost-signal .node {
 		fill: color-mix(in oklab, var(--foreground) 22%, transparent);
 	}
@@ -154,8 +140,16 @@
 		fill: var(--primary);
 		animation: pip-breathe 3.5s ease-in-out infinite;
 	}
+	@keyframes pip-breathe {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.eyebrow-pip,
 		.lost-signal .dot {
 			animation: none;
 		}
