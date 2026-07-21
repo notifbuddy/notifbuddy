@@ -94,6 +94,9 @@ func TestSlackConnect_OrglessSession(t *testing.T) {
 	if !strings.Contains(loc, "/interrupted?") || !strings.Contains(loc, "code=no_org") {
 		t.Fatalf("Location = %q, want dashboard /interrupted redirect with code=no_org", loc)
 	}
+	if !strings.Contains(loc, "message=") || !strings.Contains(loc, "title=") {
+		t.Fatalf("Location = %q, want title= and message= from backend", loc)
+	}
 }
 
 // TestSlackConnect_Unauthenticated asserts an anonymous connect does not start
@@ -107,5 +110,8 @@ func TestSlackConnect_Unauthenticated(t *testing.T) {
 	requireStatus(t, r, http.StatusFound)
 	if !strings.Contains(loc, "/interrupted?") || !strings.Contains(loc, "code=no_org") {
 		t.Fatalf("Location = %q, want dashboard /interrupted redirect with code=no_org", loc)
+	}
+	if !strings.Contains(loc, "message=") || !strings.Contains(loc, "title=") {
+		t.Fatalf("Location = %q, want title= and message= from backend", loc)
 	}
 }

@@ -7,4 +7,4 @@
 // directory (backend/).
 package backend
 
-//go:generate go tool ogen --target internal/api --package api --clean ../spec/openapi.yaml
+//go:generate go tool ogen --config ogen.yml --target internal/api --package api --clean ../spec/openapi.yaml

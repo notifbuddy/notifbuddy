@@ -114,9 +114,9 @@ func (UnimplementedHandler) GetBilling(ctx context.Context) (r GetBillingRes, _ 
 
 // GetIntegrationStatus implements getIntegrationStatus operation.
 //
-// Returns the connection state of each supported integration (Slack, Slack, Linear) for the caller's
-// active organization. Drives the integrations settings view. The actual connect/callback flows are
-// browser redirects (GET /integrations/{provider}/connect) and are not part of this JSON spec.
+// Returns the connection state of each supported integration (Slack, Linear) for the caller's active
+// organization. Drives the integrations settings view. Connect/callback are documented as 302 browser
+// redirects under `/integrations/{provider}/connect|callback`.
 //
 // GET /integrations/status
 func (UnimplementedHandler) GetIntegrationStatus(ctx context.Context) (r GetIntegrationStatusRes, _ error) {
