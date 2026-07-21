@@ -173,7 +173,7 @@ func main() {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if orgID, _ := auth.OrgUserFromRequest(r); orgID != "" {
 				if status, err := billingSvc.StatusForOrg(r.Context(), orgID); err == nil && status.Locked {
-					intgSvc.RedirectBrowserError(w, r, provider)
+					intgSvc.RedirectBrowserError(w, r, provider, http.StatusPaymentRequired, integrations.ErrBillingLocked)
 					return
 				}
 			}

@@ -96,13 +96,28 @@
 				font-weight: 500;
 				text-decoration: none;
 			}
+			.support {
+				margin: 0;
+			}
+			.support a {
+				display: inline;
+				height: auto;
+				padding: 0;
+				background: none;
+				color: var(--muted);
+				font-size: 12px;
+				font-weight: 500;
+				text-decoration: underline;
+				text-underline-offset: 4px;
+			}
 		</style>
 	</head>
 	<body>
 		<div class="pip" aria-hidden="true"></div>
-		<p class="eyebrow">http %sveltekit.status% — signal interrupted</p>
-		<h1>Something broke<br />the sync<span>.</span></h1>
+		<p class="eyebrow">http %sveltekit.status%</p>
+		<h1>Unable to load this page<span>.</span></h1>
 		<p>%sveltekit.error.message%</p>
 		<a href="/">Back to the signal</a>
+		<p class="support"><a href="mailto:support@notifbuddy.com">reach out to support</a></p>
 	</body>
 </html>

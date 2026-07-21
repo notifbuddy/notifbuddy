@@ -1,0 +1,9 @@
+# ogen generator config.
+# Integration OAuth connect/callback are documented in openapi.yaml (302 browser
+# flows) but stay as plain net/http handlers — exclude them from codegen.
+# Go regexp has no negative lookahead, so this is an allow-list of JSON paths.
+generator:
+  ignore_not_implemented:
+    - all
+  filters:
+    path_regex: '^/(ping|me|invitations|members|organizations|organization|integrations/status|integrations/\{provider\}/disconnect|integrations/linear|integrations/settings|billing)(/.*)?$'

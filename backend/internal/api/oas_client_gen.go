@@ -102,9 +102,9 @@ type Invoker interface {
 	GetBilling(ctx context.Context) (GetBillingRes, error)
 	// GetIntegrationStatus invokes getIntegrationStatus operation.
 	//
-	// Returns the connection state of each supported integration (Slack, Slack, Linear) for the caller's
-	// active organization. Drives the integrations settings view. The actual connect/callback flows are
-	// browser redirects (GET /integrations/{provider}/connect) and are not part of this JSON spec.
+	// Returns the connection state of each supported integration (Slack, Linear) for the caller's active
+	// organization. Drives the integrations settings view. Connect/callback are documented as 302 browser
+	// redirects under `/integrations/{provider}/connect|callback`.
 	//
 	// GET /integrations/status
 	GetIntegrationStatus(ctx context.Context) (GetIntegrationStatusRes, error)
@@ -1078,9 +1078,9 @@ func (c *Client) sendGetBilling(ctx context.Context) (res GetBillingRes, err err
 
 // GetIntegrationStatus invokes getIntegrationStatus operation.
 //
-// Returns the connection state of each supported integration (Slack, Slack, Linear) for the caller's
-// active organization. Drives the integrations settings view. The actual connect/callback flows are
-// browser redirects (GET /integrations/{provider}/connect) and are not part of this JSON spec.
+// Returns the connection state of each supported integration (Slack, Linear) for the caller's active
+// organization. Drives the integrations settings view. Connect/callback are documented as 302 browser
+// redirects under `/integrations/{provider}/connect|callback`.
 //
 // GET /integrations/status
 func (c *Client) GetIntegrationStatus(ctx context.Context) (GetIntegrationStatusRes, error) {

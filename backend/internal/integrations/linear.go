@@ -29,12 +29,12 @@ func (s *Service) linearConfigured() bool {
 // install rather than a per-user authorization.
 func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 	if !s.Enabled() || !s.linearConfigured() {
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusServiceUnavailable, ErrNotConfigured)
 		return
 	}
 	orgID, userID := s.resolve(r)
 	if orgID == "" {
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusUnauthorized, ErrNoOrg)
 		return
 	}
 	level := store.LevelWorkspace
@@ -45,7 +45,7 @@ func (s *Service) HandleLinearConnect(w http.ResponseWriter, r *http.Request) {
 	state, err := s.sealState(oauthState{OrgID: orgID, UserID: userID, Level: string(level), Nonce: nonce})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: seal linear state", "error", err)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusInternalServerError, ErrStartFailed)
 		return
 	}
 	// Bind this flow to the initiating browser; the callback requires the cookie
@@ -73,12 +73,12 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
 		slog.WarnContext(r.Context(), "integrations: linear callback error", "error", e)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadRequest, ErrOAuthDenied)
 		return
 	}
 	st, err := s.openState(q.Get("state"))
 	if err != nil || st.OrgID == "" {
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadRequest, ErrInvalidState)
 		return
 	}
 	// Bind to the initiating browser: reject a callback whose state nonce does
@@ -86,20 +86,20 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	// state has expired.
 	if err := s.verifyState(r, "linear", st); err != nil {
 		slog.WarnContext(r.Context(), "integrations: linear oauth state binding failed", "error", err)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadRequest, ErrInvalidState)
 		return
 	}
 	s.clearStateCookie(w, "linear")
 	code := q.Get("code")
 	if code == "" {
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadRequest, ErrMissingCode)
 		return
 	}
 
 	access, err := s.linearExchangeCode(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: linear exchange", "error", err)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadGateway, ErrToken)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	encToken, err := s.enc.Encrypt([]byte(access.AccessToken))
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: encrypt linear token", "error", err)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusInternalServerError, ErrToken)
 		return
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
 		slog.ErrorContext(r.Context(), "integrations: store linear token", "error", err)
-		s.RedirectBrowserError(w, r, "linear")
+		s.RedirectBrowserError(w, r, "linear", http.StatusInternalServerError, ErrStore)
 		return
 	}
 

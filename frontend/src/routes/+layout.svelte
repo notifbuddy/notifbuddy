@@ -24,9 +24,10 @@
 
 	// Org-scoped routes need an active organization: bounce org-less sessions
 	// that deep-link anywhere else back to the entry route, which shows the
-	// create-organization step.
+	// create-organization step. /interrupted is a bare branded board (API redirects).
 	$effect(() => {
-		if (user && !user.organizationId && page.url.pathname !== '/') goto('/');
+		const path = page.url.pathname;
+		if (user && !user.organizationId && path !== '/' && path !== '/interrupted') goto('/');
 	});
 </script>
 
@@ -55,7 +56,12 @@
      (the app's original single mode) until the user toggles. -->
 <ModeWatcher defaultMode="dark" />
 
-{#if user === undefined}
+{#if page.url.pathname === '/interrupted'}
+	<!-- Full-bleed Quiet error board (API OAuth failures). Never wrap in AppShell;
+	     don't wait on session either — this page is safe signed-out.
+	     Path is /interrupted not /error — SvelteKit reserves /error for +error.svelte. -->
+	{@render children()}
+{:else if user === undefined}
 	<!-- Still checking the session — show a shell-shaped skeleton (top bar +
 	     content placeholder) so there's no un-shelled full-width flash on reload
 	     and the wait reads as loading, consistent with the app's skeletons. -->
