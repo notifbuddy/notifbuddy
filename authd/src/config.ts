@@ -12,6 +12,10 @@ export interface Config {
 		base_url: string;
 		secret: string;
 		cookie_domain: string;
+		// Empty → Better Auth default "better-auth" (cookie better-auth.session_token).
+		// Preview sets e.g. "better-auth-pr-57" so Domain=.notifbuddy.com does not
+		// overwrite the prod session cookie.
+		cookie_prefix: string;
 	};
 	database: { url: string };
 	cors: { trusted_origins: string[] };

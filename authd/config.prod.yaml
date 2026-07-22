@@ -10,13 +10,18 @@ auth:
   base_url: "https://auth.notifbuddy.com"
   secret: "${BETTER_AUTH_SECRET}" # SECRET — Infisical prod
   cookie_domain: ".notifbuddy.com" # api.* must see the session cookie
+  # Empty → Better Auth default "better-auth". Preview deploys set
+  # better-auth-pr-<n> so the shared cookie Domain does not overwrite prod.
+  cookie_prefix: ""
 
 database:
   url: "${DATABASE_URL}" # injected by infra from the Neon connection string
 
 cors:
   trusted_origins:
-    - "https://dashboard.notifbuddy.com" # exact prod SPA origin (credentialed CORS: no "*")
+    # Exact SPA origin only (credentialed CORS: no "*"). Preview CI replaces
+    # this with https://dashboard-pr-<n>.notifbuddy.com.
+    - "https://dashboard.notifbuddy.com"
 
 github:
   # Prod GitHub OAuth app; callback https://auth.notifbuddy.com/api/auth/callback/github
