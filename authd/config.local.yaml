@@ -12,6 +12,7 @@ auth:
   base_url: "http://localhost:8787" # public base URL of this service
   secret: "${BETTER_AUTH_SECRET}" # SECRET — signing/encryption key (openssl rand -base64 32)
   cookie_domain: "" # empty locally; prod ".notifbuddy.com" so api.* sees the session cookie
+  cookie_prefix: "" # empty → Better Auth default "better-auth"
 
 database:
   # Dedicated database on the same homebrew postgres as the backend:

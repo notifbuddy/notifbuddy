@@ -141,6 +141,11 @@ type GCPPubSub struct {
 	// PushServiceAccount is the service account email Pub/Sub signs push
 	// tokens with; deliveries from any other principal are rejected.
 	PushServiceAccount string `yaml:"push_service_account"`
+	// NamePrefix is prepended to topic and subscription resource names
+	// (e.g. "pr-57-") so preview environments can share a GCP project without
+	// colliding with prod. Empty in production. Manifest names stay logical;
+	// only the GCP provider applies the prefix.
+	NamePrefix string `yaml:"name_prefix"`
 }
 
 // PollIntervalDuration returns the parsed poll interval, defaulting to 1s when

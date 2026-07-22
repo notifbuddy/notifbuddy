@@ -70,6 +70,9 @@ export const auth = betterAuth({
 	trustedOrigins: config.cors.trusted_origins,
 
 	advanced: {
+		// Per-PR prefix (e.g. better-auth-pr-57) keeps preview sessions from
+		// clobbering prod when both use Domain=.notifbuddy.com.
+		...(config.auth.cookie_prefix ? { cookiePrefix: config.auth.cookie_prefix } : {}),
 		...(config.auth.cookie_domain
 			? {
 					crossSubDomainCookies: {

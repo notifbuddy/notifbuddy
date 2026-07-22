@@ -21,6 +21,10 @@ type GCPOptions struct {
 	// PushServiceAccount is the service account email Pub/Sub signs push
 	// tokens with; deliveries from any other principal are rejected.
 	PushServiceAccount string
+	// NamePrefix is prepended to topic and subscription resource names
+	// (e.g. "pr-57-") for preview isolation in a shared GCP project. Empty in
+	// production. Callers and handlers keep using logical manifest names.
+	NamePrefix string
 	// Verifier validates push OIDC tokens. Nil selects the Google-backed
 	// default; tests inject a fake.
 	Verifier TokenVerifier
@@ -77,6 +81,12 @@ func NewGCPBus(ctx context.Context, opts GCPOptions) (*GCPBus, error) {
 	return &GCPBus{client: client, opts: opts, publishers: map[string]*gpubsub.Publisher{}}, nil
 }
 
+// resourceName joins NamePrefix with a logical manifest name. Empty prefix
+// leaves the name unchanged (production).
+func (b *GCPBus) resourceName(logical string) string {
+	return b.opts.NamePrefix + logical
+}
+
 // Publish sends the message and waits for the server ack, so callers (webhook
 // handlers) see a real error and can 5xx for provider retry.
 func (b *GCPBus) Publish(ctx context.Context, msg Message) error {
@@ -91,28 +101,32 @@ func (b *GCPBus) Publish(ctx context.Context, msg Message) error {
 }
 
 // publisher returns the cached per-topic publisher (they hold batching state
-// and must be reused, not recreated per publish).
+// and must be reused, not recreated per publish). The cache key is the logical
+// topic; the GCP resource name may carry NamePrefix.
 func (b *GCPBus) publisher(topic string) *gpubsub.Publisher {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if p, ok := b.publishers[topic]; ok {
 		return p
 	}
-	p := b.client.Publisher(topic)
+	p := b.client.Publisher(b.resourceName(topic))
 	b.publishers[topic] = p
 	return p
 }
 
 // Start registers the subscriptions with the push dispatcher. No network work:
 // the subscriptions themselves exist in infra, and delivery arrives over
-// HTTP once PushHandler is mounted.
+// HTTP once PushHandler is mounted. Push deliveries are keyed by the prefixed
+// GCP subscription ID; handlers still see logical Topic names from the
+// Subscription value.
 func (b *GCPBus) Start(_ context.Context, subs []Subscription) error {
 	byName := make(map[string]Subscription, len(subs))
 	for _, sub := range subs {
-		if _, dup := byName[sub.Name]; dup {
-			return fmt.Errorf("pubsub: duplicate subscription name %q", sub.Name)
+		name := b.resourceName(sub.Name)
+		if _, dup := byName[name]; dup {
+			return fmt.Errorf("pubsub: duplicate subscription name %q", name)
 		}
-		byName[sub.Name] = sub
+		byName[name] = sub
 	}
 	b.push = &pushServer{
 		subs:      byName,

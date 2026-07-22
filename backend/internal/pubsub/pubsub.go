@@ -107,6 +107,7 @@ func NewBus(ctx context.Context, cfg config.PubSubConfig, pool *pgxpool.Pool) (B
 			ProjectID:          cfg.GCP.ProjectID,
 			PushAudience:       cfg.GCP.PushAudience,
 			PushServiceAccount: cfg.GCP.PushServiceAccount,
+			NamePrefix:         cfg.GCP.NamePrefix,
 		})
 	default:
 		return nil, fmt.Errorf("pubsub: unknown provider %q (want postgres or gcp)", cfg.Provider)
