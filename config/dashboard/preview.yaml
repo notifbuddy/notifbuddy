@@ -1,0 +1,3 @@
+# Dashboard SPA origins — rewritten by scripts/preview-bake-configs.sh per PR.
+api_base_url: "https://api-pr-0.notifbuddy.com"
+auth_url: "https://auth-pr-0.notifbuddy.com"

@@ -22,11 +22,14 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY shared /app/shared
+COPY config /app/config
 COPY frontend ./
 
 # $env/static/public is resolved at build time and an undefined variable is a
 # build error, so both are defined and empty: src/lib/runtime-config.ts then
 # falls through to window.__notifbuddy, which runtime-config.sh fills in.
+# Feature flags still come from config/featureflags/${NB_ENV}.yaml.
+ENV NB_ENV=prod
 ENV PUBLIC_API_BASE_URL=""
 ENV PUBLIC_AUTH_URL=""
 RUN npm run build

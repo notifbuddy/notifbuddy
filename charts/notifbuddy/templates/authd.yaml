@@ -85,6 +85,10 @@ spec:
             {{- end }}
             - name: CONFIG_FILE
               value: /config/config.yaml
+            - name: NB_ENV
+              value: prod
+            - name: FEATUREFLAGS_FILE
+              value: /app/config/featureflags/prod.yaml
           volumeMounts:
             - name: config
               mountPath: /config
@@ -122,6 +126,10 @@ spec:
             {{- end }}
             - name: CONFIG_FILE
               value: /config/config.yaml
+            - name: NB_ENV
+              value: prod
+            - name: FEATUREFLAGS_FILE
+              value: /app/config/featureflags/prod.yaml
           ports:
             - name: http
               containerPort: 8787

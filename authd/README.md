@@ -12,7 +12,7 @@ Fully request-driven — no daemons, no cron — so it scales to zero.
 ```sh
 psql -d postgres -c "CREATE DATABASE authd;"
 cp .env.example .env   # fill BETTER_AUTH_SECRET (openssl rand -base64 32)
-                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app)
+                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app; local/prod)
 npm install
 npm run migrate        # applies the Better Auth schema
 node --env-file=.env src/server.ts
@@ -24,12 +24,21 @@ browser's cookie.
 
 ## Configuration
 
-Same pattern as the backend: non-sensitive settings live in a committed YAML
-file (`config.local.yaml` by default, `config.prod.yaml` in the Docker image;
-override with `CONFIG_FILE`), and SENSITIVE values reference env vars with
-`${VAR}` — resolved at startup, referenced-but-unset is a hard error. `.env`
+Non-sensitive settings live under the repo-root config tree:
+
+- `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`)
+- `config/featureflags/${NB_ENV}.yaml` — which sign-in methods are enabled
+
+Override paths with `CONFIG_FILE` / `FEATUREFLAGS_FILE`. Sensitive values use
+`${VAR}` — resolved at startup; referenced-but-unset is a hard error. `.env`
 holds only those secrets (see `.env.example`).
 
-GitHub OAuth is the only sign-in method — `github.client_id`/`client_secret`
-are required. Resend email is optional: an empty `email.resend_api_key` sends
-invitation mail to the console (dev sink).
+Sign-in methods (from feature flags):
+
+- **local / prod:** `github_oauth_login: true` — GitHub OAuth required
+  (`github.client_id` / `client_secret`)
+- **preview:** `email_password_login: true` — email/password only (no GitHub
+  secrets needed)
+
+Resend email is optional: an empty `email.resend_api_key` sends invitation mail
+to the console (dev sink).

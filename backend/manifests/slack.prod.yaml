@@ -1,6 +1,6 @@
 # Slack app manifest — production app.
 # Paste into api.slack.com/apps → App Manifest for the notifbuddy app.
-# Bot scopes must stay in sync with slack.scopes in config.prod.yaml; adding a
+# Bot scopes must stay in sync with slack.scopes in config/backend/prod.yaml; adding a
 # scope here requires already-connected workspaces to reconnect Slack before
 # the new permissions take effect.
 display_information:

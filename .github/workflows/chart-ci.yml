@@ -109,8 +109,8 @@ jobs:
 
       - name: Build images from this branch
         run: |
-          docker build -t notifbuddy/backend:ci backend
-          docker build -t notifbuddy/authd:ci authd
+          docker build -t notifbuddy/backend:ci -f backend/Dockerfile .
+          docker build -t notifbuddy/authd:ci -f authd/Dockerfile .
           docker build -t notifbuddy/dashboard:ci -f frontend/Dockerfile .
 
       - uses: helm/kind-action@v1

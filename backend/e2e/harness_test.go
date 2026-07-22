@@ -3,7 +3,7 @@
 // Package e2e is a black-box end-to-end suite for the NotifBuddy backend. It talks to
 // a fully wired server (real Postgres, real pub/sub, real HTTP stack) over the
 // network exactly like the SPA would — no in-process handlers, no mocks of our
-// own code. External SaaS is disabled or stubbed by config.e2e.yaml.
+// own code. External SaaS is disabled or stubbed by config/backend/e2e.yaml.
 //
 // The suite is gated behind the `e2e` build tag so `go test ./...` never picks
 // it up; run it via backend/e2e/run.sh (docker compose) or point E2E_BASE_URL at

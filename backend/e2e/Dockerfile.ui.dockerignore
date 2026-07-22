@@ -1,8 +1,10 @@
 # Scoped ignore for the repo-root build context of Dockerfile.ui. Only
-# frontend/ and shared/ are needed; everything else just bloats the context.
+# frontend/, shared/, and config/ are needed; everything else just bloats
+# the context.
 *
 !frontend
 !shared
+!config
 frontend/node_modules
 frontend/build
 frontend/.svelte-kit

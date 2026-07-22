@@ -1,0 +1,23 @@
+# Preview authd configuration. Hosts/cookie prefix rewritten by
+# scripts/preview-bake-configs.sh. Email/password sign-in is enabled via
+# config/featureflags/preview.yaml (GitHub OAuth off).
+
+server:
+  port: 8787
+auth:
+  base_url: "https://auth-pr-0.notifbuddy.com"
+  secret: "${BETTER_AUTH_SECRET}"
+  cookie_domain: ".notifbuddy.com"
+  cookie_prefix: "better-auth-pr-0"
+database:
+  url: "${DATABASE_URL}"
+cors:
+  trusted_origins:
+    - https://dashboard-pr-0.notifbuddy.com
+# Unused when github_oauth_login is false; kept optional for flag flips.
+github:
+  client_id: ""
+  client_secret: ""
+email:
+  resend_api_key: ""
+  from: ""

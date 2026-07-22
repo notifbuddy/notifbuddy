@@ -236,13 +236,17 @@ func defaultConfig() Config {
 }
 
 // Load reads the YAML config file, expands `$VAR`/`${VAR}` env references in
-// every string field, and validates required values. The path comes from the
-// CONFIG_FILE env var, defaulting to "config.local.yaml" (prod deploys set
-// CONFIG_FILE=config.prod.yaml).
+// every string field, and validates required values. Path resolution:
+//   1. CONFIG_FILE if set
+//   2. config/backend/${NB_ENV}.yaml (NB_ENV defaults to "local"), searching
+//      ./ then ../ so both repo-root and backend/ working directories work.
 func Load() (Config, error) {
 	cfg := defaultConfig()
 
-	path := envOr("CONFIG_FILE", "config.local.yaml")
+	path, err := resolveConfigPath("backend")
+	if err != nil {
+		return Config{}, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
@@ -258,6 +262,23 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// resolveConfigPath returns CONFIG_FILE, or config/<service>/${NB_ENV}.yaml
+// found under the cwd or its parent (repo root when running from <service>/).
+func resolveConfigPath(service string) (string, error) {
+	if p := os.Getenv("CONFIG_FILE"); p != "" {
+		return p, nil
+	}
+	env := envOr("NB_ENV", "local")
+	rel := fmt.Sprintf("config/%s/%s.yaml", service, env)
+	for _, prefix := range []string{".", ".."} {
+		candidate := prefix + "/" + rel
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("config: %s not found (set CONFIG_FILE or NB_ENV; tried ./%s and ../%s)", rel, rel, rel)
 }
 
 // envRefPattern matches a whole-value env reference: `$VAR` or `${VAR}`.

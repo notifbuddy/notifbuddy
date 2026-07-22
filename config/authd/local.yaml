@@ -1,9 +1,5 @@
-# authd configuration (local dev). Same pattern as backend/config.local.yaml:
-# non-sensitive values are set literally, SENSITIVE values reference an env var
-# with `${VAR}` — resolved at startup; a referenced-but-unset variable is a
-# hard error. Secrets live in authd/.env (run with `node --env-file=.env`).
-#
-# Override the config path with CONFIG_FILE=/path/to/config.yaml.
+# authd local config (config/authd/local.yaml). Secrets via ${VAR}.
+# Override with CONFIG_FILE=... or NB_ENV=local|prod|preview.
 
 server:
   port: 8787 # PORT env (Cloud Run contract) wins when set
@@ -24,8 +20,8 @@ cors:
     - "http://localhost:5173"
 
 github:
-  # GitHub OAuth — the only sign-in method (required). Create a GitHub OAuth
-  # app with callback <auth.base_url>/api/auth/callback/github
+  # Required when config/featureflags/${NB_ENV}.yaml has github_oauth_login: true
+  # (local/prod). Callback: <auth.base_url>/api/auth/callback/github
   client_id: "${GITHUB_CLIENT_ID}"
   client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
 

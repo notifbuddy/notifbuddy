@@ -63,15 +63,16 @@ services:
 
   backend:
     build:
-      context: .. # the backend/ dir — matches backend/Dockerfile's assumptions
-      dockerfile: Dockerfile
+      context: ../.. # repo root — matches backend/Dockerfile
+      dockerfile: backend/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       fakeapis:
         condition: service_healthy # CA present before the first outbound call
     environment:
-      CONFIG_FILE: /app/config.e2e.yaml
+      CONFIG_FILE: /app/config/backend/e2e.yaml
+      NB_ENV: e2e
       AUTHD_BASE_URL: http://fakeapis:8888 # fakeapis' authd fake (direct; NO_PROXY covers it)
       DATABASE_URL: postgres://notifbuddy:notifbuddy@postgres:5432/notifbuddy?sslmode=disable
       INTEGRATION_ENC_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= # base64 of a fixed 32-byte key
@@ -85,7 +86,7 @@ services:
       NO_PROXY: postgres,fakeapis,backend,localhost,127.0.0.1
       SSL_CERT_FILE: /certs/ca.pem
     volumes:
-      - ./config.e2e.yaml:/app/config.e2e.yaml:ro
+      - ../../config/backend/e2e.yaml:/app/config/backend/e2e.yaml:ro
       - certs:/certs:ro # read the CA minted by fakeapis
 
   # Backend Go e2e suite. Behind the "backend" profile so a UI-only run
@@ -108,7 +109,7 @@ services:
   # It shares the backend container's network namespace (network_mode:
   # service:backend), so from the browser's point of view the SPA is served at
   # http://localhost:5173 and the API is http://localhost:8080 — exactly the
-  # origins config.e2e.yaml already allows (cors.allow_origin / post_login_url).
+  # origins config/backend/e2e.yaml already allows (cors.allow_origin / post_login_url).
   # That makes the SPA→API call cross-origin (CORS handled) but same-site (host
   # "localhost"), so the forged session cookie is sent. The cookie itself is
   # read from /certs/session.json, minted by fakeapis with the same secret its

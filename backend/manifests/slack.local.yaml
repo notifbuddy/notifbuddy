@@ -1,6 +1,6 @@
 # Slack app manifest — local development instance.
 # Paste into api.slack.com/apps → App Manifest for the notifbuddy-local app.
-# Bot scopes must stay in sync with slack.scopes in config.local.yaml; adding a
+# Bot scopes must stay in sync with slack.scopes in config/backend/local.yaml; adding a
 # scope here requires reinstalling the app to the dev workspace.
 display_information:
   name: notifbuddy-local

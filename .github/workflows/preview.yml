@@ -17,6 +17,7 @@ on:
       - 'frontend/**'
       - 'backend/**'
       - 'authd/**'
+      - 'config/**'
       - 'scripts/preview-bake-configs.sh'
       - '.github/workflows/preview.yml'
 
@@ -60,7 +61,7 @@ jobs:
           echo "$files" | grep -qE '^userdocs/' && services+=(docs)
 
           fullstack=false
-          if echo "$files" | grep -qE '^(frontend|backend|authd)/'; then
+          if echo "$files" | grep -qE '^(frontend|backend|authd|config)/'; then
             # Sibling hosts must ship together (cookie Domain + CORS + PUBLIC_*).
             services+=(dashboard api auth)
             fullstack=true
@@ -100,7 +101,7 @@ jobs:
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Bake preview configs into backend/authd
+      - name: Bake preview configs
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: ./scripts/preview-bake-configs.sh "$PR_NUMBER"
@@ -118,7 +119,8 @@ jobs:
         id: backend
         uses: docker/build-push-action@v6
         with:
-          context: backend
+          context: .
+          file: backend/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.AR }}/backend:pr-${{ github.event.pull_request.number }}
@@ -127,7 +129,8 @@ jobs:
         id: authd
         uses: docker/build-push-action@v6
         with:
-          context: authd
+          context: .
+          file: authd/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.AR }}/authd:pr-${{ github.event.pull_request.number }}

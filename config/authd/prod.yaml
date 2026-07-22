@@ -1,7 +1,5 @@
-# PRODUCTION authd configuration. Same shape as config.local.yaml; sensitive
-# values reference env vars (`${VAR}`), resolved at startup — a referenced-
-# but-unset variable is a hard error. Select this file with
-# CONFIG_FILE=config.prod.yaml (the Docker image / Cloud Run sets this).
+# PRODUCTION authd (config/authd/prod.yaml).
+# Docker/Cloud Run: NB_ENV=prod CONFIG_FILE=config/authd/prod.yaml
 
 server:
   port: 8787 # Cloud Run injects PORT; the PORT env wins when set

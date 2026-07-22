@@ -25,11 +25,14 @@ RUN npm ci
 # Playwright browser + its OS dependencies (Chromium only).
 RUN npx playwright install --with-deps chromium
 
-# App sources.
+# App sources (+ shared config tree for vite feature-flag bake).
 COPY shared /app/shared
+COPY config /app/config
 COPY frontend ./
 
 # Build the static SPA (adapter-static → frontend/build).
+# PUBLIC_API_* are set above; feature flags come from config/featureflags.
+ENV NB_ENV=local
 RUN npm run build
 
 # Runs Playwright; playwright.config.ts serves build/ on :5173 via e2e/serve.mjs.
