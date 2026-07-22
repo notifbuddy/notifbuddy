@@ -4,6 +4,7 @@
 	// (landing-deploy.yml) creates/updates the Worker and uploads build/ in one
 	// step; infra (infra) only attaches the custom domain and
 	// the www redirect.
+	// preview smoke test (NOT-42)
 	//
 	// No account_id here — wrangler doesn't interpolate ${VAR} in config, so
 	// the deploy workflow passes CLOUDFLARE_ACCOUNT_ID via the env instead
