@@ -35,18 +35,24 @@ function resolveConfigFile(area: string, envName: string): string {
 	throw new Error(`dashboard vite: missing ${rel}`);
 }
 
+/** True only when unset — empty string means "explicitly empty" (Helm bake). */
+function unset(...vals: Array<string | undefined>): boolean {
+	return vals.every((v) => v === undefined);
+}
+
 export default defineConfig(({ mode }) => {
 	// Prefer explicit PUBLIC_* from the environment (CI / Helm bake). Otherwise
 	// load config/dashboard + featureflags for NB_ENV (default local).
+	// Empty string counts as set (Helm leaves URLs empty for runtime inject).
 	const fileEnv = loadEnv(mode, process.cwd(), '');
 	const nbEnv = process.env.NB_ENV || fileEnv.NB_ENV || 'local';
 
-	if (!process.env.PUBLIC_API_BASE_URL && !fileEnv.PUBLIC_API_BASE_URL) {
+	if (unset(process.env.PUBLIC_API_BASE_URL, fileEnv.PUBLIC_API_BASE_URL)) {
 		const dash = loadFlatYaml(resolveConfigFile('dashboard', nbEnv));
 		process.env.PUBLIC_API_BASE_URL = String(dash.api_base_url ?? '');
 		process.env.PUBLIC_AUTH_URL = String(dash.auth_url ?? '');
 	}
-	if (!process.env.PUBLIC_FEATURE_EMAIL_PASSWORD && !fileEnv.PUBLIC_FEATURE_EMAIL_PASSWORD) {
+	if (unset(process.env.PUBLIC_FEATURE_EMAIL_PASSWORD, fileEnv.PUBLIC_FEATURE_EMAIL_PASSWORD)) {
 		const flags = loadFlatYaml(resolveConfigFile('featureflags', nbEnv));
 		process.env.PUBLIC_FEATURE_EMAIL_PASSWORD = flags.email_password_login ? 'true' : 'false';
 		process.env.PUBLIC_FEATURE_GITHUB_OAUTH = flags.github_oauth_login ? 'true' : 'false';
