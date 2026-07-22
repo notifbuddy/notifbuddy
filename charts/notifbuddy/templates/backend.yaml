@@ -59,6 +59,8 @@ spec:
           env:
             - name: CONFIG_FILE
               value: /config/config.yaml
+            - name: NB_ENV
+              value: prod
           ports:
             - name: http
               containerPort: 8080

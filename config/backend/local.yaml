@@ -1,12 +1,9 @@
-# Backend configuration for Xolo.
+# Shared application config lives under config/<service>/{local,prod,preview}.yaml
+# at the repo root. Override with CONFIG_FILE=... or NB_ENV=local|prod|preview.
 #
 # Non-sensitive values are set literally here. SENSITIVE values reference an
 # environment variable with `$VAR` or `${VAR}` — these are resolved at startup
-# and a referenced-but-unset variable is a hard error. This keeps real secrets
-# out of the committed file; set them in backend/.env (auto-loaded) or the real
-# environment.
-#
-# Override the config path with CONFIG_FILE=/path/to/config.yaml.
+# and a referenced-but-unset variable is a hard error.
 
 server:
   addr: ":8080" # listen address

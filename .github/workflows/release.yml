@@ -75,10 +75,10 @@ jobs:
         # per-image build inputs and the per-arch runner to the six jobs above.
         include:
           - image: backend
-            context: backend
+            context: .
             dockerfile: backend/Dockerfile
           - image: authd
-            context: authd
+            context: .
             dockerfile: authd/Dockerfile
           # The SPA build needs frontend/ and the repo-root shared/, so this
           # one builds from the repo root.

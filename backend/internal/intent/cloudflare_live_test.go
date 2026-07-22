@@ -18,7 +18,7 @@ import (
 //
 //	cd backend && RUN_LIVE_INTENT=1 go test ./internal/intent/ -run Live -v
 //
-// It loads backend/.env (for CF_API_TOKEN) and backend/config.local.yaml the same way
+// It loads backend/.env (for CF_API_TOKEN) and config/backend/local.yaml the same way
 // the server does, then asserts a few representative phrasings classify as
 // expected. Small models aren't perfectly deterministic, so this is a smoke
 // test of the wiring (auth, endpoint, parsing), not a strict accuracy gate.
@@ -36,7 +36,7 @@ func TestClassify_Live(t *testing.T) {
 	if err := godotenv.Load(filepath.Join(backendDir, ".env")); err != nil {
 		t.Logf("note: could not load .env (%v); relying on real environment", err)
 	}
-	t.Setenv("CONFIG_FILE", filepath.Join(backendDir, "config.yaml"))
+	t.Setenv("CONFIG_FILE", filepath.Join(filepath.Dir(backendDir), "config", "backend", "local.yaml"))
 
 	cfg, err := config.Load()
 	if err != nil {

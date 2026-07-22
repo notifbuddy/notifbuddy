@@ -1,14 +1,7 @@
-# PRODUCTION backend configuration for NotifBuddy.
+# PRODUCTION backend configuration (config/backend/prod.yaml).
+# Docker/Cloud Run: NB_ENV=prod CONFIG_FILE=config/backend/prod.yaml
 #
-# Same shape as config.local.yaml, but with production URLs/origins. Sensitive
-# values still reference env vars (`${VAR}`), resolved at startup — a referenced-
-# but-unset variable is a hard error. Select this file with
-# CONFIG_FILE=config.prod.yaml (the Docker image / Cloud Run sets this).
-#
-# ⚠️ FILL IN THE PLACEHOLDER URLs after `infra apply` allocates the Cloud Run
-#    URL (infra output backend_url) and you know the prod frontend origin.
-#    Every OAuth redirect/callback below must also be registered in the
-#    respective provider dashboards (WorkOS, Slack app, Linear app).
+# Sensitive values reference env vars (`${VAR}`), resolved at startup.
 
 server:
   addr: ":8080" # Cloud Run routes $PORT (default 8080) to this

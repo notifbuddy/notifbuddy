@@ -3,15 +3,22 @@
 // in dev, Neon in prod). The service is fully request-driven: no daemons, no
 // cron — safe to scale to zero (NOT-20).
 //
-// All settings come from config.ts (YAML + ${VAR} env refs); required values
-// are validated there at load, so this module can use them unconditionally.
+// Sign-in methods come from config/featureflags/${NB_ENV}.yaml.
 import { betterAuth } from 'better-auth';
 import { organization } from 'better-auth/plugins';
 import pg from 'pg';
-import { config } from './config.ts';
+import { config, featureFlags } from './config.ts';
 import { sendEmail } from './email.ts';
 
 const pool = new pg.Pool({ connectionString: config.database.url });
+
+const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
+if (featureFlags.github_oauth_login) {
+	socialProviders.github = {
+		clientId: config.github.client_id,
+		clientSecret: config.github.client_secret,
+	};
+}
 
 export const auth = betterAuth({
 	baseURL: config.auth.base_url,
@@ -36,13 +43,17 @@ export const auth = betterAuth({
 		},
 	},
 
-	// GitHub is the only sign-in method — no email/password.
-	socialProviders: {
-		github: {
-			clientId: config.github.client_id,
-			clientSecret: config.github.client_secret,
-		},
-	},
+	...(featureFlags.email_password_login
+		? {
+				emailAndPassword: {
+					enabled: true,
+					// Preview convenience: no verification email required to sign in.
+					requireEmailVerification: false,
+				},
+			}
+		: {}),
+
+	...(Object.keys(socialProviders).length > 0 ? { socialProviders } : {}),
 
 	plugins: [
 		organization({
@@ -70,14 +81,12 @@ export const auth = betterAuth({
 	trustedOrigins: config.cors.trusted_origins,
 
 	advanced: {
-		// Per-PR prefix (e.g. better-auth-pr-57) keeps preview sessions from
-		// clobbering prod when both use Domain=.notifbuddy.com.
 		...(config.auth.cookie_prefix ? { cookiePrefix: config.auth.cookie_prefix } : {}),
 		...(config.auth.cookie_domain
 			? {
 					crossSubDomainCookies: {
 						enabled: true,
-						domain: config.auth.cookie_domain, // ".notifbuddy.com" in prod: api.* must see the session
+						domain: config.auth.cookie_domain,
 					},
 				}
 			: {}),

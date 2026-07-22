@@ -3,7 +3,7 @@
 Black-box end-to-end tests for NotifBuddy. They talk to a **fully wired server**
 (real Postgres, real pub/sub, real HTTP stack) over the network exactly like the
 SPA does — no in-process handlers, no mocks of our own code. Every external SaaS
-dependency is disabled or stubbed by `config.e2e.yaml`.
+dependency is disabled or stubbed by `config/backend/e2e.yaml`.
 
 Two suites share one docker-compose stack, split by compose **profile**:
 
@@ -33,7 +33,7 @@ with the runner's status code (`0` = all green). It tears the stack down
 postgres  throwaway DB (tmpfs — wiped every run)
 fakeapis  TLS-terminating egress proxy + third-party API fakes; also mints the
           forged session cookie the UI suite authenticates with
-backend   the real server, CONFIG_FILE=config.e2e.yaml, HTTPS_PROXY -> fakeapis
+backend   the real server, CONFIG_FILE=config/backend/e2e.yaml, HTTPS_PROXY -> fakeapis
 tests     (profile: backend) the e2e-tagged Go suite, against backend:8080
 ui        (profile: ui) the dashboard Playwright suite, against localhost:8080
 ```
@@ -93,7 +93,7 @@ the shared volume, and the browser is seeded with that cookie
 The `ui` container builds the SPA with `PUBLIC_API_BASE_URL=http://localhost:8080`
 and serves it on `:5173`. It runs with `network_mode: service:backend`, so from
 the browser's view the SPA is `localhost:5173` and the API is `localhost:8080` —
-exactly the origins `config.e2e.yaml` already allows (`cors.allow_origin` /
+exactly the origins `config/backend/e2e.yaml` already allows (`cors.allow_origin` /
 `app.post_login_url`). That makes the SPA→API call cross-origin (CORS is
 exercised) but same-site (host `localhost`), so the forged session cookie
 is sent on every credentialed fetch. Specs live in `frontend/e2e/`.

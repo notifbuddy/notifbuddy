@@ -10,7 +10,8 @@
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import { userPrefersMode, setMode } from 'mode-watcher';
-	import { userStore, signIn, signOut, displayName, initials, avatarUrl } from '$lib/user.svelte';
+	import { goto } from '$app/navigation';
+	import { userStore, signOut, displayName, initials, avatarUrl } from '$lib/user.svelte';
 
 	const user = $derived(userStore.user);
 	const org = $derived(userStore.activeOrg);
@@ -60,7 +61,7 @@
 				<Card.Description>You're signed out.</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<Button onclick={signIn}>
+				<Button onclick={() => goto('/')}>
 					<LogInIcon data-icon="inline-start" />
 					Sign in
 				</Button>

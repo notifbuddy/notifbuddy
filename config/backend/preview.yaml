@@ -1,0 +1,80 @@
+# Preview backend configuration. Hosts/origins are rewritten by
+# scripts/preview-bake-configs.sh before the preview image build.
+# Select with NB_ENV=preview (CONFIG_FILE=config/backend/preview.yaml).
+
+server:
+  addr: ":8080"
+  public_base_url: "https://api-pr-0.notifbuddy.com"
+logging:
+  format: "json"
+  level: "info"
+  axiom_enabled: false
+  axiom_token: ""
+  axiom_dataset: "backend"
+cors:
+  allow_origin: "https://dashboard-pr-0.notifbuddy.com"
+auth:
+  base_url: "${AUTHD_BASE_URL}"
+app:
+  post_login_url: "https://dashboard-pr-0.notifbuddy.com"
+  insecure_cookies: false
+database:
+  url: "${DATABASE_URL}"
+encryption:
+  provider: "gcpkms"
+  local_key: ""
+  kms_key_id: "${KMS_KEY_ID}"
+pubsub:
+  provider: "gcp"
+  gcp:
+    project_id: "${GCP_PROJECT_ID}"
+    push_audience: "https://api-pr-0.notifbuddy.com/internal/pubsub/push"
+    push_service_account: "${PUBSUB_PUSH_SA}"
+    name_prefix: "${PUBSUB_NAME_PREFIX}"
+slack:
+  client_id: "${SLACK_CLIENT_ID}"
+  client_secret: "${SLACK_CLIENT_SECRET}"
+  scopes:
+    - app_mentions:read
+    - channels:manage
+    - channels:history
+    - channels:read
+    - commands
+    - groups:history
+    - groups:write
+    - reactions:write
+    - files:read
+    - files:write
+    - chat:write
+    - chat:write.public
+    - chat:write.customize
+    - im:history
+    - im:read
+    - im:write
+    - users:read
+    - users:read.email
+    - reactions:read
+    - emoji:read
+  user_scopes:
+    - chat:write
+    - channels:write
+  callback_url: "https://api-pr-0.notifbuddy.com/integrations/slack/callback"
+  signing_secret: "${SLACK_SIGNING_SECRET}"
+linear:
+  client_id: "${LINEAR_CLIENT_ID}"
+  client_secret: "${LINEAR_CLIENT_SECRET}"
+  scopes:
+    - read
+    - write
+  callback_url: "https://api-pr-0.notifbuddy.com/integrations/linear/callback"
+  webhook_secret: "${LINEAR_WEBHOOK_SECRET}"
+cloudflare:
+  account_id: "${CF_ACCOUNT_ID}"
+  api_token: "${CF_API_TOKEN}"
+  model: "@cf/meta/llama-3.1-8b-instruct"
+billing:
+  mode: "beta"
+stripe:
+  api_key: "${STRIPE_API_KEY}"
+  webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
+  price_id: ""
