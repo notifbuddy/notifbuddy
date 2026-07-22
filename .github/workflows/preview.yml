@@ -1,11 +1,12 @@
 name: Preview trigger
 
-# Single entrypoint for PR previews. Detects which static apps changed in the
-# PR and dispatches one iac preview.yml run with that service list.
+# Single entrypoint for PR previews. Detects which apps changed in the PR and
+# dispatches one iac preview.yml run with that service list.
 # Deploys to {service}-pr-<n>.notifbuddy.com (iac preview.yml; Universal SSL).
 #
-# Supported services (Phase 1+): landing, docs, dashboard
-# (api/auth come later with the full-stack preview work.)
+# Static: landing, docs
+# Full-stack (dashboard + api + auth): frontend/, backend/, or authd/ changes.
+# Full-stack builds preview images here (image-pusher WIF) then iac deploys.
 
 on:
   pull_request:
@@ -14,22 +15,33 @@ on:
       - 'landing/**'
       - 'userdocs/**'
       - 'frontend/**'
+      - 'backend/**'
+      - 'authd/**'
+      - 'scripts/preview-bake-configs.sh'
       - '.github/workflows/preview.yml'
 
 permissions:
   contents: read
-  id-token: write # GitHub OIDC → Infisical machine identity
+  id-token: write # GitHub OIDC → Infisical + GCP WIF
   pull-requests: read # list PR files for service detection
 
 concurrency:
   group: preview-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  REGION: us-east4
+  AR: us-east4-docker.pkg.dev/notifbuddy/notifbuddy
+
 jobs:
-  dispatch:
+  detect:
     # Fork PRs have no Infisical OIDC / App secrets — same-repo only.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.services.outputs.services }}
+      skip: ${{ steps.services.outputs.skip }}
+      fullstack: ${{ steps.services.outputs.fullstack }}
     steps:
       - name: Detect changed preview services
         id: services
@@ -46,22 +58,97 @@ jobs:
           services=()
           echo "$files" | grep -qE '^landing/' && services+=(landing)
           echo "$files" | grep -qE '^userdocs/' && services+=(docs)
-          echo "$files" | grep -qE '^frontend/' && services+=(dashboard)
+
+          fullstack=false
+          if echo "$files" | grep -qE '^(frontend|backend|authd)/'; then
+            # Sibling hosts must ship together (cookie Domain + CORS + PUBLIC_*).
+            services+=(dashboard api auth)
+            fullstack=true
+          fi
 
           if [ ${#services[@]} -eq 0 ]; then
             echo "No previewable app paths in this PR — skipping dispatch"
             echo "services=" >> "$GITHUB_OUTPUT"
             echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "fullstack=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           joined=$(IFS=,; echo "${services[*]}")
           echo "services=${joined}" >> "$GITHUB_OUTPUT"
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "Preview services: ${joined}"
+          echo "fullstack=${fullstack}" >> "$GITHUB_OUTPUT"
+          echo "Preview services: ${joined} (fullstack=${fullstack})"
 
+  build-images:
+    needs: detect
+    if: >-
+      needs.detect.outputs.skip != 'true'
+      && needs.detect.outputs.fullstack == 'true'
+      && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.tags.outputs.backend_image }}
+      authd_image: ${{ steps.tags.outputs.authd_image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Bake preview configs into backend/authd
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/preview-bake-configs.sh "$PR_NUMBER"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/41636012349/locations/global/workloadIdentityPools/github/providers/github
+          service_account: notifbuddy-image-pusher@notifbuddy.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build + push backend
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.AR }}/backend:pr-${{ github.event.pull_request.number }}
+
+      - name: Build + push authd
+        id: authd
+        uses: docker/build-push-action@v6
+        with:
+          context: authd
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.AR }}/authd:pr-${{ github.event.pull_request.number }}
+
+      - name: Image refs
+        id: tags
+        run: |
+          echo "backend_image=${AR}/backend@${{ steps.backend.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          echo "authd_image=${AR}/authd@${{ steps.authd.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  dispatch:
+    needs: [detect, build-images]
+    # Run when detect found work; image build may be skipped (static-only or teardown).
+    if: >-
+      always()
+      && needs.detect.outputs.skip != 'true'
+      && (needs.build-images.result == 'success'
+          || needs.build-images.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
       - name: Fetch GitHub App creds from Infisical (OIDC)
-        if: steps.services.outputs.skip != 'true'
         uses: Infisical/secrets-action@v1.0.7
         with:
           method: "oidc"
@@ -72,7 +159,6 @@ jobs:
           export-type: "env"
 
       - name: Mint cross-repo App token for notifbuddy/iac
-        if: steps.services.outputs.skip != 'true'
         id: apptoken
         uses: actions/create-github-app-token@v1
         with:
@@ -82,17 +168,28 @@ jobs:
           repositories: iac
 
       - name: Dispatch iac preview
-        if: steps.services.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ steps.apptoken.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           APP_REF: ${{ github.event.pull_request.head.sha }}
           ACTION: ${{ github.event.action == 'closed' && 'teardown' || 'deploy' }}
-          SERVICES: ${{ steps.services.outputs.services }}
+          SERVICES: ${{ needs.detect.outputs.services }}
+          BACKEND_IMAGE: ${{ needs.build-images.outputs.backend_image }}
+          AUTHD_IMAGE: ${{ needs.build-images.outputs.authd_image }}
         run: |
-          gh workflow run preview.yml \
-            --repo notifbuddy/iac \
-            --field action="${ACTION}" \
-            --field app_ref="${APP_REF}" \
-            --field pr_number="${PR_NUMBER}" \
+          set -euo pipefail
+          args=(
+            gh workflow run preview.yml
+            --repo notifbuddy/iac
+            --field action="${ACTION}"
+            --field app_ref="${APP_REF}"
+            --field pr_number="${PR_NUMBER}"
             --field services="${SERVICES}"
+          )
+          if [ -n "${BACKEND_IMAGE:-}" ]; then
+            args+=(--field backend_image="${BACKEND_IMAGE}")
+          fi
+          if [ -n "${AUTHD_IMAGE:-}" ]; then
+            args+=(--field authd_image="${AUTHD_IMAGE}")
+          fi
+          "${args[@]}"
