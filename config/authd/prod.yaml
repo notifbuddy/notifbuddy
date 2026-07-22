@@ -17,14 +17,23 @@ database:
 
 cors:
   trusted_origins:
-    # Exact SPA origin only (credentialed CORS: no "*"). Preview CI replaces
-    # this with https://dashboard-pr-<n>.notifbuddy.com.
+    # Credentialed CORS: no "*". Wildcards let oAuthProxy hand preview
+    # OAuth back to auth-pr-* / dashboard-pr-* (Better Auth supports *).
     - "https://dashboard.notifbuddy.com"
+    - "https://dashboard-pr-*.notifbuddy.com"
+    - "https://auth-pr-*.notifbuddy.com"
 
 github:
   # Prod GitHub OAuth app; callback https://auth.notifbuddy.com/api/auth/callback/github
+  # (also the only callback used by preview via oAuthProxy).
   client_id: "${GITHUB_CLIENT_ID}"
   client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
+
+# Shared with preview authd — encrypts OAuth profile handoff. Same value in
+# Infisical /auth for prod and preview Cloud Run.
+oauth_proxy:
+  production_url: "https://auth.notifbuddy.com"
+  secret: "${OAUTH_PROXY_SECRET}" # SECRET
 
 email:
   resend_api_key: "${RESEND_API_KEY}" # SECRET

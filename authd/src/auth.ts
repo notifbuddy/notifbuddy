@@ -3,21 +3,43 @@
 // in dev, Neon in prod). The service is fully request-driven: no daemons, no
 // cron — safe to scale to zero (NOT-20).
 //
-// Sign-in methods come from config/featureflags/${NB_ENV}.yaml.
+// Sign-in is GitHub OAuth only (config/featureflags). Preview uses oAuthProxy
+// so GitHub only ever callbacks to production auth.notifbuddy.com.
 import { betterAuth } from 'better-auth';
-import { organization } from 'better-auth/plugins';
+import { oAuthProxy, organization } from 'better-auth/plugins';
 import pg from 'pg';
 import { config, featureFlags } from './config.ts';
 import { sendEmail } from './email.ts';
 
 const pool = new pg.Pool({ connectionString: config.database.url });
 
-const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
-if (featureFlags.github_oauth_login) {
-	socialProviders.github = {
-		clientId: config.github.client_id,
-		clientSecret: config.github.client_secret,
-	};
+if (!featureFlags.github_oauth_login) {
+	throw new Error('authd: github_oauth_login must be enabled');
+}
+
+const plugins: Parameters<typeof betterAuth>[0]['plugins'] = [
+	organization({
+		sendInvitationEmail: async ({ email, inviter, organization: org, invitation }) => {
+			const url = `${config.auth.base_url}/accept-invitation/${invitation.id}`;
+			await sendEmail({
+				to: email,
+				subject: `${inviter.user.name || inviter.user.email} invited you to ${org.name} on notifbuddy`,
+				text: `Join ${org.name} on notifbuddy: ${url}`,
+			});
+		},
+	}),
+];
+
+if (config.oauth_proxy?.secret) {
+	plugins!.push(
+		oAuthProxy({
+			productionURL: config.oauth_proxy.production_url,
+			secret: config.oauth_proxy.secret,
+			// Cloud Run / CF proxy: prefer the configured public base URL over
+			// request Host detection so the proxy round-trip finds auth-pr-N.
+			currentURL: config.auth.base_url,
+		}),
+	);
 }
 
 export const auth = betterAuth({
@@ -43,30 +65,14 @@ export const auth = betterAuth({
 		},
 	},
 
-	...(featureFlags.email_password_login
-		? {
-				emailAndPassword: {
-					enabled: true,
-					// Preview convenience: no verification email required to sign in.
-					requireEmailVerification: false,
-				},
-			}
-		: {}),
+	socialProviders: {
+		github: {
+			clientId: config.github.client_id,
+			clientSecret: config.github.client_secret,
+		},
+	},
 
-	...(Object.keys(socialProviders).length > 0 ? { socialProviders } : {}),
-
-	plugins: [
-		organization({
-			sendInvitationEmail: async ({ email, inviter, organization: org, invitation }) => {
-				const url = `${config.auth.base_url}/accept-invitation/${invitation.id}`;
-				await sendEmail({
-					to: email,
-					subject: `${inviter.user.name || inviter.user.email} invited you to ${org.name} on notifbuddy`,
-					text: `Join ${org.name} on notifbuddy: ${url}`,
-				});
-			},
-		}),
-	],
+	plugins,
 
 	// Scale-to-zero rule (NOT-20): rate-limit state must live in the database —
 	// the in-memory default dies with the instance and never shares across

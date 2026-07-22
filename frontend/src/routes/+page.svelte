@@ -7,8 +7,7 @@
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import { userStore, signInWithGithub, signInWithEmail, signUpWithEmail, switchOrg, type User } from '$lib/user.svelte';
-	import { featureEmailPassword, featureGithubOauth } from '$lib/runtime-config';
+	import { userStore, signInWithGithub, switchOrg, type User } from '$lib/user.svelte';
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
@@ -26,30 +25,7 @@
 	let creatingOrg = $state(false);
 	let createOrgError = $state<string | null>(null);
 
-	let emailMode = $state<'signin' | 'signup'>('signin');
-	let emailName = $state('');
-	let emailAddr = $state('');
-	let emailPassword = $state('');
-	let emailBusy = $state(false);
-	let emailError = $state<string | null>(null);
-
 	userStore.load();
-
-	async function submitEmail(e: SubmitEvent) {
-		e.preventDefault();
-		emailBusy = true;
-		emailError = null;
-		try {
-			if (emailMode === 'signup') {
-				await signUpWithEmail(emailName.trim() || emailAddr.trim(), emailAddr.trim(), emailPassword);
-			} else {
-				await signInWithEmail(emailAddr.trim(), emailPassword);
-			}
-		} catch (err) {
-			emailError = err instanceof Error ? err.message : 'Authentication failed';
-			emailBusy = false;
-		}
-	}
 
 	// This is the entry route: it owns the signed-out / mid-login UI. Once the
 	// session resolves to a user with an active org, send them into the app.
@@ -219,69 +195,10 @@
 					<Skeleton class="h-11 w-full rounded-md" />
 				{:else}
 					<div class="flex w-full flex-col gap-3">
-						{#if featureEmailPassword}
-							<form class="flex w-full flex-col gap-3" onsubmit={submitEmail}>
-								{#if emailMode === 'signup'}
-									<input
-										class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-										type="text"
-										name="name"
-										placeholder="Name"
-										autocomplete="name"
-										bind:value={emailName}
-										required
-									/>
-								{/if}
-								<input
-									class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-									type="email"
-									name="email"
-									placeholder="Email"
-									autocomplete="email"
-									bind:value={emailAddr}
-									required
-								/>
-								<input
-									class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-									type="password"
-									name="password"
-									placeholder="Password"
-									autocomplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
-									bind:value={emailPassword}
-									required
-									minlength="8"
-								/>
-								<Button type="submit" size="lg" class="font-medium" disabled={emailBusy}>
-									{#if emailBusy}
-										<LoaderIcon data-icon="inline-start" class="animate-spin" />
-										Please wait…
-									{:else if emailMode === 'signup'}
-										Create account
-									{:else}
-										Sign in
-									{/if}
-								</Button>
-								<button
-									type="button"
-									class="text-muted-foreground hover:text-foreground text-center text-sm underline-offset-4 hover:underline"
-									onclick={() => {
-										emailMode = emailMode === 'signin' ? 'signup' : 'signin';
-										emailError = null;
-									}}
-								>
-									{emailMode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
-								</button>
-								{#if emailError}
-									<p class="text-destructive text-center text-sm">{emailError}</p>
-								{/if}
-							</form>
-						{/if}
-						{#if featureGithubOauth}
-							<Button onclick={signInWithGithub} size="lg" class="font-medium" variant={featureEmailPassword ? 'outline' : 'default'}>
-								<GithubIcon data-icon="inline-start" size={18} />
-								Continue with GitHub
-							</Button>
-						{/if}
+						<Button onclick={signInWithGithub} size="lg" class="font-medium">
+							<GithubIcon data-icon="inline-start" size={18} />
+							Continue with GitHub
+						</Button>
 					</div>
 				{/if}
 			</div>

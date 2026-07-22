@@ -21,10 +21,14 @@ export interface Config {
 	cors: { trusted_origins: string[] };
 	github: { client_id: string; client_secret: string };
 	email: { resend_api_key: string; from: string };
+	// When set, Better Auth oAuthProxy routes non-prod OAuth through production.
+	oauth_proxy?: {
+		production_url: string;
+		secret: string;
+	};
 }
 
 export interface FeatureFlags {
-	email_password_login: boolean;
 	github_oauth_login: boolean;
 }
 
@@ -68,13 +72,14 @@ if (!config.database?.url) throw new Error('authd: database.url is required');
 if (!config.auth?.base_url) throw new Error('authd: auth.base_url is required');
 if (!config.auth?.secret) throw new Error('authd: auth.secret is required');
 
-const emailOn = !!featureFlags.email_password_login;
-const githubOn = !!featureFlags.github_oauth_login;
-if (!emailOn && !githubOn) {
-	throw new Error('authd: at least one of email_password_login / github_oauth_login must be true');
+if (!featureFlags.github_oauth_login) {
+	throw new Error('authd: github_oauth_login must be true (GitHub is the only sign-in method)');
 }
-if (githubOn && (!config.github?.client_id || !config.github?.client_secret)) {
-	throw new Error('authd: github.client_id and github.client_secret are required when github_oauth_login is true');
+if (!config.github?.client_id || !config.github?.client_secret) {
+	throw new Error('authd: github.client_id and github.client_secret are required');
+}
+if (config.oauth_proxy?.secret && !config.oauth_proxy?.production_url) {
+	throw new Error('authd: oauth_proxy.production_url is required when oauth_proxy.secret is set');
 }
 if (config.email?.resend_api_key && !config.email?.from) {
 	throw new Error('authd: email.from is required when email.resend_api_key is set');

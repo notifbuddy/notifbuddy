@@ -54,27 +54,6 @@ export async function signInWithGithub() {
 	});
 }
 
-export async function signInWithEmail(email: string, password: string) {
-	const { error } = await authClient.signIn.email({
-		email,
-		password,
-		callbackURL: `${window.location.origin}/`
-	});
-	if (error) throw new Error(error.message || 'Sign-in failed');
-	window.location.href = '/';
-}
-
-export async function signUpWithEmail(name: string, email: string, password: string) {
-	const { error } = await authClient.signUp.email({
-		name,
-		email,
-		password,
-		callbackURL: `${window.location.origin}/`
-	});
-	if (error) throw new Error(error.message || 'Sign-up failed');
-	window.location.href = '/';
-}
-
 export async function signOut() {
 	await authClient.signOut();
 	window.location.href = '/';

@@ -12,7 +12,7 @@ Fully request-driven — no daemons, no cron — so it scales to zero.
 ```sh
 psql -d postgres -c "CREATE DATABASE authd;"
 cp .env.example .env   # fill BETTER_AUTH_SECRET (openssl rand -base64 32)
-                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app; local/prod)
+                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app)
 npm install
 npm run migrate        # applies the Better Auth schema
 node --env-file=.env src/server.ts
@@ -27,18 +27,18 @@ browser's cookie.
 Non-sensitive settings live under the repo-root config tree:
 
 - `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`)
-- `config/featureflags/${NB_ENV}.yaml` — which sign-in methods are enabled
+- `config/featureflags/${NB_ENV}.yaml` — `github_oauth_login` (must be true)
 
 Override paths with `CONFIG_FILE` / `FEATUREFLAGS_FILE`. Sensitive values use
 `${VAR}` — resolved at startup; referenced-but-unset is a hard error. `.env`
 holds only those secrets (see `.env.example`).
 
-Sign-in methods (from feature flags):
+**Sign-in:** GitHub OAuth only (`github.client_id` / `client_secret` required).
 
-- **local / prod:** `github_oauth_login: true` — GitHub OAuth required
-  (`github.client_id` / `client_secret`)
-- **preview:** `email_password_login: true` — email/password only (no GitHub
-  secrets needed)
+**Preview:** Better Auth `oAuthProxy` routes GitHub through production so the
+only registered callback is `https://auth.notifbuddy.com/api/auth/callback/github`.
+Prod + preview share `OAUTH_PROXY_SECRET` (`oauth_proxy` in the YAML). Local
+uses a direct localhost callback (no proxy).
 
 Resend email is optional: an empty `email.resend_api_key` sends invitation mail
 to the console (dev sink).

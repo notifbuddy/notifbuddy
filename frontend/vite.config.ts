@@ -52,11 +52,6 @@ export default defineConfig(({ mode }) => {
 		process.env.PUBLIC_API_BASE_URL = String(dash.api_base_url ?? '');
 		process.env.PUBLIC_AUTH_URL = String(dash.auth_url ?? '');
 	}
-	if (unset(process.env.PUBLIC_FEATURE_EMAIL_PASSWORD, fileEnv.PUBLIC_FEATURE_EMAIL_PASSWORD)) {
-		const flags = loadFlatYaml(resolveConfigFile('featureflags', nbEnv));
-		process.env.PUBLIC_FEATURE_EMAIL_PASSWORD = flags.email_password_login ? 'true' : 'false';
-		process.env.PUBLIC_FEATURE_GITHUB_OAUTH = flags.github_oauth_login ? 'true' : 'false';
-	}
 
 	return {
 		plugins: [

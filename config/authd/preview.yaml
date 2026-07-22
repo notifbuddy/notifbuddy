@@ -1,23 +1,34 @@
 # Preview authd configuration. Hosts/cookie prefix rewritten by
-# scripts/preview-bake-configs.sh. Email/password sign-in is enabled via
-# config/featureflags/preview.yaml (GitHub OAuth off).
+# scripts/preview-bake-configs.sh. GitHub OAuth is proxied through
+# production via Better Auth oAuthProxy (see oauth_proxy below).
 
 server:
   port: 8787
+
 auth:
   base_url: "https://auth-pr-0.notifbuddy.com"
   secret: "${BETTER_AUTH_SECRET}"
   cookie_domain: ".notifbuddy.com"
   cookie_prefix: "better-auth-pr-0"
+
 database:
   url: "${DATABASE_URL}"
+
 cors:
   trusted_origins:
-    - https://dashboard-pr-0.notifbuddy.com
-# Unused when github_oauth_login is false; kept optional for flag flips.
+    - "https://dashboard-pr-0.notifbuddy.com"
+
+# Same GitHub OAuth app as prod — callback is always auth.notifbuddy.com
+# (oAuthProxy); client id/secret must match production.
 github:
-  client_id: ""
-  client_secret: ""
+  client_id: "${GITHUB_CLIENT_ID}"
+  client_secret: "${GITHUB_CLIENT_SECRET}"
+
+# Shared with prod: encrypts the profile handoff preview ↔ production.
+oauth_proxy:
+  production_url: "https://auth.notifbuddy.com"
+  secret: "${OAUTH_PROXY_SECRET}"
+
 email:
   resend_api_key: ""
   from: ""

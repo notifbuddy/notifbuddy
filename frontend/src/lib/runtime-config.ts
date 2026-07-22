@@ -15,18 +15,11 @@
 //
 // An origin that resolves to neither is a hard error in the browser rather
 // than a pile of requests to a relative path.
-import {
-	PUBLIC_API_BASE_URL,
-	PUBLIC_AUTH_URL,
-	PUBLIC_FEATURE_EMAIL_PASSWORD,
-	PUBLIC_FEATURE_GITHUB_OAUTH
-} from '$env/static/public';
+import { PUBLIC_API_BASE_URL, PUBLIC_AUTH_URL } from '$env/static/public';
 
 export type RuntimeConfig = {
 	apiBaseUrl?: string;
 	authUrl?: string;
-	featureEmailPassword?: boolean;
-	featureGithubOauth?: boolean;
 };
 
 declare global {
@@ -51,30 +44,5 @@ function resolve(key: 'apiBaseUrl' | 'authUrl', buildTime: string): string {
 	return url;
 }
 
-function resolveFlag(
-	runtimeKey: 'featureEmailPassword' | 'featureGithubOauth',
-	buildTime: string | undefined,
-	defaultOn: boolean
-): boolean {
-	const fromWindow = runtime[runtimeKey];
-	if (typeof fromWindow === 'boolean') return fromWindow;
-	const raw = (buildTime ?? '').trim().toLowerCase();
-	if (raw === 'true' || raw === '1') return true;
-	if (raw === 'false' || raw === '0') return false;
-	return defaultOn;
-}
-
 export const apiBaseUrl = resolve('apiBaseUrl', PUBLIC_API_BASE_URL);
 export const authUrl = resolve('authUrl', PUBLIC_AUTH_URL);
-
-// Defaults match config/featureflags/local.yaml (GitHub on, email/password off).
-export const featureEmailPassword = resolveFlag(
-	'featureEmailPassword',
-	PUBLIC_FEATURE_EMAIL_PASSWORD,
-	false
-);
-export const featureGithubOauth = resolveFlag(
-	'featureGithubOauth',
-	PUBLIC_FEATURE_GITHUB_OAUTH,
-	true
-);
