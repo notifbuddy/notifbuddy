@@ -139,7 +139,7 @@
 					{:else if needsCreateOrg}
 						Name the organization your team will share — you can rename it later.
 					{:else}
-						Route your Linear notifications into one calm Slack feed.
+						Route your Linear notifications into one calm Slack feed. (fullstack preview smoke)
 					{/if}
 				</p>
 			</div>
