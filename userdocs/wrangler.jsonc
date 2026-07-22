@@ -7,6 +7,7 @@
 	// No account_id here — wrangler doesn't interpolate ${VAR} in config, so
 	// the deploy workflow passes CLOUDFLARE_ACCOUNT_ID via the env instead
 	// (same convention as landing/wrangler.jsonc).
+	// docs preview smoke (NOT-43)
 	"name": "notifbuddy-docs",
 	"compatibility_date": "2026-07-01",
 	"assets": {
