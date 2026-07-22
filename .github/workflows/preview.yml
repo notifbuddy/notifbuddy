@@ -2,7 +2,7 @@ name: Preview trigger
 
 # Single entrypoint for PR previews. Detects which static apps changed in the
 # PR and dispatches one iac preview.yml run with that service list.
-# Deploys live under preview.notifbuddy.com (see iac config.yaml).
+# Deploys to {service}-pr-<n>.notifbuddy.com (iac preview.yml; Universal SSL).
 #
 # Supported services (Phase 1+): landing, docs, dashboard
 # (api/auth come later with the full-stack preview work.)
