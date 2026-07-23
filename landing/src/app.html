@@ -5,7 +5,11 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- Static theme-color for first paint / older iOS. iOS 26 Safari ignores
+		     these and samples body / sticky header backgrounds instead. -->
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121113" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		%sveltekit.head%
 	</head>

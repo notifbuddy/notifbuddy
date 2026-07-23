@@ -63,9 +63,9 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
-	/* html + body both carry bg-background so overscroll and the area behind
-	   the iOS Dynamic Island match the page (theme-color alone isn't enough
-	   if html is transparent). */
+	/* iOS Safari (esp. 26+) tints the Dynamic Island / toolbars from body
+	   background-color, or from a sticky/fixed top bar. theme-color is ignored
+	   there — keep body solid and paint chrome-top full-bleed. */
 	html {
 		@apply bg-background font-sans;
 		scrollbar-gutter: stable;
@@ -76,5 +76,33 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+		background-color: var(--background);
+	}
+
+	/* Full-bleed sticky strip Safari samples for top chrome. Inner row stays
+	   max-width constrained; padding-top clears the island under viewport-fit=cover. */
+	.chrome-top {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		width: 100%;
+		background-color: var(--background);
+		padding-top: env(safe-area-inset-top, 0px);
+	}
+	.chrome-top-inner {
+		margin-inline: auto;
+		display: flex;
+		width: 100%;
+		max-width: 72rem; /* max-w-6xl */
+		align-items: center;
+		padding: 1.25rem 1rem;
+	}
+	@media (min-width: 640px) {
+		.chrome-top-inner {
+			padding-inline: 1.5rem;
+		}
+	}
+	.chrome-bottom {
+		padding-bottom: env(safe-area-inset-bottom, 0px);
 	}
 }

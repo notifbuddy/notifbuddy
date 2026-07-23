@@ -21,8 +21,10 @@
 </svelte:head>
 
 <div class="flex min-h-svh flex-col">
-	<header class="mx-auto flex w-full max-w-6xl items-center px-4 py-5 sm:px-6">
-		<a href="/" aria-label="notifbuddy home"><Logo size={30} /></a>
+	<header class="chrome-top">
+		<div class="chrome-top-inner">
+			<a href="/" aria-label="notifbuddy home"><Logo size={30} /></a>
+		</div>
 	</header>
 
 	<main class="mx-auto w-full max-w-xl flex-1 px-4 py-10 sm:px-6">
@@ -54,7 +56,7 @@
 		</div>
 	</main>
 
-	<footer class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+	<footer class="chrome-bottom mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
