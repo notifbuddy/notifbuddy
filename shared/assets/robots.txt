@@ -3,3 +3,4 @@ User-agent: *
 Disallow:
 
 Sitemap: https://notifbuddy.com/sitemap.xml
+Sitemap: https://docs.notifbuddy.com/sitemap.xml
