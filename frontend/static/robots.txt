@@ -1,1 +1,3 @@
-../../shared/assets/robots.txt
+# Dashboard is an authenticated app — do not index.
+User-agent: *
+Disallow: /
