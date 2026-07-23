@@ -33,6 +33,9 @@ func Setup(ctx context.Context, cfg config.OTelConfig) (func(context.Context) er
 		// validate() should have caught this; belt-and-suspenders.
 		return noop, fmt.Errorf("otel: enabled but endpoint/token missing")
 	}
+	if !strings.Contains(endpoint, "://") {
+		endpoint = "https://" + endpoint
+	}
 
 	exporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithEndpointURL(endpoint+"/v1/traces"),
@@ -51,10 +54,11 @@ func Setup(ctx context.Context, cfg config.OTelConfig) (func(context.Context) er
 	if serviceName == "" {
 		serviceName = "notifbuddy-backend"
 	}
+	// Merge custom attrs as schemaless so we don't conflict with
+	// resource.Default()'s SDK schema URL (semconv package versions drift).
 	res, err := resource.Merge(
 		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
+		resource.NewSchemaless(
 			semconv.ServiceName(serviceName),
 		),
 	)
