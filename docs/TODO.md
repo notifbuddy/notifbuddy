@@ -61,7 +61,9 @@ Phase 2 after launch
 - change description for github integration to something else
 - sync user profile image when login through github happens
 - Update onboarding screen to accept organization name, generate organization image like github does.
-- Connect posthog to see user activity capture.
+- ~~Connect posthog to see user activity capture.~~ Cloud dashboard session
+  replay + backend OTLP traces via Better Stack (docs/better-stack.md). PostHog
+  later only if we need funnels/cohorts/feature flags.
 - Webhook events need from notifbuddy need to be supported, users can add custom logic if required.
 - Access control logs need to be done.
 - Docs site (Astro Starlight) — WIP on branch `docs-starlight`, in `website/`.

@@ -1,5 +1,6 @@
 import { api, apiBaseUrl } from '$lib/api/client';
 import { authClient } from '$lib/auth-client';
+import { clearBetterStackUser } from '$lib/betterstack';
 import type { components } from '$lib/api/schema';
 
 export type User = components['schemas']['UserResponse'];
@@ -55,6 +56,7 @@ export async function signInWithGithub() {
 }
 
 export async function signOut() {
+	clearBetterStackUser();
 	await authClient.signOut();
 	window.location.href = '/';
 }

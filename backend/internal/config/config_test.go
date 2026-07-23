@@ -99,6 +99,20 @@ func TestValidate_WebhookSecretsRequiredWhenConfigured(t *testing.T) {
 			c.Logging.AxiomEnabled = true
 			c.Logging.AxiomToken = "xapt-test"
 		}, "logging.axiom_enabled is true but"},
+		{"otel disabled ignores endpoint/token", func(c *Config) {}, ""},
+		{"otel enabled with endpoint and token", func(c *Config) {
+			c.OTel.Enabled = true
+			c.OTel.Endpoint = "https://in.example.betterstackdata.com"
+			c.OTel.Token = "bst_test"
+		}, ""},
+		{"otel enabled without endpoint fails", func(c *Config) {
+			c.OTel.Enabled = true
+			c.OTel.Token = "bst_test"
+		}, "otel.enabled is true but"},
+		{"otel enabled without token fails", func(c *Config) {
+			c.OTel.Enabled = true
+			c.OTel.Endpoint = "https://in.example.betterstackdata.com"
+		}, "otel.enabled is true but"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := validCfg()

@@ -22,6 +22,7 @@ import (
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Logging    LoggingConfig    `yaml:"logging"`
+	OTel       OTelConfig       `yaml:"otel"`
 	CORS       CORSConfig       `yaml:"cors"`
 	Auth       AuthConfig       `yaml:"auth"`
 	App        AppConfig        `yaml:"app"`
@@ -33,6 +34,24 @@ type Config struct {
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 	Stripe     StripeConfig     `yaml:"stripe"`
 	Billing    BillingConfig    `yaml:"billing"`
+}
+
+// OTelConfig controls optional OpenTelemetry trace export (Better Stack OTLP).
+// Self-hosted / local leave Enabled false; cloud prod turns it on.
+type OTelConfig struct {
+	// Enabled is the single switch. When true, Endpoint and Token are REQUIRED
+	// (validate fails otherwise) — same pattern as logging.axiom_enabled.
+	Enabled bool `yaml:"enabled"`
+	// Endpoint is the OTLP HTTP ingest base URL without a signal path, e.g.
+	// https://in.logs.betterstack.com. The exporter appends /v1/traces.
+	// SECRET-ish host is still env-ref'd per source. Empty when disabled.
+	Endpoint string `yaml:"endpoint"`
+	// Token is the Better Stack source token sent as Authorization: Bearer.
+	// SECRET — set to an env ref.
+	Token string `yaml:"token"`
+	// ServiceName is the resource attribute service.name (defaults to
+	// "notifbuddy-backend" when empty).
+	ServiceName string `yaml:"service_name"`
 }
 
 // BillingConfig controls plan enforcement.
@@ -375,6 +394,9 @@ func (c *Config) validate() error {
 	}
 	if c.Logging.AxiomEnabled && (c.Logging.AxiomToken == "" || c.Logging.AxiomDataset == "") {
 		return fmt.Errorf("logging.axiom_enabled is true but logging.axiom_token/logging.axiom_dataset are not both set (e.g. $AXIOM_TOKEN / $AXIOM_DATASET); set them or set logging.axiom_enabled: false")
+	}
+	if c.OTel.Enabled && (c.OTel.Endpoint == "" || c.OTel.Token == "") {
+		return fmt.Errorf("otel.enabled is true but otel.endpoint/otel.token are not both set (e.g. $BETTER_STACK_OTLP_ENDPOINT / $BETTER_STACK_SOURCE_TOKEN); set them or set otel.enabled: false")
 	}
 	switch c.PubSub.Provider {
 	case "", "postgres":

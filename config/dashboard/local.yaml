@@ -1,3 +1,5 @@
 # Dashboard SPA origins (local vite).
+# better_stack_token empty = no session replay locally.
 api_base_url: "http://localhost:8080"
 auth_url: "http://localhost:8787"
+better_stack_token: ""

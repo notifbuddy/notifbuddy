@@ -33,7 +33,8 @@ yq -i "
   .pubsub.gcp.push_audience = \"${api}/internal/pubsub/push\" |
   .slack.callback_url = \"${api}/integrations/slack/callback\" |
   .linear.callback_url = \"${api}/integrations/linear/callback\" |
-  .logging.axiom_enabled = false
+  .logging.axiom_enabled = false |
+  .otel.enabled = false
 " "$backend"
 
 yq -i "
@@ -45,7 +46,8 @@ yq -i "
 
 yq -i "
   .api_base_url = \"${api}\" |
-  .auth_url = \"${auth}\"
+  .auth_url = \"${auth}\" |
+  .better_stack_token = \"\"
 " "$dashboard"
 
 echo "preview-bake: api=${api} auth=${auth} dash=${dash} cookie_prefix=${prefix}"

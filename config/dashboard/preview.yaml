@@ -1,3 +1,5 @@
 # Dashboard SPA origins — rewritten by scripts/preview-bake-configs.sh per PR.
+# Preview keeps Better Stack off (empty token) unless CI sets PUBLIC_BETTER_STACK_TOKEN.
 api_base_url: "https://api-pr-0.notifbuddy.com"
 auth_url: "https://auth-pr-0.notifbuddy.com"
+better_stack_token: ""

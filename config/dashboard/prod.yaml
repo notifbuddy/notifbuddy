@@ -1,3 +1,6 @@
 # Dashboard SPA origins (Cloudflare prod build).
+# better_stack_token: leave empty in git — CI sets PUBLIC_BETTER_STACK_TOKEN from
+# Infisical /frontend (see docs/better-stack.md). Self-hosted image builds with "".
 api_base_url: "https://api.notifbuddy.com"
 auth_url: "https://auth.notifbuddy.com"
+better_stack_token: ""

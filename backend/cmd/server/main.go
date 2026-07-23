@@ -23,6 +23,7 @@ import (
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/intent"
 	"xolo/backend/internal/logging"
+	"xolo/backend/internal/otelsetup"
 	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
@@ -54,6 +55,21 @@ func main() {
 	// shutdown of both the HTTP server and the pub/sub router.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// OpenTelemetry: optional OTLP/HTTP export to Better Stack. ogen handlers
+	// already use the global TracerProvider; until this runs they are no-ops.
+	// closeOTel flushes the batcher on shutdown.
+	closeOTel, err := otelsetup.Setup(ctx, cfg.OTel)
+	if err != nil {
+		fatal("otel", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := closeOTel(shutdownCtx); err != nil {
+			slog.Error("otel shutdown", "error", err)
+		}
+	}()
 
 	// Persistence: connect to Postgres (if configured) and run migrations.
 	// Integrations require it; if no DATABASE_URL is set we run without a store

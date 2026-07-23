@@ -4,11 +4,20 @@
 	import { ModeWatcher } from 'mode-watcher';
 	import AppShell from '$lib/components/app/app-shell.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { userStore } from '$lib/user.svelte';
+	import { displayName, userStore } from '$lib/user.svelte';
+	import {
+		betterStackEnabled,
+		clearBetterStackUser,
+		identifyBetterStackUser,
+		initBetterStack
+	} from '$lib/betterstack';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 
 	let { children } = $props();
+
+	// Cloud builds bake PUBLIC_BETTER_STACK_TOKEN; self-hosted / local leave it empty.
+	initBetterStack(import.meta.env.DEV ? 'development' : 'production');
 
 	// Load the session once for the whole app. `user` is a tri-state:
 	//   undefined → still checking (don't render the page yet)
@@ -21,6 +30,23 @@
 	// frame before the shell mounts, causing a width flash on reload.
 	userStore.load();
 	const user = $derived(userStore.user);
+
+	// Tie Better Stack sessions to the signed-in user when the token is present.
+	$effect(() => {
+		if (!betterStackEnabled) return;
+		if (user === undefined) return;
+		if (!user) {
+			clearBetterStackUser();
+			return;
+		}
+		const org = user.organizations?.find((o) => o.id === user.organizationId);
+		identifyBetterStackUser({
+			id: user.id,
+			email: user.email,
+			username: displayName(user),
+			...(org ? { group_id: org.id, group_name: org.name } : {})
+		});
+	});
 
 	// Org-scoped routes need an active organization: bounce org-less sessions
 	// that deep-link anywhere else back to the entry route, which shows the
