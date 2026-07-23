@@ -203,7 +203,7 @@
 	</main>
 
 	<footer
-		class="chrome-bottom mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+		class="chrome-bottom mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 pt-6 sm:flex-row sm:items-center sm:justify-between sm:px-6"
 	>
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal

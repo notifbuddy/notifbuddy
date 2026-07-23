@@ -102,7 +102,11 @@
 			padding-inline: 1.5rem;
 		}
 	}
-	.chrome-bottom {
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-	}
+}
+
+/* Outside @layer so these beat Tailwind utilities (e.g. py-6) on the same node.
+   Safari's floating tab bar is NOT included in safe-area-inset-bottom — only the
+   home indicator is — so add extra clearance or the footer is sliced in half. */
+.chrome-bottom {
+	padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px) + 5rem);
 }
