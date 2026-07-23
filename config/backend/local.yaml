@@ -17,7 +17,7 @@ logging:
   format: "text" # human-readable for dev; "json" for anything log-shipped
   level: "info"
 
-# Cloud-only Better Stack traces — leave off locally (see docs/better-stack.md).
+# Cloud-only Better Stack traces — leave off locally.
 otel:
   enabled: false
 

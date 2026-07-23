@@ -2,7 +2,7 @@
 //
 // Gated on PUBLIC_BETTER_STACK_TOKEN at build time: Cloudflare prod/preview
 // builds set the token; the self-hosted nginx image builds with an empty
-// string so the tag never loads. See docs/better-stack.md.
+// string so the tag never loads.
 import { PUBLIC_BETTER_STACK_TOKEN } from '$env/static/public';
 
 declare global {

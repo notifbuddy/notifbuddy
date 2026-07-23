@@ -21,7 +21,7 @@ logging:
   axiom_dataset: "backend" # not a secret — the Axiom dataset for this service
 
 # Better Stack OTLP traces (session replay is the dashboard JS tag — separate).
-# See docs/better-stack.md. Keep Axiom for logs.
+# Keep Axiom for logs.
 otel:
   enabled: true
   endpoint: "${BETTER_STACK_OTLP_ENDPOINT}" # SECRET-ish — ingest host https://… (Infisical /)
