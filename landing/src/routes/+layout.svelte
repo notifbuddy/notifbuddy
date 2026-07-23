@@ -18,7 +18,10 @@
 </svelte:head>
 
 <!-- Manages the `dark` class on <html> + persists the visitor's choice.
-     Defaults to the system preference (no defaultMode override). -->
-<ModeWatcher />
+     Defaults to the system preference (no defaultMode override).
+     themeColors match --background (layout.css) so iOS Safari paints the
+     Dynamic Island / status-bar chrome the same color as the page — without
+     this, Safari falls back to solid black/white and leaves a hard seam. -->
+<ModeWatcher themeColors={{ light: '#ffffff', dark: '#121113' }} />
 
 {@render children()}

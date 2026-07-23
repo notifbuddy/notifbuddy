@@ -10,9 +10,8 @@
 
 /* Theme tokens: the subset of the app's theme (QraftHive) that the marketing
    page uses, so the landing site stays pixel-identical to the product without
-   pulling in the full shadcn stack. The site is always dark (html.dark is
-   static in app.html); the light block is kept so the values stay in sync if
-   that ever changes. */
+   pulling in the full shadcn stack. ModeWatcher toggles .dark on <html>; keep
+   light + dark blocks in sync with the product theme. */
 :root {
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.2101 0.0318 264.6645);
@@ -64,14 +63,18 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
-	body {
-		@apply bg-background text-foreground;
-	}
+	/* html + body both carry bg-background so overscroll and the area behind
+	   the iOS Dynamic Island match the page (theme-color alone isn't enough
+	   if html is transparent). */
 	html {
-		@apply font-sans;
+		@apply bg-background font-sans;
 		scrollbar-gutter: stable;
+		color-scheme: light;
 	}
 	html.dark {
 		color-scheme: dark;
+	}
+	body {
+		@apply bg-background text-foreground;
 	}
 }
