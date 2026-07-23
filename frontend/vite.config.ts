@@ -51,6 +51,17 @@ export default defineConfig(({ mode }) => {
 		const dash = loadFlatYaml(resolveConfigFile('dashboard', nbEnv));
 		process.env.PUBLIC_API_BASE_URL = String(dash.api_base_url ?? '');
 		process.env.PUBLIC_AUTH_URL = String(dash.auth_url ?? '');
+		if (unset(process.env.PUBLIC_BETTER_STACK_TOKEN, fileEnv.PUBLIC_BETTER_STACK_TOKEN)) {
+			process.env.PUBLIC_BETTER_STACK_TOKEN = String(dash.better_stack_token ?? '');
+		}
+	} else if (unset(process.env.PUBLIC_BETTER_STACK_TOKEN, fileEnv.PUBLIC_BETTER_STACK_TOKEN)) {
+		// CI often sets PUBLIC_API_* explicitly; still allow optional yaml token.
+		try {
+			const dash = loadFlatYaml(resolveConfigFile('dashboard', nbEnv));
+			process.env.PUBLIC_BETTER_STACK_TOKEN = String(dash.better_stack_token ?? '');
+		} catch {
+			process.env.PUBLIC_BETTER_STACK_TOKEN = '';
+		}
 	}
 
 	return {

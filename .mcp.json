@@ -3,6 +3,10 @@
 		"axiom": {
 			"type": "http",
 			"url": "https://mcp.axiom.co/mcp"
+		},
+		"betterstack": {
+			"type": "http",
+			"url": "https://mcp.betterstack.com"
 		}
 	}
 }

@@ -32,6 +32,8 @@ COPY frontend ./
 ENV NB_ENV=prod
 ENV PUBLIC_API_BASE_URL=""
 ENV PUBLIC_AUTH_URL=""
+# Empty: self-hosted never ships the Better Stack JS tag (cloud builds set this).
+ENV PUBLIC_BETTER_STACK_TOKEN=""
 RUN npm run build
 
 # --- runtime ---------------------------------------------------------------

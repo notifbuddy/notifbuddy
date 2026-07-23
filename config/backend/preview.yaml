@@ -11,6 +11,11 @@ logging:
   axiom_enabled: false
   axiom_token: ""
   axiom_dataset: "backend"
+
+# Preview stays dark for Better Stack (same as Axiom). Prod owns cloud telemetry.
+otel:
+  enabled: false
+
 cors:
   allow_origin: "https://dashboard-pr-0.notifbuddy.com"
 auth:

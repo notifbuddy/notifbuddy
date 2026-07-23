@@ -22,6 +22,10 @@ data:
       # should be pointed at. Everything goes to stdout.
       axiom_enabled: false
 
+    # Better Stack OTLP is cloud-only.
+    otel:
+      enabled: false
+
     cors:
       allow_origin: "https://{{ $dashboard }}"
 
