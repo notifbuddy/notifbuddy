@@ -1,0 +1,51 @@
+name: Dashboard deploy trigger
+
+# Dashboard SPA deploys from notifbuddy/iac as a Cloudflare Worker
+# (dashboard-deploy.yml + frontend/wrangler.jsonc) — same arch as landing/docs.
+# Not Docker/k3s. This workflow only dispatches on frontend/ changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'shared/**'
+      - '.github/workflows/dashboard-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency: dashboard-deploy-trigger
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /ci
+          export-type: env
+
+      - name: Mint cross-repo App token for notifbuddy/iac
+        id: apptoken
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
+          owner: notifbuddy
+          repositories: iac
+
+      - name: Dispatch iac dashboard-deploy with this ref
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
+        run: |
+          gh workflow run dashboard-deploy.yml \
+            --repo notifbuddy/iac \
+            --field app_ref="${GITHUB_SHA}"
