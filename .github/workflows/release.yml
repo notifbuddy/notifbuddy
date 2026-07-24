@@ -1,24 +1,12 @@
-name: Release → GHCR (self-host images)
+name: Release → GHCR + iac deploy
 
-# Publishes the public, self-hostable images that the Helm chart deploys.
+# Publishes self-host images + Helm chart to GHCR, then dispatches
+# notifbuddy/iac helm-deploy.yml with chart_version (iac pins config.yaml and
+# runs helm). This repo BUILDS; iac DEPLOYS — same split as docs/landing.
 #
-# Deliberately tag-only: pushes to main keep going to Artifact Registry via
-# publish-images.yml and deploy straight to our prod, but self-hosters should
-# only ever move when we cut a version. Nothing here touches prod.
-#
-# Images land at ghcr.io/notifbuddy/{backend,authd,dashboard} as amd64 + arm64
-# manifest lists, tagged with the full version, the major.minor series, and
-# latest.
-#
-# Each architecture builds on its own native runner (arm64 on GitHub's
-# ubuntu-24.04-arm, free for public repos) rather than under QEMU, then a
-# second job stitches the per-arch digests into one manifest list. Emulated
-# arm64 builds are slow enough to dominate the release, and authd's npm
-# install is exactly the kind of work QEMU is worst at.
-#
-# NOTE: a GHCR package is private on first publish. Each of the three has to be
-# flipped to public once, by hand, in the org's package settings — otherwise
-# `helm install` fails on an image pull for everyone.
+# Images: ghcr.io/notifbuddy/{backend,authd,dashboard}
+# Chart:  oci://ghcr.io/notifbuddy/charts/notifbuddy
+# Main continuous deploys: publish-images.yml → iac helm-deploy (image_tag).
 
 on:
   push:
@@ -27,6 +15,7 @@ on:
 permissions:
   contents: read
   packages: write # push to GHCR
+  id-token: write # Infisical OIDC (dispatch helm-deploy)
 
 concurrency: release-${{ github.ref }}
 
@@ -275,3 +264,32 @@ jobs:
           oras push "${{ env.REGISTRY }}/charts/notifbuddy:artifacthub.io" \
             --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
             charts/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+
+      # Prod on OVH k3s: dispatch iac helm-deploy (pins chart_version + helm).
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /ci
+          export-type: env
+
+      - name: Mint cross-repo App token for notifbuddy/iac
+        id: apptoken
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
+          owner: notifbuddy
+          repositories: iac
+
+      - name: Dispatch iac helm-deploy
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+        run: |
+          gh workflow run helm-deploy.yml \
+            --repo notifbuddy/iac \
+            --field chart_version="${CHART_VERSION}"
