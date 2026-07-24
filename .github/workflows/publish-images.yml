@@ -1,8 +1,8 @@
 name: Publish images → iac deploy
 
-# Builds backend + authd + dashboard, pushes to GHCR, then dispatches
-# notifbuddy/iac helm-deploy.yml with image_tag=src-<sha>. This repo BUILDS;
-# iac DEPLOYS — same split as docs/landing.
+# Builds backend + authd, pushes to GHCR, then dispatches notifbuddy/iac
+# helm-deploy.yml with image_tag=src-<sha>. Dashboard stays on Cloudflare
+# (dashboard-deploy.yml) — same Worker arch as landing/docs.
 #
 # Prereqs:
 #   - Infisical notifbuddy-app-ci (OIDC): /ci (GitHub App for cross-repo dispatch)
@@ -15,7 +15,6 @@ on:
     paths:
       - 'backend/**'
       - 'authd/**'
-      - 'frontend/**'
       - 'shared/**'
       - 'config/**'
       - '.github/workflows/publish-images.yml'
@@ -45,7 +44,6 @@ jobs:
             any:
               - 'backend/**'
               - 'authd/**'
-              - 'frontend/**'
               - 'shared/**'
               - 'config/**'
               - '.github/workflows/publish-images.yml'
@@ -64,9 +62,6 @@ jobs:
           - image: authd
             context: .
             dockerfile: authd/Dockerfile
-          - image: dashboard
-            context: .
-            dockerfile: frontend/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -95,9 +90,6 @@ jobs:
       (needs.build.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub OIDC —
-      # no App id/key stored as GitHub Actions secrets. Cross-repo dispatch needs
-      # Actions:write on iac — GITHUB_TOKEN cannot do that.
       - name: Fetch GitHub App creds from Infisical (OIDC)
         uses: Infisical/secrets-action@v1.0.7
         with:

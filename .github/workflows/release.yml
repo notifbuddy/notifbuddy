@@ -4,9 +4,10 @@ name: Release → GHCR + iac deploy
 # notifbuddy/iac helm-deploy.yml with chart_version (iac pins config.yaml and
 # runs helm). This repo BUILDS; iac DEPLOYS — same split as docs/landing.
 #
-# Images: ghcr.io/notifbuddy/{backend,authd,dashboard}
+# Images: ghcr.io/notifbuddy/{backend,authd,dashboard} (dashboard for self-host
+# chart; prod SPA stays on Cloudflare via dashboard-deploy.yml)
 # Chart:  oci://ghcr.io/notifbuddy/charts/notifbuddy
-# Main continuous deploys: publish-images.yml → iac helm-deploy (image_tag).
+# Main continuous deploys: publish-images.yml → iac helm-deploy (api/auth only).
 
 on:
   push:
