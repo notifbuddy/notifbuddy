@@ -1,22 +1,13 @@
-name: Publish images → iac deploy
+name: Publish images → helm deploy
 
-# Builds the backend + authd images, pushes them to Artifact Registry, then
-# opens AND auto-merges a bot PR on notifbuddy/iac that bumps deploy.auto.tfvars
-# to the new digests + the source commit (app_revision). Each image only
-# rebuilds when its sources changed; the bot PR keeps the other digest from the
-# tfvars already on iac main. iac runs terraform apply on every push to its
-# main, so merging to main HERE deploys to prod unattended. iac fetches the
-# eventing manifest from THIS repo at that commit — this repo stays the single
-# source of truth. This repo BUILDS; iac DEPLOYS.
+# Builds backend + authd + dashboard, pushes to GHCR, then helm-upgrades onto
+# OVH k3s (inline). Replaces Artifact Registry + Cloud Run and the separate
+# iac helm-deploy workflow.
 #
-# Prereqs (one-time, all provisioned):
-#   - GCP: notifbuddy-image-pusher SA (roles/artifactregistry.writer); WIF
-#     provider condition allows this repo.
-#   - Infisical: notifbuddy-app-ci machine identity, OIDC-bound to this repo,
-#     reads the GitHub App creds from /ci (prod). No App secrets in GitHub.
-#   - A GitHub App installed on notifbuddy/iac with Contents:write +
-#     Pull requests:write (its id/key live in Infisical /ci) — the default
-#     GITHUB_TOKEN cannot open PRs on another repo.
+# Prereqs:
+#   - Infisical notifbuddy-app-ci (OIDC): /ci (GitHub App), /ovh, /auth, /
+#   - GHCR packages public (or cluster pull creds)
+#   - /ovh/KUBECONFIG in Infisical
 
 on:
   push:
@@ -24,119 +15,97 @@ on:
     paths:
       - 'backend/**'
       - 'authd/**'
+      - 'frontend/**'
+      - 'shared/**'
+      - 'config/**'
       - '.github/workflows/publish-images.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write # Workload Identity Federation → Artifact Registry
+  id-token: write
+  packages: write # GHCR
 
-concurrency: publish-images # serialize; keep a single open bot PR
+concurrency: publish-images
 
 env:
-  REGION: us-east4
-  AR: us-east4-docker.pkg.dev/notifbuddy/notifbuddy
+  REGISTRY: ghcr.io/notifbuddy
 
 jobs:
   changes:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
-      # workflow_dispatch has no diff to filter on — rebuild unconditionally.
-      backend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.backend == 'true' }}
-      authd: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.authd == 'true' }}
+      any: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.any == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            backend:
+            any:
               - 'backend/**'
-              - 'config/backend/**'
-              - 'config/featureflags/**'
-              - '.github/workflows/publish-images.yml'
-            authd:
               - 'authd/**'
-              - 'config/authd/**'
-              - 'config/featureflags/**'
+              - 'frontend/**'
+              - 'shared/**'
+              - 'config/**'
               - '.github/workflows/publish-images.yml'
 
-  backend:
+  build:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            context: .
+            dockerfile: backend/Dockerfile
+          - image: authd
+            context: .
+            dockerfile: authd/Dockerfile
+          - image: dashboard
+            context: .
+            dockerfile: frontend/Dockerfile
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/41636012349/locations/global/workloadIdentityPools/github/providers/github
-          service_account: notifbuddy-image-pusher@notifbuddy.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
       - uses: docker/setup-buildx-action@v3
-      - name: Build + push backend
-        id: build
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build + push ${{ matrix.image }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: backend/Dockerfile
-          platforms: linux/amd64 # Cloud Run is x86
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
           push: true
-          tags: ${{ env.AR }}/backend:src-${{ github.sha }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ matrix.image }}:src-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ matrix.image }}:main
+          cache-from: type=gha,scope=${{ matrix.image }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-amd64
 
-  authd:
-    needs: changes
-    if: needs.changes.outputs.authd == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/41636012349/locations/global/workloadIdentityPools/github/providers/github
-          service_account: notifbuddy-image-pusher@notifbuddy.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-      - uses: docker/setup-buildx-action@v3
-      - name: Build + push authd
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: authd/Dockerfile
-          platforms: linux/amd64 # Cloud Run is x86
-          push: true
-          tags: ${{ env.AR }}/authd:src-${{ github.sha }}
-
-  open-pr:
-    needs: [backend, authd]
-    # Run when at least one image built and nothing failed (skipped is fine —
-    # that image keeps its current digest).
+  deploy:
+    needs: [changes, build]
     if: >-
       !cancelled() && !contains(needs.*.result, 'failure') &&
-      contains(needs.*.result, 'success')
+      (needs.build.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      # Pull the GitHub App creds from Infisical (/ci) via keyless GitHub OIDC —
-      # no App id/key stored as GitHub Actions secrets. Exports NOTIFBUDDY_CI_APP_ID
-      # + NOTIFBUDDY_CI_PRIVATE_KEY to the env. Default OIDC audience is the repo
-      # owner URL (https://github.com/notifbuddy), which the identity is bound to.
       - name: Fetch GitHub App creds from Infisical (OIDC)
         uses: Infisical/secrets-action@v1.0.7
         with:
-          method: "oidc"
+          method: oidc
           identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
           project-slug: notifbuddy-58-th
           env-slug: prod
-          secret-path: "/ci"
-          export-type: "env"
+          secret-path: /ci
+          export-type: env
 
-      - name: Mint cross-repo App token for notifbuddy/iac
+      - name: Mint App token for notifbuddy/iac
         id: apptoken
         uses: actions/create-github-app-token@v1
         with:
@@ -145,60 +114,91 @@ jobs:
           owner: notifbuddy
           repositories: iac
 
-      - name: Open + auto-merge image-bump PR on notifbuddy/iac
+      - name: Checkout iac (values + chart pin)
+        uses: actions/checkout@v4
+        with:
+          repository: notifbuddy/iac
+          token: ${{ steps.apptoken.outputs.token }}
+          path: iac
+
+      - name: Fetch /ovh (KUBECONFIG)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /ovh
+          export-type: env
+
+      - name: Fetch /auth
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /auth
+          export-type: env
+
+      - name: Fetch / (integrations)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /
+          export-type: env
+
+      - name: Write kubeconfig + install helm
+        run: |
+          test -n "${KUBECONFIG:-}" || { echo "KUBECONFIG missing from Infisical /ovh" >&2; exit 1; }
+          umask 077
+          printf '%s\n' "$KUBECONFIG" >"$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >>"$GITHUB_ENV"
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Resolve values.yaml refs + helm upgrade --install
         env:
-          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
-          BACKEND_DIGEST: ${{ needs.backend.outputs.digest }}
-          AUTHD_DIGEST: ${{ needs.authd.outputs.digest }}
+          IMAGE_TAG: src-${{ github.sha }}
         run: |
           set -euo pipefail
-          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/notifbuddy/iac" iac
-          cd iac
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          VERSION=$(yq -r '.helmfile.chart_version' iac/config.yaml)
+          echo "chart=${VERSION} image.tag=${IMAGE_TAG}"
 
-          # Base the bot branch on its previous tip when one exists so an
-          # unmerged pending bump keeps a single open PR.
-          if git fetch --depth 1 origin bot/image-bump; then
-            git checkout -B bot/image-bump FETCH_HEAD
-          else
-            git checkout -B bot/image-bump
-          fi
+          kubectl get nodes -o wide
 
-          # A skipped build has no digest — that image keeps whatever ref the
-          # tfvars on this branch already carries (empty if never built).
-          current() { grep -oE "^$1\s*=\s*\"[^\"]*\"" deploy.auto.tfvars 2>/dev/null | sed -E 's/^[^"]*"([^"]*)"/\1/' || true; }
-          backend_image="${AR}/backend@${BACKEND_DIGEST}"
-          [ -n "${BACKEND_DIGEST}" ] || backend_image="$(current backend_image)"
-          authd_image=""
-          [ -z "${AUTHD_DIGEST}" ] || authd_image="${AR}/authd@${AUTHD_DIGEST}"
-          [ -n "${authd_image}" ] || authd_image="$(current authd_image)"
+          python3 <<'PY'
+          import os, re, pathlib
+          src = pathlib.Path("iac/helmfile/values.yaml").read_text()
+          pat = re.compile(r"ref\+infisical://([A-Za-z0-9_]+)\?[^\s\"']+")
+          missing = []
+          def repl(m):
+              name = m.group(1)
+              val = os.environ.get(name)
+              if not val:
+                  missing.append(name)
+                  return m.group(0)
+              return '"' + val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+          out = pat.sub(repl, src)
+          if missing:
+              raise SystemExit(f"missing env for Infisical refs: {', '.join(sorted(set(missing)))}")
+          dest = pathlib.Path(os.environ["RUNNER_TEMP"]) / "values.resolved.yaml"
+          dest.write_text(out)
+          print(f"wrote {dest}")
+          PY
 
-          # Only the digests + the source commit. The manifest is NOT copied —
-          # iac fetches it from this repo at app_revision, keeping this repo the
-          # single source of truth for the eventing topology.
-          cat > deploy.auto.tfvars <<EOF
-          # Managed by the app repo publish-images workflow — do not hand-edit.
-          backend_image = "${backend_image}"
-          authd_image   = "${authd_image}"
-          app_revision  = "${GITHUB_SHA}"
-          EOF
+          helm upgrade --install notifbuddy \
+            oci://ghcr.io/notifbuddy/charts/notifbuddy \
+            --version "$VERSION" \
+            --namespace notifbuddy \
+            --create-namespace \
+            --wait \
+            --timeout 10m \
+            -f "$RUNNER_TEMP/values.resolved.yaml" \
+            --set-string "image.tag=${IMAGE_TAG}"
 
-          git add -A
-          if git diff --cached --quiet; then
-            echo "digests unchanged — nothing to open"
-            exit 0
-          fi
-
-          git -c user.name=notifbuddy-bot -c user.email=bot@users.noreply.github.com \
-            commit -m "deploy: bump images to ${GITHUB_SHA:0:12}"
-          git push -f origin bot/image-bump
-
-          gh pr create --repo notifbuddy/iac --head bot/image-bump --base main \
-            --title "deploy: bump images to ${GITHUB_SHA:0:12}" \
-            --body "Auto-generated by publish-images (app repo @ ${GITHUB_SHA:0:12}). Auto-merged; iac applies on push to main." \
-            2>/dev/null || echo "PR already open — branch force-updated with new digests"
-
-          # Continuous deployment: merge the bump immediately — iac runs
-          # terraform apply on every push to main, so this merge IS the deploy.
-          # A failure here (e.g. a conflict on deploy.auto.tfvars) fails the job
-          # loudly and leaves the PR open for a human.
-          gh pr merge bot/image-bump --repo notifbuddy/iac --squash --delete-branch
+          kubectl -n notifbuddy get pods,ingress,svc
