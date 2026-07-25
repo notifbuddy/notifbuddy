@@ -53,9 +53,10 @@ type slackFile struct {
 }
 
 // OnSlackEvent is the subscriber for integrations.slack.webhook_event. It
-// mirrors a human Slack message in a synced channel into a Linear comment on
-// the mapped issue. A returned error nacks the message for redelivery; errors
-// after the Linear comment exists are only logged so a retry can't double-post.
+// handles @bot create/close commands, or mirrors a human Slack message in a
+// synced channel into a Linear comment on the mapped issue. A returned error
+// nacks the message for redelivery; errors after the Linear comment exists are
+// only logged so a retry can't double-post.
 func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	var ref slackEventRef
 	if err := json.Unmarshal(msg.Payload, &ref); err != nil {
@@ -83,17 +84,24 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 	ev := p.Slack.Event
 
-	// Only real user messages mirror.
-	if ev.Type != "message" {
-		return nil
-	}
-	// Defense 1: drop the bot's own messages. Our mirrored posts are authored by
-	// the bot (bot_id set); message subtypes like bot_message / message_changed
-	// are also not human posts. This is what stops the Linear->Slack->Linear echo.
-	// file_share is the one subtype a human post can carry (a message with an
-	// attachment), so it passes through — the bot-identity checks (bot_id here,
-	// AuthTestUserID below) still drop the bot's own file shares.
-	if ev.BotID != "" || (ev.Subtype != "" && ev.Subtype != "file_share") || ev.User == "" {
+	// Human messages and app_mention (Slack's delivery for @bot). Other event
+	// types are ignored.
+	switch ev.Type {
+	case "message":
+		// Defense 1: drop the bot's own messages. Our mirrored posts are authored by
+		// the bot (bot_id set); message subtypes like bot_message / message_changed
+		// are also not human posts. This is what stops the Linear->Slack->Linear echo.
+		// file_share is the one subtype a human post can carry (a message with an
+		// attachment), so it passes through — the bot-identity checks (bot_id here,
+		// AuthTestUserID below) still drop the bot's own file shares.
+		if ev.BotID != "" || (ev.Subtype != "" && ev.Subtype != "file_share") || ev.User == "" {
+			return nil
+		}
+	case "app_mention":
+		if ev.User == "" {
+			return nil
+		}
+	default:
 		return nil
 	}
 
@@ -101,9 +109,16 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	if err != nil {
 		return fmt.Errorf("slack event %s: slack token: %w", ref.EventID, err)
 	}
-	// Belt check: if we can resolve our own bot user id and it authored this,
-	// drop it. (Covers the rare case a mirrored post lacks bot_id.)
-	if botID, err := e.slack.AuthTestUserID(ctx, token); err == nil && botID != "" && botID == ev.User {
+	bot, botOK := e.resolveBotIdentity(ctx, ref.OrgID, token)
+	// Belt check: drop our own posts. Prefer the resolved identity; if users.info
+	// failed, fall back to auth.test alone so loop prevention still works.
+	ownBotID := ""
+	if botOK {
+		ownBotID = bot.SlackUserID
+	} else if id, err := e.slack.AuthTestUserID(ctx, token); err == nil {
+		ownBotID = id
+	}
+	if ownBotID != "" && ownBotID == ev.User {
 		return nil
 	}
 
@@ -114,6 +129,13 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 	if err != nil {
 		return fmt.Errorf("slack event %s: issue lookup: %w", ref.EventID, err)
+	}
+
+	// @bot command? Classify before mirroring; a create/close short-circuits.
+	if botOK && e.classifier != nil && botMentioned(ev.Text, bot.SlackUserID, bot.SlackDisplayName) {
+		if e.runNotifBuddyCommand(ctx, ref.OrgID, issueID, ev.Text, nil) {
+			return nil
+		}
 	}
 
 	// Idempotency: if this Slack message was already mirrored (Pub/Sub redelivers
@@ -152,7 +174,8 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	// file — a failed download (deleted file, over-cap, missing files:read
 	// scope) becomes a note in the comment rather than a redelivery loop.
 	var attachments []integrations.LinearCommentAttachment
-	body := ev.Text
+	// Resolve <@U…> mentions: linked Linear profile URL first, else @displayName.
+	body := e.rewriteSlackMentions(ctx, ref.OrgID, token, ev.Text)
 	for _, f := range ev.Files {
 		fileURL := firstNonEmpty(f.URLPrivateDownload, f.URLPrivate)
 		if fileURL == "" {

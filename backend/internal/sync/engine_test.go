@@ -137,6 +137,7 @@ type fakeSlack struct {
 	nextTS          string
 	nextChannel     string
 	botUserID       string
+	authTestErr     error // when set, AuthTestUserID fails (fail-closed NLP path)
 	usersByEmail    map[string]slackapi.User
 	usersByID       map[string]slackapi.User
 	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
@@ -180,7 +181,31 @@ func (s *fakeSlack) UserByID(_ context.Context, _, id string) (slackapi.User, er
 	return slackapi.User{}, store.ErrNotFound
 }
 func (s *fakeSlack) AuthTestUserID(_ context.Context, _ string) (string, error) {
+	if s.authTestErr != nil {
+		return "", s.authTestErr
+	}
 	return s.botUserID, nil
+}
+
+// withBotIdentity sets auth.test + users.info so NLP mention detection works.
+func withBotIdentity(sl *fakeSlack, id, displayName string) *fakeSlack {
+	sl.botUserID = id
+	if sl.usersByID == nil {
+		sl.usersByID = map[string]slackapi.User{}
+	}
+	sl.usersByID[id] = slackapi.User{ID: id, Name: displayName, IsBot: true}
+	return sl
+}
+
+// countClassifier records Classify calls and always returns the fixed intent.
+type countClassifier struct {
+	calls  int
+	intent intent.Intent
+}
+
+func (c *countClassifier) Classify(context.Context, string) intent.Intent {
+	c.calls++
+	return c.intent
 }
 func (s *fakeSlack) DownloadFile(_ context.Context, _, fileURL string) ([]byte, error) {
 	if data, ok := s.files[fileURL]; ok {
@@ -213,6 +238,8 @@ type fakeIntg struct {
 	nextCommentID   string
 	linearFiles     map[string][]byte // url -> bytes served by LinearFileDownload; missing url errors
 	linearFileCT    map[string]string // url -> content type; missing = application/octet-stream
+	// linearMentions maps slack user id → Linear markdown mention (profile URL).
+	linearMentions map[string]string
 }
 
 func (i *fakeIntg) SlackBotToken(context.Context, string) (string, error) { return "xoxb-test", nil }
@@ -241,6 +268,13 @@ type fixedClassifier intent.Intent
 func (f fixedClassifier) Classify(context.Context, string) intent.Intent { return intent.Intent(f) }
 func (i *fakeIntg) LinearAssetProxyURL(_ string, fileURL string) (string, error) {
 	return "https://proxy.test/asset?u=" + fileURL, nil
+}
+func (i *fakeIntg) LinearMentionForSlackUser(_ context.Context, _, slackUserID string) (string, bool) {
+	if i.linearMentions == nil {
+		return "", false
+	}
+	m, ok := i.linearMentions[slackUserID]
+	return m, ok && m != ""
 }
 func (i *fakeIntg) LinearFileDownload(_ context.Context, _ string, fileURL string) ([]byte, string, error) {
 	if data, ok := i.linearFiles[fileURL]; ok {
@@ -314,7 +348,11 @@ func linearCommentPayload(action, commentID, body, issueID, parentID, actorName,
 }
 
 func slackMessagePayload(user, botID, subtype, text, channel, ts, threadTS string) json.RawMessage {
-	ev := map[string]any{"type": "message", "user": user, "text": text, "channel": channel, "ts": ts}
+	return slackEventPayload("message", user, botID, subtype, text, channel, ts, threadTS)
+}
+
+func slackEventPayload(eventType, user, botID, subtype, text, channel, ts, threadTS string) json.RawMessage {
+	ev := map[string]any{"type": eventType, "user": user, "text": text, "channel": channel, "ts": ts}
 	if botID != "" {
 		ev["bot_id"] = botID
 	}
@@ -440,7 +478,7 @@ func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
 	st.linearPayloads["d_nb"] = linearCommentPayload(
 		"create", "c_nb", "@notifbuddy create a channel regarding this", "issue54", "", "Nik", "nik@x.io", false)
 
-	sl := &fakeSlack{nextChannel: "C_NB"}
+	sl := withBotIdentity(&fakeSlack{nextChannel: "C_NB"}, "U_BOT", "notifbuddy")
 	pub := &spyPub{}
 	ig := &fakeIntg{
 		settings: integrations.LinearSettings{
@@ -464,6 +502,154 @@ func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
 	}
 	if len(sl.posted) != 0 {
 		t.Errorf("command must short-circuit mirroring; got %d posts", len(sl.posted))
+	}
+}
+
+// Linear commands match the resolved Slack bot display name (self-host rename).
+func TestOnLinearEvent_NotifBuddyMatchesResolvedDisplayName(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d_rename"] = linearCommentPayload(
+		"create", "c_rename", "@my-bot create a channel", "issue54", "", "Nik", "nik@x.io", false)
+
+	sl := withBotIdentity(&fakeSlack{nextChannel: "C_REN"}, "U_BOT", "my-bot")
+	ig := &fakeIntg{
+		settings: integrations.LinearSettings{
+			CreationMode: "manual",
+			NameTemplate: "tkt-${{ linear.issue.identifier }}",
+		},
+	}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.CreateChannel))
+
+	e.OnLinearEvent(context.Background(), linearRef("d_rename", "org1"))
+
+	if sl.createdName != "tkt-not-1" {
+		t.Errorf("channel name = %q, want tkt-not-1", sl.createdName)
+	}
+}
+
+// When Slack bot identity cannot be resolved, skip NLP even if the body
+// contains a product-name string (no hardcoded fallback).
+func TestOnLinearEvent_NotifBuddySkipsNLPWhenBotIdentityFails(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d_fail"] = linearCommentPayload(
+		"create", "c_fail", "@notifbuddy create a channel", "issue54", "", "Nik", "nik@x.io", false)
+	st.issueToChannel["org1|issue54"] = "C1" // so a missed short-circuit would mirror
+
+	sl := &fakeSlack{authTestErr: fmt.Errorf("auth.test down")}
+	clf := &countClassifier{intent: intent.CreateChannel}
+	e := newEngineWithClassifier(st, sl, &fakeIntg{}, &spyPub{}, clf)
+
+	e.OnLinearEvent(context.Background(), linearRef("d_fail", "org1"))
+
+	if clf.calls != 0 {
+		t.Fatalf("classifier must not run when bot identity fails; calls=%d", clf.calls)
+	}
+	if sl.createdName != "" {
+		t.Errorf("must not create channel; got %q", sl.createdName)
+	}
+	// Ordinary mirroring still proceeds (command path skipped).
+	if len(sl.posted) != 1 {
+		t.Fatalf("want comment mirrored to Slack, got %d posts", len(sl.posted))
+	}
+}
+
+// Slack <@BOT> close archives the channel and does not create a Linear comment.
+func TestOnSlackEvent_BotMentionCloseChannel(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e_close"] = slackMessagePayload(
+		"U_HUMAN", "", "", "<@U_BOT> archive this channel", "C1", "TS_CLOSE", "")
+
+	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "notifbuddy")
+	ig := &fakeIntg{}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.CloseChannel))
+
+	e.OnSlackEvent(context.Background(), slackRef("e_close", "org1"))
+
+	if sl.archivedChannel != "C1" {
+		t.Errorf("archived = %q, want C1", sl.archivedChannel)
+	}
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("command must not mirror to Linear; got %d comments", len(ig.createdComments))
+	}
+	if _, err := st.ChannelForIssue(context.Background(), "org1", "issue1"); err == nil {
+		t.Error("issue↔channel mapping should be deleted after close")
+	}
+}
+
+// app_mention events (Slack's @bot delivery) run the same command path.
+func TestOnSlackEvent_AppMentionCloseChannel(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e_am"] = slackEventPayload(
+		"app_mention", "U_HUMAN", "", "", "<@U_BOT> close the channel", "C1", "TS_AM", "")
+
+	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "notifbuddy")
+	ig := &fakeIntg{}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.CloseChannel))
+
+	e.OnSlackEvent(context.Background(), slackRef("e_am", "org1"))
+
+	if sl.archivedChannel != "C1" {
+		t.Errorf("archived = %q, want C1", sl.archivedChannel)
+	}
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("command must not mirror; got %d comments", len(ig.createdComments))
+	}
+}
+
+// Mentions of a different user id are mirrored (not classified) and the id is
+// resolved to a display name on the Linear comment.
+func TestOnSlackEvent_WrongBotIDMirrors(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e_wrong"] = slackMessagePayload(
+		"U_HUMAN", "", "", "<@U_OTHER> please repeat what I said", "C1", "TS_WRONG", "")
+
+	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "notifbuddy")
+	sl.usersByID["U_OTHER"] = slackapi.User{ID: "U_OTHER", Name: "parrot", IsBot: true}
+	clf := &countClassifier{intent: intent.CloseChannel}
+	ig := &fakeIntg{nextCommentID: "cmt_wrong"}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, clf)
+
+	e.OnSlackEvent(context.Background(), slackRef("e_wrong", "org1"))
+
+	if clf.calls != 0 {
+		t.Fatalf("wrong bot id must not classify; calls=%d", clf.calls)
+	}
+	if sl.archivedChannel != "" {
+		t.Errorf("must not archive; got %q", sl.archivedChannel)
+	}
+	if len(ig.createdComments) != 1 {
+		t.Fatalf("want mirrored comment, got %d", len(ig.createdComments))
+	}
+	if got := ig.createdComments[0].Body; got != "@parrot please repeat what I said" {
+		t.Errorf("body = %q, want resolved @parrot mention", got)
+	}
+}
+
+// Non-command mentions of our bot rewrite <@ID> to @DisplayName on Linear.
+func TestOnSlackEvent_RewritesBotMentionWhenMirroring(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e_rw"] = slackMessagePayload(
+		"U_HUMAN", "", "", "<@U_BOT> thanks for the help", "C1", "TS_RW", "")
+
+	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "my-bot")
+	ig := &fakeIntg{nextCommentID: "cmt_rw"}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.NoAction))
+
+	e.OnSlackEvent(context.Background(), slackRef("e_rw", "org1"))
+
+	if len(ig.createdComments) != 1 {
+		t.Fatalf("want 1 comment, got %d", len(ig.createdComments))
+	}
+	if got := ig.createdComments[0].Body; got != "@my-bot thanks for the help" {
+		t.Errorf("body = %q, want rewritten @my-bot mention", got)
 	}
 }
 
