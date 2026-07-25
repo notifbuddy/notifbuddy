@@ -54,16 +54,13 @@ encryption:
   kms_key_id: "${KMS_KEY_ID}" # resource name, not a secret (infra output kms_key_id)
 
 pubsub:
-  # Pub/Sub push keeps Cloud Run + Neon scale-to-zero (no polling). Requires
-  # infra applied (topics/subscriptions/IAM) BEFORE deploying this.
-  provider: "gcp"
-  gcp:
-    project_id: "${GCP_PROJECT_ID}"
-    push_audience: "https://api.notifbuddy.com/internal/pubsub/push" # OIDC audience = push endpoint URL
-    push_service_account: "${PUBSUB_PUSH_SA}" # see infra
-    # Empty in prod. Preview CI sets PUBSUB_NAME_PREFIX=pr-<n>- so topics/subs
-    # share the GCP project without colliding with production names.
-    name_prefix: "${PUBSUB_NAME_PREFIX}"
+  # OVH k3s keeps a warm backend replica, so watermill over the app DB is
+  # fine (no GCP Pub/Sub push / OIDC endpoint). Matches the Helm chart
+  # ConfigMap that prod actually mounts at /config/config.yaml.
+  provider: "postgres"
+  postgres:
+    poll_interval: "1s"
+    log_events: false
 
 slack:
   client_id: "${SLACK_CLIENT_ID}" # TODO: prod Slack app client id
