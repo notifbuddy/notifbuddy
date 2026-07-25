@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -119,8 +120,10 @@ type Client interface {
 	UpdateMessage(ctx context.Context, token string, opts UpdateOptions) error
 }
 
-// httpClient is the default Client, talking to https://slack.com/api. It is
-// stateless apart from the underlying *http.Client.
+// httpClient is the default Client, talking to https://slack.com/api.
+// Successful users.info / auth.test results are cached for the process
+// lifetime so mention rewriting and bot-identity checks don't re-hit Slack
+// for the same token+user (or token) on every event.
 type httpClient struct {
 	hc      *http.Client
 	baseURL string
@@ -128,6 +131,10 @@ type httpClient struct {
 	// invalid_blocks — Slack processes uploads asynchronously, and a slack_file
 	// reference is invalid until processing completes (typically a few seconds).
 	blockRetryDelay time.Duration
+	// usersByKey caches UserByID: key = token + "\x00" + userID → User.
+	usersByKey sync.Map
+	// authUserByToken caches AuthTestUserID: key = token → bot user id.
+	authUserByToken sync.Map
 }
 
 // New returns the default HTTP-backed Slack client.
@@ -247,6 +254,10 @@ func (c *httpClient) LookupUserByEmail(ctx context.Context, token, email string)
 }
 
 func (c *httpClient) UserByID(ctx context.Context, token, userID string) (User, error) {
+	key := token + "\x00" + userID
+	if v, ok := c.usersByKey.Load(key); ok {
+		return v.(User), nil
+	}
 	form := url.Values{}
 	form.Set("user", userID)
 	var out struct {
@@ -256,16 +267,24 @@ func (c *httpClient) UserByID(ctx context.Context, token, userID string) (User, 
 	if err := c.callForm(ctx, token, "users.info", form, &out); err != nil {
 		return User{}, err
 	}
-	return out.User.toUser(), nil
+	u := out.User.toUser()
+	c.usersByKey.Store(key, u)
+	return u, nil
 }
 
 func (c *httpClient) AuthTestUserID(ctx context.Context, token string) (string, error) {
+	if v, ok := c.authUserByToken.Load(token); ok {
+		return v.(string), nil
+	}
 	var out struct {
 		slackOK
 		UserID string `json:"user_id"`
 	}
 	if err := c.callForm(ctx, token, "auth.test", url.Values{}, &out); err != nil {
 		return "", err
+	}
+	if out.UserID != "" {
+		c.authUserByToken.Store(token, out.UserID)
 	}
 	return out.UserID, nil
 }

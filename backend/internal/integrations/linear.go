@@ -829,6 +829,58 @@ func (s *Service) LinearUserToken(ctx context.Context, orgID, userID string) (st
 	return s.linearToken(ctx, orgID, store.LevelUser, userID)
 }
 
+// LinearMentionForSlackUser returns Linear markdown that @mentions the Linear
+// user linked to slackUserID. Linear turns a profile URL in comment markdown
+// into a real @mention (see Linear GraphQL "Adding mentions in Markdown").
+// ok=false when the Slack user has no linked NotifBuddy→Linear identity, or
+// the viewer lookup fails.
+func (s *Service) LinearMentionForSlackUser(ctx context.Context, orgID, slackUserID string) (string, bool) {
+	if slackUserID == "" {
+		return "", false
+	}
+	uid, err := s.store.UserIDBySlackUserID(ctx, orgID, slackUserID)
+	if err != nil {
+		return "", false
+	}
+	token, err := s.LinearUserToken(ctx, orgID, uid)
+	if err != nil {
+		return "", false
+	}
+	url, err := s.linearViewerProfileURL(ctx, token)
+	if err != nil || url == "" {
+		return "", false
+	}
+	return url, true
+}
+
+// linearViewerProfileURL queries viewer { url } with a user-level Linear token.
+func (s *Service) linearViewerProfileURL(ctx context.Context, token string) (string, error) {
+	const query = `{"query":"{ viewer { url } }"}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.linear.app/graphql", bytes.NewReader([]byte(query)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Data struct {
+			Viewer struct {
+				URL string `json:"url"`
+			} `json:"viewer"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(body.Data.Viewer.URL), nil
+}
+
 func (s *Service) linearToken(ctx context.Context, orgID string, level store.Level, userID string) (string, error) {
 	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, level, userID)
 	if err != nil {

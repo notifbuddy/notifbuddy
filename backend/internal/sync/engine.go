@@ -58,6 +58,10 @@ type Integrations interface {
 	// SettingForTeam resolves the config that applies to a Linear team, or
 	// store.ErrNotFound when the team isn't mapped to any config (→ do nothing).
 	SettingForTeam(ctx context.Context, orgID, teamID string) (integrations.LinearSettings, error)
+	// LinearMentionForSlackUser returns Linear markdown that @mentions the
+	// Linear user linked to slackUserID (profile URL). ok=false when that Slack
+	// user has no linked Linear identity.
+	LinearMentionForSlackUser(ctx context.Context, orgID, slackUserID string) (mention string, ok bool)
 }
 
 // Store is the persistence surface the engine needs: reading stored webhook

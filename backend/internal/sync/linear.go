@@ -651,23 +651,46 @@ func (e *Engine) shareFiles(ctx context.Context, orgID, commentID, token, channe
 	}
 }
 
-// handleNotifBuddy classifies a comment body and, on a create/close command,
-// performs it. Returns true if the body was a command (mirroring should stop).
-// Commands stay best-effort: failures are logged, never retried via
-// redelivery — re-running the classifier on a redelivered comment could
-// re-execute a command the user already saw take effect.
+// handleNotifBuddy resolves our Slack bot identity for the org, detects a bot
+// mention in body, and runs create/close commands. Returns true if the body
+// was a command (mirroring should stop). Commands stay best-effort: failures
+// are logged, never retried via redelivery — re-running the classifier on a
+// redelivered comment could re-execute a command the user already saw take effect.
 //
 // p is the normalized comment envelope (already includes injected issue when
-// ingest succeeded). On create fallback it may set p.Linear.Issue.
+// ingest succeeded). On create fallback it may set p.Linear.Issue. Callers on
+// the Slack path may pass nil; create then fetches the issue via GraphQL.
 func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body string, p *linearPayload) bool {
-	if e.classifier == nil || !strings.Contains(strings.ToLower(body), "notifbuddy") {
+	if e.classifier == nil {
 		return false
+	}
+	token, err := e.intg.SlackBotToken(ctx, orgID)
+	if err != nil {
+		slog.WarnContext(ctx, "sync: notifbuddy: slack token failed; skipping NLP",
+			"org_id", orgID, "error", err)
+		return false
+	}
+	bot, ok := e.resolveBotIdentity(ctx, orgID, token)
+	if !ok || !botMentioned(body, bot.SlackUserID, bot.SlackDisplayName) {
+		return false
+	}
+	return e.runNotifBuddyCommand(ctx, orgID, issueID, body, p)
+}
+
+// runNotifBuddyCommand classifies body and performs create/close. Caller has
+// already verified the bot was mentioned. Returns true when the body was a
+// create/close command (mirroring should stop).
+func (e *Engine) runNotifBuddyCommand(ctx context.Context, orgID, issueID, body string, p *linearPayload) bool {
+	if p == nil {
+		p = &linearPayload{}
+		p.Linear.Type = "comment"
 	}
 	switch e.classifier.Classify(ctx, body) {
 	case intent.CreateChannel:
 		teamID := teamIDFromIssue(p.Linear.Issue)
 		if teamID == "" {
-			// Fallback when ingest couldn't inject the issue (e.g. org unknown).
+			// Fallback when ingest couldn't inject the issue (e.g. org unknown)
+			// or the Slack path has no Linear envelope.
 			issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
 			if err != nil {
 				slog.ErrorContext(ctx, "sync: notifbuddy create: fetch issue failed", "org_id", orgID, "issue_id", issueID, "error", err)
