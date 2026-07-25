@@ -3,6 +3,10 @@ title: July 2026
 description: Changes shipped in notifbuddy during July 2026.
 ---
 
+## July 25
+
+- **breaking: Linear event envelope shape** — templates and conditions use typed paths (`linear.issue.*`, `linear.comment.*`) instead of `linear.data`. Comment events include an injected `linear.issue` so naming works on `@notifbuddy` creates. Update any saved templates that still reference `linear.data`. [Templates](/templates)
+
 ## July 20
 
 - **feature: Self-hosting on Kubernetes** — a Helm chart, published to Artifact Hub. [Self-hosting guide](/self-host)
