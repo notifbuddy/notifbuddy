@@ -131,6 +131,8 @@ github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHP
 github.com/mattn/go-colorable v0.1.14/go.mod h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=
 github.com/mattn/go-isatty v0.0.22 h1:j8l17JJ9i6VGPUFUYoTUKPSgKe/83EYU2zBC7YNKMw4=
 github.com/mattn/go-isatty v0.0.22/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJlRFqopa4=
+github.com/notifbuddy/emoji v0.0.0-20260724202513-2e1cd3536ce5 h1:xDl779Oqrq2eb6W5Y6I3AAyLGDryav/U+UsMsEpORTw=
+github.com/notifbuddy/emoji v0.0.0-20260724202513-2e1cd3536ce5/go.mod h1:elpkKAS92j09SJvW/0sXfdMgltL7TQi7ToZD4tehPko=
 github.com/ogen-go/ogen v1.22.0 h1:7wU+jcIKg/JBAhM95909ULLdAkGr43KQOuvNpJ7Mxb4=
 github.com/ogen-go/ogen v1.22.0/go.mod h1:7BOh9a51QiPCC92RMrj1LlkLjejhBAyPhR+oMc6lR9g=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=

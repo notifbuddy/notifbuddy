@@ -1,0 +1,30 @@
+{
+  "$schema": "https://linear.app/.well-known/oauth-app-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "distribution": "public",
+  "display": {
+    "description": "All the noise. One signal.",
+    "iconUrl": "https://public.linear.app/d23ed06e-8608-4b40-acec-0e28cc76eb31/a114c03d-e2a4-4e3b-9a6d-8973ca9e746d/256x256/dda00d21-9f0b-4848-90a2-c43ca7985072"
+  },
+  "developer": {
+    "name": "notifbuddy"
+  },
+  "oauth": {
+    "client_name": "notifbuddy",
+    "client_uri": "https://notifbuddy.com",
+    "redirect_uris": [
+      "https://api.notifbuddy.com/integrations/linear/callback"
+    ],
+    "grant_types": [
+      "authorization_code"
+    ]
+  },
+  "webhook": {
+    "url": "https://api.notifbuddy.com/integrations/linear/webhook",
+    "resourceTypes": [
+      "Issue",
+      "Comment",
+      "Reaction"
+    ]
+  }
+}

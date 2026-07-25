@@ -18,6 +18,8 @@ func normalizeLinearType(t string) (normalized, entityKey string) {
 		return "comment", "comment"
 	case "workflowstate":
 		return "workflow_state", "workflow_state"
+	case "reaction":
+		return "reaction", "reaction"
 	default:
 		n := strings.ToLower(t)
 		return n, n

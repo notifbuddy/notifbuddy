@@ -84,6 +84,14 @@ type linearWorkflowStateEntity struct {
 	} `json:"team"`
 }
 
+// linearReactionEntity is linear.reaction (comment reaction webhooks).
+type linearReactionEntity struct {
+	ID        string `json:"id"`
+	Emoji     string `json:"emoji"`
+	CommentID string `json:"commentId"`
+	UserID    string `json:"userId"`
+}
+
 // linearPayload is the stored event envelope after WriteLinearWebhook
 // normalizes Linear's webhook (lowercase type, typed entity keys, comment→issue
 // injection) and wraps it under `linear` with a top-level `event_source`.
@@ -96,6 +104,7 @@ type linearPayload struct {
 		Issue         *linearIssueEntity         `json:"issue,omitempty"`
 		Comment       *linearCommentEntity       `json:"comment,omitempty"`
 		WorkflowState *linearWorkflowStateEntity `json:"workflow_state,omitempty"`
+		Reaction      *linearReactionEntity      `json:"reaction,omitempty"`
 	} `json:"linear"`
 }
 
@@ -142,8 +151,9 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 
 	// Defense 1: drop events our own Linear app caused. When we create a comment
 	// with actor=app, the resulting webhook carries a botActor — dropping it
-	// stops the echo from bouncing back into Slack.
-	if p.botActor() != nil {
+	// stops the echo from bouncing back into Slack. Reaction webhooks use
+	// actor.type instead (see reaction case below).
+	if p.Linear.Type != "reaction" && p.botActor() != nil {
 		return nil
 	}
 
@@ -154,6 +164,13 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 		return e.onLinearComment(ctx, ref.OrgID, p)
 	case "workflow_state":
 		return e.onLinearWorkflowState(ctx, ref.OrgID, p)
+	case "reaction":
+		// Defense 1 for reactions: only mirror human-authored reactions.
+		// App/OAuth echoes from our reactionCreate have a non-user actor.
+		if p.Linear.Actor.Type != "" && p.Linear.Actor.Type != "user" {
+			return nil
+		}
+		return e.onLinearReaction(ctx, ref.OrgID, p)
 	}
 	return nil
 }

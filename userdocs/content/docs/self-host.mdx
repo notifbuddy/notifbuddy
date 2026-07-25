@@ -154,6 +154,8 @@ settings:
       - app_mention
       - message.channels
       - message.groups
+      - reaction_added
+      - reaction_removed
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
@@ -168,13 +170,52 @@ workspace before the new permissions take effect.
 
 ### Linear
 
-Create an OAuth application in your Linear workspace settings, under **API** >
-**OAuth applications**. Set the redirect and webhook URLs from the table above,
-and request the `read` and `write` scopes.
+Create an OAuth application in [Linear → Settings → API → OAuth
+applications](https://linear.app/settings/api). Linear does not currently offer
+Slack-style “create from manifest” in the UI, so configure the app to match the
+JSON below (replace `api.example.com` with your API hostname). Keep a copy of
+this file with your install — it is the checklist for redirect URL, webhook URL,
+and webhook resource types.
 
-Enable webhooks on the application so Linear delivers issue and comment events,
-and copy the signing secret it generates into
+Request the `read` and `write` scopes. Webhooks must include **`Issue`**,
+**`Comment`**, and **`Reaction`** so channel sync, comment mirroring, and
+reaction sync all receive events. Copy the signing secret Linear generates into
 `integrations.linear.webhookSecret`.
+
+```json
+{
+  "$schema": "https://linear.app/.well-known/oauth-app-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "distribution": "public",
+  "display": {
+    "description": "Two-way Linear ⇄ Slack sync"
+  },
+  "developer": {
+    "name": "notifbuddy"
+  },
+  "oauth": {
+    "client_name": "notifbuddy",
+    "client_uri": "https://example.com",
+    "redirect_uris": [
+      "https://api.example.com/integrations/linear/callback"
+    ],
+    "grant_types": [
+      "authorization_code"
+    ]
+  },
+  "webhook": {
+    "url": "https://api.example.com/integrations/linear/webhook",
+    "resourceTypes": [
+      "Issue",
+      "Comment",
+      "Reaction"
+    ]
+  }
+}
+```
+
+The client ID, client secret, and webhook signing secret are on the OAuth
+application’s page after you create it.
 
 ### Cloudflare Workers AI
 

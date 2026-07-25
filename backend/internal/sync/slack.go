@@ -20,6 +20,29 @@ type slackEventRef struct {
 	ChannelID string `json:"channel_id"`
 }
 
+// slackEventBody is the subset of Slack's event object we act on (messages,
+// app_mention, and reactions).
+type slackEventBody struct {
+	Type     string      `json:"type"`
+	Subtype  string      `json:"subtype"`
+	User     string      `json:"user"`
+	BotID    string      `json:"bot_id"`
+	Text     string      `json:"text"`
+	Channel  string      `json:"channel"`
+	TS       string      `json:"ts"`
+	ThreadTS string      `json:"thread_ts"`
+	Reaction string      `json:"reaction"`
+	Item     slackItem   `json:"item"`
+	Files    []slackFile `json:"files"`
+}
+
+// slackItem is the target of a reaction_added / reaction_removed event.
+type slackItem struct {
+	Type    string `json:"type"`
+	Channel string `json:"channel"`
+	TS      string `json:"ts"`
+}
+
 // slackPayload is the stored event envelope: the writer
 // (integrations.WriteSlackWebhook) wraps Slack's raw event_callback body under
 // `slack` with a top-level `event_source`, mirroring the Linear envelope. We
@@ -27,17 +50,7 @@ type slackEventRef struct {
 type slackPayload struct {
 	EventSource string `json:"event_source"`
 	Slack       struct {
-		Event struct {
-			Type     string      `json:"type"`
-			Subtype  string      `json:"subtype"`
-			User     string      `json:"user"`
-			BotID    string      `json:"bot_id"`
-			Text     string      `json:"text"`
-			Channel  string      `json:"channel"`
-			TS       string      `json:"ts"`
-			ThreadTS string      `json:"thread_ts"`
-			Files    []slackFile `json:"files"`
-		} `json:"event"`
+		Event slackEventBody `json:"event"`
 	} `json:"slack"`
 }
 
@@ -84,9 +97,25 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 	ev := p.Slack.Event
 
-	// Human messages and app_mention (Slack's delivery for @bot). Other event
-	// types are ignored.
+	token, err := e.intg.SlackBotToken(ctx, ref.OrgID)
+	if err != nil {
+		return fmt.Errorf("slack event %s: slack token: %w", ref.EventID, err)
+	}
+	bot, botOK := e.resolveBotIdentity(ctx, ref.OrgID, token)
+	// Belt check: drop our own posts. Prefer the resolved identity; if users.info
+	// failed, fall back to auth.test alone so loop prevention still works.
+	ownBotID := ""
+	if botOK {
+		ownBotID = bot.SlackUserID
+	} else if id, err := e.slack.AuthTestUserID(ctx, token); err == nil {
+		ownBotID = id
+	}
+
+	// Reactions are handled before the message path: they nest channel/ts under
+	// item and must not fall through to IssueForChannel(ev.Channel).
 	switch ev.Type {
+	case "reaction_added", "reaction_removed":
+		return e.onSlackReaction(ctx, ref.OrgID, ref.EventID, ownBotID, ev)
 	case "message":
 		// Defense 1: drop the bot's own messages. Our mirrored posts are authored by
 		// the bot (bot_id set); message subtypes like bot_message / message_changed
@@ -105,19 +134,6 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		return nil
 	}
 
-	token, err := e.intg.SlackBotToken(ctx, ref.OrgID)
-	if err != nil {
-		return fmt.Errorf("slack event %s: slack token: %w", ref.EventID, err)
-	}
-	bot, botOK := e.resolveBotIdentity(ctx, ref.OrgID, token)
-	// Belt check: drop our own posts. Prefer the resolved identity; if users.info
-	// failed, fall back to auth.test alone so loop prevention still works.
-	ownBotID := ""
-	if botOK {
-		ownBotID = bot.SlackUserID
-	} else if id, err := e.slack.AuthTestUserID(ctx, token); err == nil {
-		ownBotID = id
-	}
 	if ownBotID != "" && ownBotID == ev.User {
 		return nil
 	}

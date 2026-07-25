@@ -208,6 +208,91 @@ func (s *Store) MirroredAssets(ctx context.Context, orgID, source, sourceID stri
 	return out, rows.Err()
 }
 
+// MirroredReaction links a reaction mirrored across tools. Fields use envelope
+// vocabulary (event_source / parent_source / counterpart_source) so additional
+// providers can share the table without Linear/Slack-named columns.
+type MirroredReaction struct {
+	OrgID               string
+	EventSource         string
+	EventSourceID       string
+	ParentSource        string
+	ParentSourceID      string
+	Emoji               string
+	CounterpartSource   string
+	CounterpartParentID string
+	CounterpartEmoji    string
+}
+
+// RecordMirroredReaction stores a mirror link after a successful sync.
+// Idempotent on (org, event_source, event_source_id).
+func (s *Store) RecordMirroredReaction(ctx context.Context, orgID string, r MirroredReaction) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mirrored_reactions (
+			org_id, event_source, event_source_id,
+			parent_source, parent_source_id, emoji,
+			counterpart_source, counterpart_parent_id, counterpart_emoji)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (org_id, event_source, event_source_id) DO NOTHING
+	`, orgID, r.EventSource, r.EventSourceID,
+		r.ParentSource, r.ParentSourceID, r.Emoji,
+		r.CounterpartSource, r.CounterpartParentID, r.CounterpartEmoji)
+	if err != nil {
+		return fmt.Errorf("store: record mirrored reaction: %w", err)
+	}
+	return nil
+}
+
+// MirroredReactionBySource looks up a row by the native reaction id side.
+func (s *Store) MirroredReactionBySource(ctx context.Context, orgID, eventSource, eventSourceID string) (MirroredReaction, error) {
+	return s.scanMirroredReaction(ctx, `
+		SELECT org_id, event_source, event_source_id,
+		       parent_source, parent_source_id, emoji,
+		       counterpart_source, counterpart_parent_id, counterpart_emoji
+		FROM mirrored_reactions
+		WHERE org_id = $1 AND event_source = $2 AND event_source_id = $3
+	`, orgID, eventSource, eventSourceID)
+}
+
+// MirroredReactionByCounterpart looks up a row by the counterpart parent + emoji
+// (e.g. Slack channel:ts + shortcode) so remove can resolve the Linear reaction id.
+func (s *Store) MirroredReactionByCounterpart(ctx context.Context, orgID, counterpartSource, counterpartParentID, counterpartEmoji string) (MirroredReaction, error) {
+	return s.scanMirroredReaction(ctx, `
+		SELECT org_id, event_source, event_source_id,
+		       parent_source, parent_source_id, emoji,
+		       counterpart_source, counterpart_parent_id, counterpart_emoji
+		FROM mirrored_reactions
+		WHERE org_id = $1 AND counterpart_source = $2
+		  AND counterpart_parent_id = $3 AND counterpart_emoji = $4
+	`, orgID, counterpartSource, counterpartParentID, counterpartEmoji)
+}
+
+// DeleteMirroredReaction removes a mirror row after a successful unreact.
+func (s *Store) DeleteMirroredReaction(ctx context.Context, orgID, eventSource, eventSourceID string) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM mirrored_reactions
+		WHERE org_id = $1 AND event_source = $2 AND event_source_id = $3
+	`, orgID, eventSource, eventSourceID)
+	if err != nil {
+		return fmt.Errorf("store: delete mirrored reaction: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) scanMirroredReaction(ctx context.Context, query string, args ...any) (MirroredReaction, error) {
+	var r MirroredReaction
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
+		&r.OrgID, &r.EventSource, &r.EventSourceID,
+		&r.ParentSource, &r.ParentSourceID, &r.Emoji,
+		&r.CounterpartSource, &r.CounterpartParentID, &r.CounterpartEmoji)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MirroredReaction{}, ErrNotFound
+	}
+	if err != nil {
+		return MirroredReaction{}, fmt.Errorf("store: scan mirrored reaction: %w", err)
+	}
+	return r, nil
+}
+
 func (s *Store) scanLink(ctx context.Context, query string, args ...any) (MirroredMessage, error) {
 	var m MirroredMessage
 	err := s.pool.QueryRow(ctx, query, args...).Scan(

@@ -15,6 +15,8 @@ func TestNormalizeLinearType(t *testing.T) {
 		{"Comment", "comment", "comment"},
 		{"WorkflowState", "workflow_state", "workflow_state"},
 		{"workflow_state", "workflow_state", "workflow_state"},
+		{"Reaction", "reaction", "reaction"},
+		{"reaction", "reaction", "reaction"},
 	}
 	for _, c := range cases {
 		typ, key := normalizeLinearType(c.in)

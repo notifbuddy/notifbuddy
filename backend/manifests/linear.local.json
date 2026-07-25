@@ -1,0 +1,29 @@
+{
+  "$schema": "https://linear.app/.well-known/oauth-app-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "distribution": "private",
+  "display": {
+    "description": "notifbuddy local development — two-way Linear ⇄ Slack sync (dev instance, not the marketplace app)"
+  },
+  "developer": {
+    "name": "notifbuddy-local"
+  },
+  "oauth": {
+    "client_name": "notifbuddy-local",
+    "client_uri": "http://localhost:5173",
+    "redirect_uris": [
+      "http://localhost:8080/integrations/linear/callback"
+    ],
+    "grant_types": [
+      "authorization_code"
+    ]
+  },
+  "webhook": {
+    "url": "https://your-dev-tunnel.example.com/integrations/linear/webhook",
+    "resourceTypes": [
+      "Issue",
+      "Comment",
+      "Reaction"
+    ]
+  }
+}

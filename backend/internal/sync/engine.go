@@ -39,6 +39,8 @@ type SlackActions interface {
 	DownloadFile(ctx context.Context, token, fileURL string) ([]byte, error)
 	UploadFile(ctx context.Context, token string, opts slackapi.UploadOptions) error
 	UpdateMessage(ctx context.Context, token string, opts slackapi.UpdateOptions) error
+	AddReaction(ctx context.Context, token, channelID, ts, name string) error
+	RemoveReaction(ctx context.Context, token, channelID, ts, name string) error
 }
 
 // Integrations is the subset of integrations.Service the engine needs: token
@@ -48,6 +50,8 @@ type SlackActions interface {
 type Integrations interface {
 	SlackBotToken(ctx context.Context, orgID string) (string, error)
 	LinearCreateComment(ctx context.Context, orgID string, in integrations.LinearCreateCommentInput) (integrations.LinearComment, error)
+	LinearCreateReaction(ctx context.Context, orgID, commentID, emoji string) (reactionID string, err error)
+	LinearDeleteReaction(ctx context.Context, orgID, reactionID string) error
 	LinearIssueByID(ctx context.Context, orgID, issueID string) (integrations.LinearIssue, error)
 	// LinearIssueInvitees returns creator/assignee/profile-mentioned users for
 	// inviting into a newly created Slack channel. extraBodies are additional
@@ -96,6 +100,11 @@ type Store interface {
 	// post-create update).
 	RecordMirroredAsset(ctx context.Context, orgID, source, sourceID string, a store.MirroredAsset) error
 	MirroredAssets(ctx context.Context, orgID, source, sourceID string) ([]store.MirroredAsset, error)
+
+	RecordMirroredReaction(ctx context.Context, orgID string, r store.MirroredReaction) error
+	MirroredReactionBySource(ctx context.Context, orgID, eventSource, eventSourceID string) (store.MirroredReaction, error)
+	MirroredReactionByCounterpart(ctx context.Context, orgID, counterpartSource, counterpartParentID, counterpartEmoji string) (store.MirroredReaction, error)
+	DeleteMirroredReaction(ctx context.Context, orgID, eventSource, eventSourceID string) error
 
 	// PatchLinearTeamState applies a single WorkflowState webhook to a team's
 	// synced status snapshot (upsert, or remove when removed=true).
