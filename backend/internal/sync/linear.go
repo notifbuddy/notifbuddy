@@ -217,7 +217,7 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	if !create {
 		return nil
 	}
-	return e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode)
+	return e.ensureChannel(ctx, orgID, issueID, settings, evt, settings.CreationMode, channelInviteExtras{})
 }
 
 // settingForIssue resolves the config that applies to an issue event's team.
@@ -674,13 +674,14 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 	if !ok || !botMentioned(body, bot.SlackUserID, bot.SlackDisplayName) {
 		return false
 	}
-	return e.runNotifBuddyCommand(ctx, orgID, issueID, body, p)
+	return e.runNotifBuddyCommand(ctx, orgID, issueID, body, "", p)
 }
 
 // runNotifBuddyCommand classifies body and performs create/close. Caller has
 // already verified the bot was mentioned. Returns true when the body was a
-// create/close command (mirroring should stop).
-func (e *Engine) runNotifBuddyCommand(ctx context.Context, orgID, issueID, body string, p *linearPayload) bool {
+// create/close command (mirroring should stop). slackAuthorID is the Slack user
+// who typed the command when the create originated in Slack (empty on Linear).
+func (e *Engine) runNotifBuddyCommand(ctx context.Context, orgID, issueID, body, slackAuthorID string, p *linearPayload) bool {
 	if p == nil {
 		p = &linearPayload{}
 		p.Linear.Type = "comment"
@@ -705,8 +706,15 @@ func (e *Engine) runNotifBuddyCommand(ctx context.Context, orgID, issueID, body 
 			return true // no config applies to this issue's team
 		}
 		evt := template.Event{EventType: "linear", Linear: envelopeLinear(*p)}
+		extras := channelInviteExtras{
+			Bodies:   []string{body},
+			SlackIDs: []string{slackAuthorID},
+		}
+		if email := strings.TrimSpace(p.Linear.Actor.Email); email != "" {
+			extras.Emails = []string{email}
+		}
 		if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err != nil {
-			if err := e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy"); err != nil {
+			if err := e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy", extras); err != nil {
 				slog.ErrorContext(ctx, "sync: notifbuddy create failed", "org_id", orgID, "issue_id", issueID, "error", err)
 			}
 		}

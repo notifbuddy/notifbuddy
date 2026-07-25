@@ -133,7 +133,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 
 	// @bot command? Classify before mirroring; a create/close short-circuits.
 	if botOK && e.classifier != nil && botMentioned(ev.Text, bot.SlackUserID, bot.SlackDisplayName) {
-		if e.runNotifBuddyCommand(ctx, ref.OrgID, issueID, ev.Text, nil) {
+		if e.runNotifBuddyCommand(ctx, ref.OrgID, issueID, ev.Text, ev.User, nil) {
 			return nil
 		}
 	}
