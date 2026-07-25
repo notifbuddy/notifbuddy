@@ -49,8 +49,7 @@ data:
       kms_key_id: ""
 
     pubsub:
-      # Events ride on the application database (watermill). The GCP Pub/Sub
-      # provider is for our own deployment and needs GCP credentials.
+      # Events ride on the application database (watermill).
       provider: "postgres"
       postgres:
         poll_interval: "1s"
