@@ -301,11 +301,11 @@ func ArchiveTriggered(tmpl template.Engine, s LinearSettings, stateName string, 
 	}
 }
 
-// EventStateName extracts linear.data.state.name from an event envelope, for
+// EventStateName extracts linear.issue.state.name from an event envelope, for
 // evaluating status-mode triggers outside the engine's typed payload.
 func EventStateName(evt template.Event) string {
-	data, _ := evt.Linear["data"].(map[string]any)
-	state, _ := data["state"].(map[string]any)
+	issue, _ := evt.Linear["issue"].(map[string]any)
+	state, _ := issue["state"].(map[string]any)
 	name, _ := state["name"].(string)
 	return name
 }

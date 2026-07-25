@@ -10,11 +10,11 @@
       "url": "https://linear.app/skogai/profiles/skogix"
     },
     "createdAt": "2026-04-18T14:06:29.000Z",
-    "type": "WorkflowState",
+    "type": "workflow_state",
     "organizationId": "b1e3f0f4-1c2d-4a5b-9e6f-7a8b9c0d1e2f",
     "webhookId": "sample-webhook-id",
     "webhookTimestamp": 1776470789000,
-    "data": {
+    "workflow_state": {
       "id": "065a2424-81d9-479d-84b8-ea8b1f20cf67",
       "name": "In Review",
       "type": "started",

@@ -1369,7 +1369,7 @@ components:
           example: "2026-06-26T12:00:00Z"
         payload:
           type: string
-          description: The raw webhook JSON payload (as a string).
+          description: The stored event envelope JSON (as a string).
       required:
         - deliveryId
         - eventType
@@ -1421,7 +1421,7 @@ components:
         nameTemplate:
           type: string
           description: GitHub-Actions-expression template for the channel name.
-          example: tkt-${{ linear.data.identifier }}
+          example: tkt-${{ linear.issue.identifier }}
         conditionExpr:
           type: string
           description: GitHub-Actions-expression that must be true for creation.
@@ -1442,7 +1442,7 @@ components:
         archiveConditionExpr:
           type: string
           description: GitHub-Actions-expression that must be true for archiving.
-          example: linear.data.state.type == 'completed'
+          example: linear.issue.state.type == 'completed'
         autoAddMembers:
           type: array
           description: Slack member ids (U…) — bots and people — to auto-add on channel creation.
@@ -1583,7 +1583,7 @@ components:
       properties:
         nameTemplate:
           type: string
-          example: tkt-${{ linear.data.identifier }}
+          example: tkt-${{ linear.issue.identifier }}
         creationMode:
           type: string
           description: The creation trigger mode (status | manual | condition).
@@ -1595,7 +1595,7 @@ components:
         condition:
           type: string
           description: The channel-creation condition expression.
-          example: linear.data.state.name == 'Done'
+          example: linear.issue.state.name == 'Done'
         archiveMode:
           type: string
           description: The archive trigger mode (status | manual | condition).
@@ -1607,7 +1607,7 @@ components:
         archiveCondition:
           type: string
           description: The channel-archive condition expression.
-          example: linear.data.state.type == 'completed'
+          example: linear.issue.state.type == 'completed'
         sampleId:
           type: string
           description: Id of a built-in sample event.

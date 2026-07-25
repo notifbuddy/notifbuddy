@@ -10,7 +10,18 @@
       "url": "https://linear.app/skogai/profiles/skogix"
     },
     "createdAt": "2026-04-18T12:24:02.756Z",
-    "data": {
+    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
+    "type": "issue",
+    "updatedFrom": {
+      "completedAt": null,
+      "sortOrder": -3076,
+      "stateId": "aabc7e7e-aeb7-4de6-9a43-92eaf5c1e263",
+      "updatedAt": "2026-04-18T12:12:04.022Z"
+    },
+    "url": "https://linear.app/skogai/issue/SKO-177/test-issue",
+    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
+    "webhookTimestamp": 1776515043292,
+    "issue": {
       "addedToTeamAt": "2026-04-18T11:55:21.686Z",
       "assignee": {
         "email": "user@example.com",
@@ -76,17 +87,6 @@
       "title": "test-issue",
       "updatedAt": "2026-04-18T12:24:02.755Z",
       "url": "https://linear.app/skogai/issue/SKO-177/test-issue"
-    },
-    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
-    "type": "Issue",
-    "updatedFrom": {
-      "completedAt": null,
-      "sortOrder": -3076,
-      "stateId": "aabc7e7e-aeb7-4de6-9a43-92eaf5c1e263",
-      "updatedAt": "2026-04-18T12:12:04.022Z"
-    },
-    "url": "https://linear.app/skogai/issue/SKO-177/test-issue",
-    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
-    "webhookTimestamp": 1776515043292
+    }
   }
 }

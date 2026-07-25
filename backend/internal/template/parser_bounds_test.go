@@ -22,7 +22,7 @@ func TestParse_DepthBounded(t *testing.T) {
 		}
 	}
 	// A legitimately shaped expression still parses.
-	if _, err := parse("linear.action == 'update' && !(linear.data.number > 3)"); err != nil {
+	if _, err := parse("linear.action == 'update' && !(linear.issue.number > 3)"); err != nil {
 		t.Fatalf("normal expression should parse, got: %v", err)
 	}
 }

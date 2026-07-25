@@ -940,7 +940,7 @@ export interface components {
             triggerStatus?: string;
             /**
              * @description GitHub-Actions-expression template for the channel name.
-             * @example tkt-${{ linear.data.identifier }}
+             * @example tkt-${{ linear.issue.identifier }}
              */
             nameTemplate?: string;
             /**
@@ -964,7 +964,7 @@ export interface components {
             archiveStatus?: string;
             /**
              * @description GitHub-Actions-expression that must be true for archiving.
-             * @example linear.data.state.type == 'completed'
+             * @example linear.issue.state.type == 'completed'
              */
             archiveConditionExpr?: string;
             /**
@@ -1055,7 +1055,7 @@ export interface components {
          *     rules (mode-aware), so the result answers "what would this event do?".
          */
         TemplateTestRequest: {
-            /** @example tkt-${{ linear.data.identifier }} */
+            /** @example tkt-${{ linear.issue.identifier }} */
             nameTemplate?: string;
             /**
              * @description The creation trigger mode (status | manual | condition).
@@ -1069,7 +1069,7 @@ export interface components {
             triggerStatus?: string;
             /**
              * @description The channel-creation condition expression.
-             * @example linear.data.state.name == 'Done'
+             * @example linear.issue.state.name == 'Done'
              */
             condition?: string;
             /**
@@ -1084,7 +1084,7 @@ export interface components {
             archiveStatus?: string;
             /**
              * @description The channel-archive condition expression.
-             * @example linear.data.state.type == 'completed'
+             * @example linear.issue.state.type == 'completed'
              */
             archiveCondition?: string;
             /**

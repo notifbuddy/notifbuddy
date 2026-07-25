@@ -26,7 +26,9 @@ import (
 func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, settings integrations.LinearSettings, evt template.Event, trigger string) error {
 	// Condition gate (if configured): must evaluate true to proceed. Eval errors
 	// are deterministic (bad expression), so retrying can't help.
-	if settings.ConditionExpr != "" {
+	// @notifbuddy is explicit user intent — never re-apply the auto-create
+	// condition on a manual command.
+	if trigger != "notifbuddy" && settings.ConditionExpr != "" {
 		ok, err := e.tmpl.Evaluate(settings.ConditionExpr, evt)
 		if err != nil {
 			slog.WarnContext(ctx, "sync: ensureChannel: condition eval failed", "error", err)
@@ -125,8 +127,8 @@ func (e *Engine) channelName(settings integrations.LinearSettings, evt template.
 		name = rendered
 	}
 	if strings.TrimSpace(name) == "" {
-		// Fallback: tkt-<identifier> from the event data.
-		if id, ok := evt.Linear["data"].(map[string]any); ok {
+		// Fallback: tkt-<identifier> from the normalized issue object.
+		if id, ok := evt.Linear["issue"].(map[string]any); ok {
 			if ident, ok := id["identifier"].(string); ok && ident != "" {
 				name = "tkt-" + ident
 			}

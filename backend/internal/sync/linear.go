@@ -38,34 +38,31 @@ type linearActor struct {
 	Type  string `json:"type"`
 }
 
-// linearData is the subset of a Linear webhook's `data` we read, covering Issue
-// events (identifier/state/team), Comment events (body/issue/parent), and
-// WorkflowState events (id/name/type/color/position/team).
-type linearData struct {
+// linearIssueEntity is the subset of linear.issue we read (Issue events, or
+// the injected issue on Comment events).
+type linearIssueEntity struct {
 	ID         string `json:"id"`
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
 	State      struct {
 		Name string `json:"name"`
 	} `json:"state"`
-	// TeamID identifies the issue's (or workflow state's) team. Present on Issue
-	// events (data.teamId) and used to resolve which config applies.
 	TeamID string `json:"teamId"`
 	Team   struct {
 		ID string `json:"id"`
 	} `json:"team"`
-	// WorkflowState fields (type == "WorkflowState"): the status itself.
-	Name     string  `json:"name"`
-	Type     string  `json:"type"`
-	Color    string  `json:"color"`
-	Position float64 `json:"position"`
 	// botActor is present when the action was performed by an OAuth app
 	// (actor=app) — i.e. by us. Its presence is the Defense-1 signal.
 	BotActor *json.RawMessage `json:"botActor"`
-	// Comment fields.
-	Body    string `json:"body"`
-	IssueID string `json:"issueId"`
-	Issue   struct {
+}
+
+// linearCommentEntity is linear.comment (former Comment webhook data).
+type linearCommentEntity struct {
+	ID       string           `json:"id"`
+	Body     string           `json:"body"`
+	IssueID  string           `json:"issueId"`
+	BotActor *json.RawMessage `json:"botActor"`
+	Issue    struct {
 		ID string `json:"id"`
 	} `json:"issue"`
 	ParentID string `json:"parentId"`
@@ -74,19 +71,42 @@ type linearData struct {
 	} `json:"parent"`
 }
 
-// linearPayload is the stored event envelope: the writer
-// (integrations.WriteLinearWebhook) wraps Linear's raw webhook body under
-// `linear` with a top-level `event_source`, so future sources and
-// notifbuddy-side metadata can ride at the top level without touching the
-// provider payload.
+// linearWorkflowStateEntity is linear.workflow_state.
+type linearWorkflowStateEntity struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Type     string  `json:"type"`
+	Color    string  `json:"color"`
+	Position float64 `json:"position"`
+	TeamID   string  `json:"teamId"`
+	Team     struct {
+		ID string `json:"id"`
+	} `json:"team"`
+}
+
+// linearPayload is the stored event envelope after WriteLinearWebhook
+// normalizes Linear's webhook (lowercase type, typed entity keys, comment→issue
+// injection) and wraps it under `linear` with a top-level `event_source`.
 type linearPayload struct {
 	EventSource string `json:"event_source"`
 	Linear      struct {
-		Action string      `json:"action"`
-		Type   string      `json:"type"`
-		Actor  linearActor `json:"actor"`
-		Data   linearData  `json:"data"`
+		Action        string                     `json:"action"`
+		Type          string                     `json:"type"`
+		Actor         linearActor                `json:"actor"`
+		Issue         *linearIssueEntity         `json:"issue,omitempty"`
+		Comment       *linearCommentEntity       `json:"comment,omitempty"`
+		WorkflowState *linearWorkflowStateEntity `json:"workflow_state,omitempty"`
 	} `json:"linear"`
+}
+
+func (p linearPayload) botActor() *json.RawMessage {
+	if p.Linear.Comment != nil && p.Linear.Comment.BotActor != nil {
+		return p.Linear.Comment.BotActor
+	}
+	if p.Linear.Issue != nil && p.Linear.Issue.BotActor != nil {
+		return p.Linear.Issue.BotActor
+	}
+	return nil
 }
 
 // OnLinearEvent is the subscriber for integrations.linear.webhook_event. A
@@ -123,16 +143,16 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	// Defense 1: drop events our own Linear app caused. When we create a comment
 	// with actor=app, the resulting webhook carries a botActor — dropping it
 	// stops the echo from bouncing back into Slack.
-	if p.Linear.Data.BotActor != nil {
+	if p.botActor() != nil {
 		return nil
 	}
 
 	switch p.Linear.Type {
-	case "Issue":
+	case "issue":
 		return e.onLinearIssue(ctx, ref.OrgID, p)
-	case "Comment":
-		return e.onLinearComment(ctx, ref.OrgID, raw, p)
-	case "WorkflowState":
+	case "comment":
+		return e.onLinearComment(ctx, ref.OrgID, p)
+	case "workflow_state":
 		return e.onLinearWorkflowState(ctx, ref.OrgID, p)
 	}
 	return nil
@@ -145,13 +165,16 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 // evaluate against the forwarded event envelope, exactly as the settings test
 // UI does.
 func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayload) error {
+	if p.Linear.Issue == nil {
+		return nil
+	}
 	settings, ok := e.settingForIssue(ctx, orgID, p)
 	if !ok {
 		return nil // no config applies to this issue's team
 	}
-	issueID := p.Linear.Data.ID
+	issueID := p.Linear.Issue.ID
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
-	stateName := p.Linear.Data.State.Name
+	stateName := p.Linear.Issue.State.Name
 
 	// Serialize concurrent deliveries of this same issue: Pub/Sub push is
 	// at-least-once and concurrent, so without this two deliveries could both
@@ -201,9 +224,12 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 // Returns ok=false (and logs only real errors) when the team is unmapped —
 // an unmapped team is an explicit "do nothing", not an error.
 func (e *Engine) settingForIssue(ctx context.Context, orgID string, p linearPayload) (integrations.LinearSettings, bool) {
-	teamID := p.Linear.Data.TeamID
+	if p.Linear.Issue == nil {
+		return integrations.LinearSettings{}, false
+	}
+	teamID := p.Linear.Issue.TeamID
 	if teamID == "" {
-		teamID = p.Linear.Data.Team.ID
+		teamID = p.Linear.Issue.Team.ID
 	}
 	if teamID == "" {
 		return integrations.LinearSettings{}, false
@@ -229,7 +255,10 @@ func (e *Engine) settingForTeam(ctx context.Context, orgID, teamID string) (inte
 // create/update upserts the state into its team's list; a remove deletes it.
 // This is what powers the settings status dropdown between full syncs.
 func (e *Engine) onLinearWorkflowState(ctx context.Context, orgID string, p linearPayload) error {
-	d := p.Linear.Data
+	d := p.Linear.WorkflowState
+	if d == nil {
+		return nil
+	}
 	teamID := d.Team.ID
 	if teamID == "" {
 		teamID = d.TeamID
@@ -281,8 +310,11 @@ func parseLinearUploads(body string) []linearUpload {
 // or handles an @notifbuddy command in the comment body. Errors before the
 // Slack post are returned for retry; failures after it are only logged so a
 // redelivery can't double-post.
-func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, p linearPayload) error {
-	d := p.Linear.Data
+func (e *Engine) onLinearComment(ctx context.Context, orgID string, p linearPayload) error {
+	d := p.Linear.Comment
+	if d == nil {
+		return nil
+	}
 	if p.Linear.Action == "update" {
 		// Text edits are out of scope, but Linear attaches comment files
 		// asynchronously — the embed lands in an update seconds after create —
@@ -296,13 +328,17 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 	if issueID == "" {
 		issueID = d.Issue.ID
 	}
+	if issueID == "" && p.Linear.Issue != nil {
+		issueID = p.Linear.Issue.ID
+	}
 	if issueID == "" {
 		return nil
 	}
 
 	// @notifbuddy command? Classify the body; a create/close command short-
-	// circuits mirroring.
-	if e.handleNotifBuddy(ctx, orgID, issueID, d.Body, raw) {
+	// circuits mirroring. The normalized envelope already carries linear.issue
+	// (injected at ingest) for naming templates.
+	if e.handleNotifBuddy(ctx, orgID, issueID, d.Body, &p) {
 		return nil
 	}
 
@@ -425,7 +461,10 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, raw []byte, 
 // entity; other files share into the thread. Only uploads not yet in
 // mirrored_assets sync — text edits never re-post, redelivered updates no-op.
 func (e *Engine) onLinearCommentUpdate(ctx context.Context, orgID string, p linearPayload) error {
-	d := p.Linear.Data
+	d := p.Linear.Comment
+	if d == nil {
+		return nil
+	}
 	uploads := parseLinearUploads(d.Body)
 	if len(uploads) == 0 {
 		return nil
@@ -617,24 +656,32 @@ func (e *Engine) shareFiles(ctx context.Context, orgID, commentID, token, channe
 // Commands stay best-effort: failures are logged, never retried via
 // redelivery — re-running the classifier on a redelivered comment could
 // re-execute a command the user already saw take effect.
-func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body string, raw []byte) bool {
+//
+// p is the normalized comment envelope (already includes injected issue when
+// ingest succeeded). On create fallback it may set p.Linear.Issue.
+func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body string, p *linearPayload) bool {
 	if e.classifier == nil || !strings.Contains(strings.ToLower(body), "notifbuddy") {
 		return false
 	}
 	switch e.classifier.Classify(ctx, body) {
 	case intent.CreateChannel:
-		// Resolve which config applies via the issue's team. The comment webhook
-		// doesn't reliably carry the team, so fetch the issue for it.
-		issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
-		if err != nil {
-			slog.ErrorContext(ctx, "sync: notifbuddy create: fetch issue failed", "org_id", orgID, "issue_id", issueID, "error", err)
-			return true
+		teamID := teamIDFromIssue(p.Linear.Issue)
+		if teamID == "" {
+			// Fallback when ingest couldn't inject the issue (e.g. org unknown).
+			issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
+			if err != nil {
+				slog.ErrorContext(ctx, "sync: notifbuddy create: fetch issue failed", "org_id", orgID, "issue_id", issueID, "error", err)
+				return true
+			}
+			teamID = issue.TeamID
+			p.Linear.Type = "comment"
+			p.Linear.Issue = issueEntityFromLinearIssue(issue)
 		}
-		settings, ok := e.settingForTeam(ctx, orgID, issue.TeamID)
+		settings, ok := e.settingForTeam(ctx, orgID, teamID)
 		if !ok {
 			return true // no config applies to this issue's team
 		}
-		evt := template.Event{EventType: "linear", Linear: envelopeLinearRaw(raw)}
+		evt := template.Event{EventType: "linear", Linear: envelopeLinear(*p)}
 		if _, err := e.store.ChannelForIssue(ctx, orgID, issueID); err != nil {
 			if err := e.ensureChannel(ctx, orgID, issueID, settings, evt, "notifbuddy"); err != nil {
 				slog.ErrorContext(ctx, "sync: notifbuddy create failed", "org_id", orgID, "issue_id", issueID, "error", err)
@@ -651,24 +698,39 @@ func (e *Engine) handleNotifBuddy(ctx context.Context, orgID, issueID, body stri
 	}
 }
 
-// envelopeLinear rebuilds the { action, type, actor, data } map the template
-// engine walks, from the typed payload. We round-trip through JSON so the
-// template sees the same shape the settings test UI does.
+// teamIDFromIssue reads the team id from a typed linear.issue entity.
+func teamIDFromIssue(issue *linearIssueEntity) string {
+	if issue == nil {
+		return ""
+	}
+	if issue.TeamID != "" {
+		return issue.TeamID
+	}
+	return issue.Team.ID
+}
+
+// issueEntityFromLinearIssue maps the integrations fetch result onto the
+// sync engine's typed issue entity (for template naming / team resolve).
+func issueEntityFromLinearIssue(issue integrations.LinearIssue) *linearIssueEntity {
+	ent := &linearIssueEntity{
+		ID:         issue.ID,
+		Identifier: issue.Identifier,
+		Title:      issue.Title,
+		TeamID:     issue.TeamID,
+	}
+	ent.State.Name = issue.StateName
+	ent.Team.ID = issue.TeamID
+	return ent
+}
+
+// envelopeLinear rebuilds the normalized linear object the template engine
+// walks, from the typed payload. We round-trip through JSON so the template
+// sees the same shape the settings test UI does.
 func envelopeLinear(p linearPayload) map[string]any {
 	b, _ := json.Marshal(p.Linear)
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
 	return m
-}
-
-// envelopeLinearRaw extracts the raw `linear` object from a stored payload for
-// template evaluation (preserves every field, not just the typed subset).
-func envelopeLinearRaw(raw []byte) map[string]any {
-	var wrap struct {
-		Linear map[string]any `json:"linear"`
-	}
-	_ = json.Unmarshal(raw, &wrap)
-	return wrap.Linear
 }
 
 func firstNonEmpty(a, b string) string {

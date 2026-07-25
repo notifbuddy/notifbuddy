@@ -101,7 +101,7 @@
 
 	// Default channel-name template for new configs; also the input placeholder
 	// so the two never drift. lowercase() is one of our hbs-style helpers.
-	const DEFAULT_NAME_TEMPLATE = 'tkt-${{ lowercase(linear.data.identifier) }}';
+	const DEFAULT_NAME_TEMPLATE = 'tkt-${{ lowercase(linear.issue.identifier) }}';
 
 	function toDraft(s: LinearSettings): Draft {
 		return {
@@ -627,7 +627,7 @@
 									<Textarea
 										bind:value={d.conditionExpr}
 										class="min-h-20 font-mono text-xs"
-										placeholder={"linear.data.state.name == 'Done'"}
+										placeholder={"linear.issue.state.name == 'Done'"}
 										oninput={() => markEdited(d)}
 									/>
 									<Field.FieldDescription>
@@ -678,7 +678,7 @@
 									<Textarea
 										bind:value={d.archiveConditionExpr}
 										class="min-h-20 font-mono text-xs"
-										placeholder={"linear.data.state.type == 'completed'"}
+										placeholder={"linear.issue.state.type == 'completed'"}
 										oninput={() => markEdited(d)}
 									/>
 									<Field.FieldDescription>
@@ -729,7 +729,9 @@
 							<Collapsible.Content class="flex flex-col gap-3 pt-3">
 								<p class="text-muted-foreground text-xs">
 									Preview what this config would do for a sample or pasted event: the channel name and
-									whether the create/archive triggers fire.
+									whether the create/archive triggers fire. Samples use NotifBuddy's transformed
+									envelope (<code class="text-xs">linear.issue</code> /
+									<code class="text-xs">linear.comment</code>), not Linear's raw webhook shape.
 								</p>
 								<Select.Root type="single" value={sampleId} onValueChange={selectSample}>
 								<Select.Trigger class="w-full">{sampleLabel}</Select.Trigger>

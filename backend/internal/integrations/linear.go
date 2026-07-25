@@ -586,35 +586,114 @@ type LinearIssue struct {
 	TeamID     string // owning team's id (resolves the applicable config)
 }
 
+// linearIssueQuery fetches the fields templates and sync need when injecting
+// an issue into a Comment envelope (and for LinearIssueByID).
+const linearIssueQuery = `query($id: String!) {
+	issue(id: $id) {
+		id identifier title number description url
+		state { id name type color }
+		team { id key name }
+		labels { nodes { id name color } }
+		assignee { id name email }
+	}
+}`
+
+type linearIssueGQL struct {
+	ID          string `json:"id"`
+	Identifier  string `json:"identifier"`
+	Title       string `json:"title"`
+	Number      int    `json:"number"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
+	State       struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Type  string `json:"type"`
+		Color string `json:"color"`
+	} `json:"state"`
+	Team struct {
+		ID   string `json:"id"`
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	} `json:"team"`
+	Labels struct {
+		Nodes []struct {
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			Color string `json:"color"`
+		} `json:"nodes"`
+	} `json:"labels"`
+	Assignee *struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	} `json:"assignee"`
+}
+
 // LinearIssueByID fetches an issue by id using the org's workspace token.
 func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (LinearIssue, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
+	i, err := s.fetchLinearIssue(ctx, orgID, issueID)
 	if err != nil {
 		return LinearIssue{}, err
 	}
-	const query = `query($id: String!) {
-		issue(id: $id) { id identifier title state { name } team { id } }
-	}`
+	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name, TeamID: i.Team.ID}, nil
+}
+
+// LinearIssueMapByID fetches an issue and returns a map shaped like Linear's
+// webhook issue `data` (labels as a flat array, teamId, state object, …) for
+// injection into Comment envelopes and template evaluation.
+func (s *Service) LinearIssueMapByID(ctx context.Context, orgID, issueID string) (map[string]any, error) {
+	i, err := s.fetchLinearIssue(ctx, orgID, issueID)
+	if err != nil {
+		return nil, err
+	}
+	labels := make([]any, 0, len(i.Labels.Nodes))
+	for _, l := range i.Labels.Nodes {
+		labels = append(labels, map[string]any{"id": l.ID, "name": l.Name, "color": l.Color})
+	}
+	out := map[string]any{
+		"id":          i.ID,
+		"identifier":  i.Identifier,
+		"title":       i.Title,
+		"number":      i.Number,
+		"description": i.Description,
+		"url":         i.URL,
+		"teamId":      i.Team.ID,
+		"stateId":     i.State.ID,
+		"state": map[string]any{
+			"id": i.State.ID, "name": i.State.Name, "type": i.State.Type, "color": i.State.Color,
+		},
+		"team": map[string]any{
+			"id": i.Team.ID, "key": i.Team.Key, "name": i.Team.Name,
+		},
+		"labels": labels,
+	}
+	if i.Assignee != nil {
+		out["assigneeId"] = i.Assignee.ID
+		out["assignee"] = map[string]any{
+			"id": i.Assignee.ID, "name": i.Assignee.Name, "email": i.Assignee.Email,
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) fetchLinearIssue(ctx context.Context, orgID, issueID string) (linearIssueGQL, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return linearIssueGQL{}, err
+	}
 	var resp struct {
 		Data struct {
-			Issue struct {
-				ID         string `json:"id"`
-				Identifier string `json:"identifier"`
-				Title      string `json:"title"`
-				State      struct {
-					Name string `json:"name"`
-				} `json:"state"`
-				Team struct {
-					ID string `json:"id"`
-				} `json:"team"`
-			} `json:"issue"`
+			Issue linearIssueGQL `json:"issue"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, query, map[string]any{"id": issueID}, &resp); err != nil {
-		return LinearIssue{}, err
+	if err := s.linearGraphQL(ctx, token, linearIssueQuery, map[string]any{"id": issueID}, &resp); err != nil {
+		return linearIssueGQL{}, err
 	}
-	i := resp.Data.Issue
-	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name, TeamID: i.Team.ID}, nil
+	if resp.Data.Issue.ID == "" {
+		return linearIssueGQL{}, fmt.Errorf("linear issue %s: not found", issueID)
+	}
+	return resp.Data.Issue, nil
 }
 
 // LinearWorkflowState is one workflow state (issue status) of a team.

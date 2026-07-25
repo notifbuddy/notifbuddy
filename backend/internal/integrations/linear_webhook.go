@@ -129,22 +129,33 @@ func (s *Service) WriteLinearWebhook(ctx context.Context, msg pubsub.Message) er
 		WorkspaceID: msg.Attributes["workspace_id"],
 	}
 
-	// Resolve which org owns this workspace (best-effort).
+	// Resolve which org owns this workspace (best-effort). Needed before
+	// normalization so Comment events can inject the parent issue via GraphQL.
 	if evt.WorkspaceID != "" {
 		if id, err := s.store.OrgIDByLinearWorkspace(ctx, evt.WorkspaceID); err == nil {
 			evt.OrgID = id
 		}
 	}
 
-	// Transform the raw webhook into the stored envelope: the provider body
-	// moves under `linear` with a top-level `event_source` tag. Everything
-	// downstream (the sync engine, template evaluation) acts on this shape, and
-	// future sources or notifbuddy-side metadata get their own top-level keys
-	// without touching the provider payload.
+	// Normalize Linear's raw webhook into the NotifBuddy envelope shape
+	// (lowercase type, typed entity keys, comment→issue injection), then wrap
+	// under `linear` with a top-level `event_source` tag. Everything downstream
+	// (sync engine, template evaluation, settings test panel) acts on this shape.
+	normalized, err := s.normalizeLinearEnvelope(ctx, evt.OrgID, msg.Payload)
+	if err != nil {
+		return fmt.Errorf("normalize linear webhook %s: %w", evt.DeliveryID, err)
+	}
+	if t, _ := normalized["type"].(string); t != "" {
+		evt.EventType = t
+	}
+	linearRaw, err := json.Marshal(normalized)
+	if err != nil {
+		return fmt.Errorf("marshal normalized linear webhook %s: %w", evt.DeliveryID, err)
+	}
 	stored, err := json.Marshal(struct {
 		EventSource string          `json:"event_source"`
 		Linear      json.RawMessage `json:"linear"`
-	}{EventSource: "linear", Linear: json.RawMessage(msg.Payload)})
+	}{EventSource: "linear", Linear: linearRaw})
 	if err != nil {
 		return fmt.Errorf("wrap linear webhook %s: %w", evt.DeliveryID, err)
 	}

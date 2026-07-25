@@ -10,7 +10,12 @@
       "url": "https://linear.app/skogai/profiles/skogix"
     },
     "createdAt": "2026-04-18T14:06:29.000Z",
-    "data": {
+    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
+    "type": "issue",
+    "url": "https://linear.app/skogai/issue/SKO-178/bug-core-tooling-missing-on-non-skogix-containers-staging-deployment",
+    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
+    "webhookTimestamp": 1776521193454,
+    "issue": {
       "addedToTeamAt": "2026-04-18T14:06:32.390Z",
       "botActor": null,
       "createdAt": "2026-04-18T14:06:29.000Z",
@@ -58,11 +63,6 @@
       "title": "bug: core tooling missing on non-skogix containers (staging, deployment)",
       "updatedAt": "2026-04-18T14:06:31.940Z",
       "url": "https://linear.app/skogai/issue/SKO-178/bug-core-tooling-missing-on-non-skogix-containers-staging-deployment"
-    },
-    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
-    "type": "Issue",
-    "url": "https://linear.app/skogai/issue/SKO-178/bug-core-tooling-missing-on-non-skogix-containers-staging-deployment",
-    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
-    "webhookTimestamp": 1776521193454
+    }
   }
 }

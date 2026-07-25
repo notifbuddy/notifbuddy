@@ -1,7 +1,8 @@
 {
   "event_type": "linear",
   "linear": {
-    "action": "remove",
+    "action": "create",
+    "type": "comment",
     "actor": {
       "email": "user@example.com",
       "id": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
@@ -9,18 +10,17 @@
       "type": "user",
       "url": "https://linear.app/skogai/profiles/skogix"
     },
-    "createdAt": "2026-04-18T12:24:02.756Z",
-    "organizationId": "b655a777-5904-4c64-a817-81f1a9779b8c",
-    "type": "issue",
-    "updatedFrom": {
-      "completedAt": null,
-      "sortOrder": -3076,
-      "stateId": "aabc7e7e-aeb7-4de6-9a43-92eaf5c1e263",
-      "updatedAt": "2026-04-18T12:12:04.022Z"
+    "createdAt": "2026-04-18T12:30:00.000Z",
+    "comment": {
+      "id": "comment-sample-1",
+      "body": "@notifbuddy create a channel regarding this",
+      "issueId": "110ae066-d7e3-47f0-96c2-4a3536810dac",
+      "issue": {
+        "id": "110ae066-d7e3-47f0-96c2-4a3536810dac"
+      },
+      "userId": "bd8e4951-8b83-4952-8fc5-09e9e6a61987",
+      "createdAt": "2026-04-18T12:30:00.000Z"
     },
-    "url": "https://linear.app/skogai/issue/SKO-177/test-issue",
-    "webhookId": "2a07b94c-07cb-4bfe-bf3b-7db3eafd830c",
-    "webhookTimestamp": 1776515043292,
     "issue": {
       "addedToTeamAt": "2026-04-18T11:55:21.686Z",
       "assignee": {

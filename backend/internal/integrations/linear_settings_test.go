@@ -13,7 +13,7 @@ func issueEvent(stateName, stateType string) template.Event {
 		EventType: "linear",
 		Linear: map[string]any{
 			"action": "update",
-			"data": map[string]any{
+			"issue": map[string]any{
 				"identifier": "SKO-9",
 				"state":      map[string]any{"name": stateName, "type": stateType},
 			},
@@ -37,9 +37,9 @@ func TestLinearSettingsTriggers(t *testing.T) {
 	}
 	conditionConfig := LinearSettings{
 		CreationMode:         "condition",
-		ConditionExpr:        "linear.data.state.name == 'Todo'",
+		ConditionExpr:        "linear.issue.state.name == 'Todo'",
 		ArchiveMode:          "condition",
-		ArchiveConditionExpr: "linear.data.state.type == 'completed'",
+		ArchiveConditionExpr: "linear.issue.state.type == 'completed'",
 	}
 	manualConfig := LinearSettings{CreationMode: "manual", ArchiveMode: "manual"}
 
@@ -54,7 +54,7 @@ func TestLinearSettingsTriggers(t *testing.T) {
 		{"status: Done archives, does not create", statusConfig, issueEvent("Done", "completed"), false, true},
 		{"status: unrelated state does neither", statusConfig, issueEvent("Backlog", "backlog"), false, false},
 		{"status: state match is case-insensitive", statusConfig, issueEvent("todo", "unstarted"), true, false},
-		{"status: event without a state does neither", statusConfig, template.Event{EventType: "linear", Linear: map[string]any{"data": map[string]any{}}}, false, false},
+		{"status: event without a state does neither", statusConfig, template.Event{EventType: "linear", Linear: map[string]any{"issue": map[string]any{}}}, false, false},
 		{"condition: create expr true, archive expr false", conditionConfig, issueEvent("Todo", "unstarted"), true, false},
 		{"condition: archive expr true, create expr false", conditionConfig, issueEvent("Done", "completed"), false, true},
 		{"manual: never auto-fires", manualConfig, issueEvent("Todo", "unstarted"), false, false},
@@ -86,7 +86,7 @@ func TestLinearSettingsTriggers(t *testing.T) {
 
 	t.Run("name template renders alongside triggers", func(t *testing.T) {
 		cfg := statusConfig
-		cfg.NameTemplate = "tkt-${{ lowercase(linear.data.identifier) }}"
+		cfg.NameTemplate = "tkt-${{ lowercase(linear.issue.identifier) }}"
 		res := s.TestLinearTemplate(issueEvent("Todo", "unstarted"), cfg)
 		if res.Name != "tkt-sko-9" {
 			t.Errorf("name = %q, want tkt-sko-9", res.Name)
@@ -95,7 +95,7 @@ func TestLinearSettingsTriggers(t *testing.T) {
 
 	t.Run("bad archive expression surfaces an error", func(t *testing.T) {
 		res := s.TestLinearTemplate(issueEvent("Done", "completed"), LinearSettings{
-			CreationMode: "manual", ArchiveMode: "condition", ArchiveConditionExpr: "linear.data. ==",
+			CreationMode: "manual", ArchiveMode: "condition", ArchiveConditionExpr: "linear.issue. ==",
 		})
 		if res.Err == "" {
 			t.Fatal("expected an archive condition error")
@@ -104,7 +104,7 @@ func TestLinearSettingsTriggers(t *testing.T) {
 
 	t.Run("status mode with a condition gate requires both", func(t *testing.T) {
 		cfg := statusConfig
-		cfg.ConditionExpr = "linear.data.state.type == 'completed'" // gate that fails for Todo
+		cfg.ConditionExpr = "linear.issue.state.type == 'completed'" // gate that fails for Todo
 		res := s.TestLinearTemplate(issueEvent("Todo", "unstarted"), cfg)
 		if res.Err != "" {
 			t.Fatalf("unexpected error: %s", res.Err)
