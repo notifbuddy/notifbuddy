@@ -81,6 +81,7 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Peek at the envelope: type distinguishes url_verification from
 	// event_callback; the rest is present only on event_callback.
+	// Reaction events nest the channel under item.channel (not event.channel).
 	var env struct {
 		Type      string `json:"type"`
 		Challenge string `json:"challenge"`
@@ -89,6 +90,9 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 		Event     struct {
 			Type    string `json:"type"`
 			Channel string `json:"channel"`
+			Item    struct {
+				Channel string `json:"channel"`
+			} `json:"item"`
 		} `json:"event"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -109,6 +113,11 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	channelID := env.Event.Channel
+	if channelID == "" {
+		channelID = env.Event.Item.Channel
+	}
+
 	// PUBLISH the raw event durably; the writer consumer persists it (dedup on
 	// Slack's event id) and fires the processed topic. A failed publish means
 	// the event is not recorded anywhere, so surface a 5xx for Slack to retry.
@@ -120,7 +129,7 @@ func (s *Service) HandleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 			"event_id":   env.EventID,
 			"event_type": env.Event.Type,
 			"team_id":    env.TeamID,
-			"channel_id": env.Event.Channel,
+			"channel_id": channelID,
 		},
 	}); err != nil {
 		slog.ErrorContext(r.Context(), "integrations: publish slack webhook", "event_id", env.EventID, "error", err)

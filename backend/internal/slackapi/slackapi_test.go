@@ -311,3 +311,33 @@ func TestPostMessage_NoBlocksNoRetry(t *testing.T) {
 		t.Fatalf("non-invalid_blocks error must not retry: calls=%d err=%v", calls, err)
 	}
 }
+
+func TestAddReaction_TreatsAlreadyReactedAsSuccess(t *testing.T) {
+	var gotBody map[string]any
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/reactions.add") {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &gotBody)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"already_reacted"}`))
+	})
+	if err := c.AddReaction(context.Background(), "t", "C1", "1.2", "thumbsup"); err != nil {
+		t.Fatalf("already_reacted must be success: %v", err)
+	}
+	if gotBody["channel"] != "C1" || gotBody["timestamp"] != "1.2" || gotBody["name"] != "thumbsup" {
+		t.Errorf("body = %#v", gotBody)
+	}
+}
+
+func TestRemoveReaction_TreatsNoReactionAsSuccess(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/reactions.remove") {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"ok":false,"error":"no_reaction"}`))
+	})
+	if err := c.RemoveReaction(context.Background(), "t", "C1", "1.2", "thumbsup"); err != nil {
+		t.Fatalf("no_reaction must be success: %v", err)
+	}
+}

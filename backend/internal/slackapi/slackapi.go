@@ -118,6 +118,12 @@ type Client interface {
 	UploadFile(ctx context.Context, token string, opts UploadOptions) error
 	// UpdateMessage edits a bot-authored message's text/blocks in place.
 	UpdateMessage(ctx context.Context, token string, opts UpdateOptions) error
+	// AddReaction adds an emoji reaction (shortcode name, no colons) to a
+	// message. already_reacted is treated as success for redelivery safety.
+	AddReaction(ctx context.Context, token, channelID, ts, name string) error
+	// RemoveReaction removes an emoji reaction from a message. no_reaction is
+	// treated as success for redelivery safety.
+	RemoveReaction(ctx context.Context, token, channelID, ts, name string) error
 }
 
 // httpClient is the default Client, talking to https://slack.com/api.
@@ -417,6 +423,32 @@ func (c *httpClient) UpdateMessage(ctx context.Context, token string, opts Updat
 	}
 	var out slackOK
 	return c.callBlocksRetry(ctx, token, "chat.update", body, &out, len(opts.Blocks) > 0)
+}
+
+func (c *httpClient) AddReaction(ctx context.Context, token, channelID, ts, name string) error {
+	var out slackOK
+	err := c.callJSON(ctx, token, "reactions.add", map[string]any{
+		"channel":   channelID,
+		"timestamp": ts,
+		"name":      name,
+	}, &out)
+	if err != nil && strings.Contains(err.Error(), "already_reacted") {
+		return nil
+	}
+	return err
+}
+
+func (c *httpClient) RemoveReaction(ctx context.Context, token, channelID, ts, name string) error {
+	var out slackOK
+	err := c.callJSON(ctx, token, "reactions.remove", map[string]any{
+		"channel":   channelID,
+		"timestamp": ts,
+		"name":      name,
+	}, &out)
+	if err != nil && strings.Contains(err.Error(), "no_reaction") {
+		return nil
+	}
+	return err
 }
 
 // slackOK is embedded in every response to surface the Web API's uniform

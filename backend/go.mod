@@ -12,8 +12,10 @@ require (
 	github.com/axiomhq/axiom-go v0.32.0
 	github.com/go-faster/errors v0.7.1
 	github.com/go-faster/jx v1.2.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
+	github.com/kenshaw/emoji v0.5.0
 	github.com/ogen-go/ogen v1.22.0
 	github.com/stripe/stripe-go/v86 v86.1.0
 	go.opentelemetry.io/otel v1.44.0
@@ -45,7 +47,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
@@ -87,3 +88,7 @@ require (
 	google.golang.org/grpc v1.82.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+// Always resolve emoji via the notifbuddy fork (gemoji data), not upstream.
+// The fork still declares module path github.com/kenshaw/emoji.
+replace github.com/kenshaw/emoji => github.com/notifbuddy/emoji v0.0.0-20260724202513-2e1cd3536ce5

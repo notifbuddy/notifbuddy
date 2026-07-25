@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
 )
@@ -360,6 +362,71 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 		return LinearComment{}, fmt.Errorf("integrations: linear commentCreate returned success=false")
 	}
 	return LinearComment{ID: resp.Data.CommentCreate.Comment.ID}, nil
+}
+
+// LinearCreateReaction adds an emoji reaction to a Linear comment via
+// reactionCreate. emoji is the Unicode form Linear expects (e.g. "👍").
+// A client-generated UUID is supplied so the sync engine can record the
+// reaction id before/alongside the webhook echo.
+func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, emoji string) (string, error) {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return "", err
+	}
+	id := uuid.New().String()
+	const mutation = `mutation($input: ReactionCreateInput!) {
+		reactionCreate(input: $input) { success reaction { id } }
+	}`
+	input := map[string]any{
+		"id":        id,
+		"commentId": commentID,
+		"emoji":     emoji,
+	}
+	var resp struct {
+		Data struct {
+			ReactionCreate struct {
+				Success  bool `json:"success"`
+				Reaction struct {
+					ID string `json:"id"`
+				} `json:"reaction"`
+			} `json:"reactionCreate"`
+		} `json:"data"`
+	}
+	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"input": input}, &resp); err != nil {
+		return "", err
+	}
+	if !resp.Data.ReactionCreate.Success {
+		return "", fmt.Errorf("integrations: linear reactionCreate returned success=false")
+	}
+	if rid := resp.Data.ReactionCreate.Reaction.ID; rid != "" {
+		return rid, nil
+	}
+	return id, nil
+}
+
+// LinearDeleteReaction removes a reaction by its Linear id.
+func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID string) error {
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	const mutation = `mutation($id: String!) {
+		reactionDelete(id: $id) { success }
+	}`
+	var resp struct {
+		Data struct {
+			ReactionDelete struct {
+				Success bool `json:"success"`
+			} `json:"reactionDelete"`
+		} `json:"data"`
+	}
+	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"id": reactionID}, &resp); err != nil {
+		return err
+	}
+	if !resp.Data.ReactionDelete.Success {
+		return fmt.Errorf("integrations: linear reactionDelete returned success=false")
+	}
+	return nil
 }
 
 // mdLinkText sanitizes a filename for use as markdown link text so a bracketed

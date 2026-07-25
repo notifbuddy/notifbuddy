@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -30,6 +31,8 @@ type fakeStore struct {
 	deletedIssues  []string
 	statePatches   []statePatch
 	assets         map[string][]store.MirroredAsset // key: org|comment
+	reactionsBySrc map[string]store.MirroredReaction // key: org|source|id
+	reactionsByCtr map[string]store.MirroredReaction // key: org|ctrSource|parent|emoji
 }
 
 // statePatch records a PatchLinearTeamState call for assertions.
@@ -48,6 +51,8 @@ func newFakeStore() *fakeStore {
 		linksBySlack:   map[string]store.MirroredMessage{},
 		linksByLinear:  map[string]store.MirroredMessage{},
 		assets:         map[string][]store.MirroredAsset{},
+		reactionsBySrc: map[string]store.MirroredReaction{},
+		reactionsByCtr: map[string]store.MirroredReaction{},
 	}
 }
 
@@ -63,6 +68,38 @@ func (f *fakeStore) RecordMirroredAsset(_ context.Context, org, source, sourceID
 }
 func (f *fakeStore) MirroredAssets(_ context.Context, org, source, sourceID string) ([]store.MirroredAsset, error) {
 	return f.assets[org+"|"+source+"|"+sourceID], nil
+}
+func (f *fakeStore) RecordMirroredReaction(_ context.Context, org string, r store.MirroredReaction) error {
+	r.OrgID = org
+	srcKey := org + "|" + r.EventSource + "|" + r.EventSourceID
+	if _, ok := f.reactionsBySrc[srcKey]; ok {
+		return nil
+	}
+	f.reactionsBySrc[srcKey] = r
+	f.reactionsByCtr[org+"|"+r.CounterpartSource+"|"+r.CounterpartParentID+"|"+r.CounterpartEmoji] = r
+	return nil
+}
+func (f *fakeStore) MirroredReactionBySource(_ context.Context, org, eventSource, eventSourceID string) (store.MirroredReaction, error) {
+	if r, ok := f.reactionsBySrc[org+"|"+eventSource+"|"+eventSourceID]; ok {
+		return r, nil
+	}
+	return store.MirroredReaction{}, store.ErrNotFound
+}
+func (f *fakeStore) MirroredReactionByCounterpart(_ context.Context, org, counterpartSource, counterpartParentID, counterpartEmoji string) (store.MirroredReaction, error) {
+	if r, ok := f.reactionsByCtr[org+"|"+counterpartSource+"|"+counterpartParentID+"|"+counterpartEmoji]; ok {
+		return r, nil
+	}
+	return store.MirroredReaction{}, store.ErrNotFound
+}
+func (f *fakeStore) DeleteMirroredReaction(_ context.Context, org, eventSource, eventSourceID string) error {
+	srcKey := org + "|" + eventSource + "|" + eventSourceID
+	r, ok := f.reactionsBySrc[srcKey]
+	if !ok {
+		return nil
+	}
+	delete(f.reactionsBySrc, srcKey)
+	delete(f.reactionsByCtr, org+"|"+r.CounterpartSource+"|"+r.CounterpartParentID+"|"+r.CounterpartEmoji)
+	return nil
 }
 
 func (f *fakeStore) LinearWebhookPayload(_ context.Context, id string) (json.RawMessage, error) {
@@ -143,6 +180,8 @@ type fakeSlack struct {
 	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
 	uploads         []slackapi.UploadOptions
 	updates         []slackapi.UpdateOptions
+	reactionsAdded  []string // "channel|ts|name"
+	reactionsRemoved []string
 }
 
 func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, error) {
@@ -221,6 +260,14 @@ func (s *fakeSlack) UpdateMessage(_ context.Context, _ string, opts slackapi.Upd
 	s.updates = append(s.updates, opts)
 	return nil
 }
+func (s *fakeSlack) AddReaction(_ context.Context, _, channelID, ts, name string) error {
+	s.reactionsAdded = append(s.reactionsAdded, channelID+"|"+ts+"|"+name)
+	return nil
+}
+func (s *fakeSlack) RemoveReaction(_ context.Context, _, channelID, ts, name string) error {
+	s.reactionsRemoved = append(s.reactionsRemoved, channelID+"|"+ts+"|"+name)
+	return nil
+}
 
 // fakeIntg satisfies Integrations.
 //
@@ -234,10 +281,13 @@ type fakeIntg struct {
 	teamMapped      map[string]bool
 	issueTeamID     string
 	issue           integrations.LinearIssue
-	createdComments []integrations.LinearCreateCommentInput
-	nextCommentID   string
-	linearFiles     map[string][]byte // url -> bytes served by LinearFileDownload; missing url errors
-	linearFileCT    map[string]string // url -> content type; missing = application/octet-stream
+	createdComments  []integrations.LinearCreateCommentInput
+	nextCommentID    string
+	createdReactions []struct{ CommentID, Emoji string }
+	deletedReactions []string
+	nextReactionID   string
+	linearFiles      map[string][]byte // url -> bytes served by LinearFileDownload; missing url errors
+	linearFileCT     map[string]string // url -> content type; missing = application/octet-stream
 	// linearMentions maps slack user id → Linear markdown mention (profile URL).
 	linearMentions map[string]string
 	// invitees is what LinearIssueInvitees returns (creator/assignee/mentions).
@@ -254,6 +304,18 @@ func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrati
 		id = "cmt_new"
 	}
 	return integrations.LinearComment{ID: id}, nil
+}
+func (i *fakeIntg) LinearCreateReaction(_ context.Context, _, commentID, emoji string) (string, error) {
+	i.createdReactions = append(i.createdReactions, struct{ CommentID, Emoji string }{commentID, emoji})
+	id := i.nextReactionID
+	if id == "" {
+		id = "react_new"
+	}
+	return id, nil
+}
+func (i *fakeIntg) LinearDeleteReaction(_ context.Context, _, reactionID string) error {
+	i.deletedReactions = append(i.deletedReactions, reactionID)
+	return nil
 }
 func (i *fakeIntg) LinearIssueByID(_ context.Context, _, issueID string) (integrations.LinearIssue, error) {
 	out := i.issue
@@ -1741,5 +1803,205 @@ func TestOnLinearEvent_SecondImageKeepsFirstInBlocks(t *testing.T) {
 	}
 	if !strings.HasSuffix(urls[0], "/a.png") || !strings.HasSuffix(urls[1], "/b.png") {
 		t.Errorf("block image urls wrong: %v", urls)
+	}
+}
+
+func slackReactionPayload(eventType, user, reaction, channel, ts string) json.RawMessage {
+	ev := map[string]any{
+		"type":     eventType,
+		"user":     user,
+		"reaction": reaction,
+		"item":     map[string]any{"type": "message", "channel": channel, "ts": ts},
+	}
+	b, _ := json.Marshal(map[string]any{
+		"event_source": "slack",
+		"slack":        map[string]any{"event": ev},
+	})
+	return b
+}
+
+func linearReactionPayload(action, reactionID, emoji, commentID, actorType string) json.RawMessage {
+	env := map[string]any{"event_source": "linear", "linear": map[string]any{
+		"action": action,
+		"type":   "reaction",
+		"actor":  map[string]any{"type": actorType, "name": "Ada"},
+		"reaction": map[string]any{
+			"id": reactionID, "emoji": emoji, "commentId": commentID, "userId": "u1",
+		},
+	}}
+	b, _ := json.Marshal(env)
+	return b
+}
+
+func TestOnSlackEvent_ReactionAddedMirrorsToLinear(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.slackPayloads["r1"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{nextReactionID: "react1"}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("r1", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.createdReactions) != 1 || ig.createdReactions[0].CommentID != "cmt1" || ig.createdReactions[0].Emoji != "👍" {
+		t.Fatalf("createdReactions = %+v", ig.createdReactions)
+	}
+	row, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.CounterpartEmoji != "thumbsup" || row.CounterpartParentID != "C1:TS1" {
+		t.Errorf("row = %+v", row)
+	}
+}
+
+func TestOnSlackEvent_ReactionRemovedDeletesLinear(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	_ = st.RecordMirroredReaction(context.Background(), "org1", store.MirroredReaction{
+		EventSource: sourceLinear, EventSourceID: "react1",
+		ParentSource: sourceLinear, ParentSourceID: "cmt1", Emoji: "👍",
+		CounterpartSource: sourceSlack, CounterpartParentID: "C1:TS1", CounterpartEmoji: "thumbsup",
+	})
+	st.slackPayloads["r2"] = slackReactionPayload("reaction_removed", "U_HUMAN", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("r2", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.deletedReactions) != 1 || ig.deletedReactions[0] != "react1" {
+		t.Fatalf("deletedReactions = %v", ig.deletedReactions)
+	}
+	if _, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("row should be gone, err=%v", err)
+	}
+}
+
+func TestOnSlackEvent_BotReactionDropped(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.slackPayloads["r3"] = slackReactionPayload("reaction_added", "U_BOT", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("r3", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.createdReactions) != 0 {
+		t.Fatalf("bot reaction must not mirror: %+v", ig.createdReactions)
+	}
+}
+
+func TestOnSlackEvent_ReactionUnmappedMessageSkipped(t *testing.T) {
+	st := newFakeStore()
+	st.slackPayloads["r4"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS_UNKNOWN")
+	ig := &fakeIntg{}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("r4", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.createdReactions) != 0 {
+		t.Fatalf("unmapped message must not create reaction: %+v", ig.createdReactions)
+	}
+}
+
+func TestOnSlackEvent_ReactionUnmappedEmojiSkipped(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.slackPayloads["r5"] = slackReactionPayload("reaction_added", "U_HUMAN", "custom_party_parrot", "C1", "TS1")
+	ig := &fakeIntg{}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("r5", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.createdReactions) != 0 {
+		t.Fatalf("custom emoji must be skipped: %+v", ig.createdReactions)
+	}
+}
+
+func TestOnSlackEvent_ReactionAddRedeliveryIdempotent(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.slackPayloads["r6"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{nextReactionID: "react1"}
+	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
+
+	_ = e.OnSlackEvent(context.Background(), slackRef("r6", "org1"))
+	_ = e.OnSlackEvent(context.Background(), slackRef("r6", "org1"))
+	if len(ig.createdReactions) != 1 {
+		t.Fatalf("redelivery must not double-create: %d", len(ig.createdReactions))
+	}
+}
+
+func TestOnLinearEvent_ReactionCreateMirrorsToSlack(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.linearPayloads["lr1"] = linearReactionPayload("create", "react1", "👍", "cmt1", "user")
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr1", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	// gemoji's primary alias for 👍 is "+1" (Slack accepts +1 and thumbsup).
+	if len(sl.reactionsAdded) != 1 || sl.reactionsAdded[0] != "C1|TS1|+1" {
+		t.Fatalf("reactionsAdded = %v", sl.reactionsAdded)
+	}
+	if _, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOnLinearEvent_ReactionRemoveMirrorsToSlack(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	_ = st.RecordMirroredReaction(context.Background(), "org1", store.MirroredReaction{
+		EventSource: sourceLinear, EventSourceID: "react1",
+		ParentSource: sourceLinear, ParentSourceID: "cmt1", Emoji: "👍",
+		CounterpartSource: sourceSlack, CounterpartParentID: "C1:TS1", CounterpartEmoji: "thumbsup",
+	})
+	st.linearPayloads["lr2"] = linearReactionPayload("remove", "react1", "👍", "cmt1", "user")
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr2", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.reactionsRemoved) != 1 || sl.reactionsRemoved[0] != "C1|TS1|thumbsup" {
+		t.Fatalf("reactionsRemoved = %v", sl.reactionsRemoved)
+	}
+}
+
+func TestOnLinearEvent_AppAuthoredReactionDropped(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.linearPayloads["lr3"] = linearReactionPayload("create", "react1", "👍", "cmt1", "application")
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr3", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.reactionsAdded) != 0 {
+		t.Fatalf("app reaction must not mirror: %v", sl.reactionsAdded)
 	}
 }
