@@ -6,8 +6,8 @@ description: Expression syntax for channel names and creation conditions.
 Channel names and creation conditions use **GitHub Actions expression syntax**, run against the incoming event.
 
 ```
-${{ linear.data.identifier }}          # channel name
-linear.data.state.name == 'Done'       # condition
+${{ linear.issue.identifier }}          # channel name
+linear.issue.state.name == 'Done'       # condition
 ```
 
 ## Event data
@@ -15,9 +15,34 @@ linear.data.state.name == 'Done'       # condition
 Reference fields off the event envelope:
 
 - `event_type` — `linear`
-- `linear.*` — the raw event payload
+- `linear.*` — the **NotifBuddy-normalized** Linear event (not Linear’s raw webhook)
 
-Example: `linear.data.state.name`, `linear.action`.
+### How we transform Linear webhooks
+
+Linear delivers PascalCase types and a generic `data` bag (`type: "Comment"`, `data: {…}`). Before templates or sync see an event, NotifBuddy rewrites it:
+
+1. **Lowercase `type`** — `Issue` → `issue`, `Comment` → `comment`, `WorkflowState` → `workflow_state`
+2. **Typed entity keys** — former `data` moves to `linear.issue`, `linear.comment`, or `linear.workflow_state` (no `linear.data`)
+3. **Comment → issue injection** — on comment events we GraphQL-fetch the parent issue and set `linear.issue`, so naming/conditions can always use issue fields
+
+Example comment envelope:
+
+```json
+{
+  "event_type": "linear",
+  "linear": {
+    "type": "comment",
+    "action": "create",
+    "actor": {},
+    "comment": { "id": "…", "body": "@notifbuddy create a channel", "issueId": "…" },
+    "issue": { "id": "…", "identifier": "NOT-54", "state": { "name": "Todo" } }
+  }
+}
+```
+
+Useful paths: `linear.issue.identifier`, `linear.issue.state.name`, `linear.comment.body`, `linear.action`.
+
+The settings **Test against an event** panel uses the same transformed samples (including comment events with an injected `issue`).
 
 ## Operators
 
@@ -57,11 +82,11 @@ CI-only functions error if used: `hashFiles`, `success`, `always`, `cancelled`, 
 
 ```
 # only when moved to Done
-linear.data.state.name == 'Done'
+linear.issue.state.name == 'Done'
 
 # bugs only
-contains(join(linear.data.labels.*.name), 'bug')
+contains(join(linear.issue.labels.*.name), 'bug')
 
 # name by identifier (the default channel-name template)
-tkt-${{ lowercase(linear.data.identifier) }}
+tkt-${{ lowercase(linear.issue.identifier) }}
 ```

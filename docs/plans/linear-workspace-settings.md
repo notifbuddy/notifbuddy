@@ -27,9 +27,9 @@ applies here — it is exhaustively tested against real captured GitHub **and** 
 ### Template language: GitHub Actions expressions (locked)
 
 - **Interpolation (naming):** `pr-${{ github.repository }}-${{ github.event.number }}`,
-  `tkt-${{ linear.data.identifier }}`. Text outside `${{ }}` is literal.
+  `tkt-${{ linear.issue.identifier }}`. Text outside `${{ }}` is literal.
 - **Conditional:** a single GHA expression evaluated for truthiness, e.g.
-  `linear.action == 'update' && linear.data.state.name == 'In Progress'`.
+  `linear.action == 'update' && linear.issue.state.name == 'In Progress'`.
 
 We hand-write a small, fully-specified evaluator (no maintained Go lib exists for GHA
 expressions — depending on an unmaintained one would violate "zero unknowns").
@@ -151,7 +151,7 @@ envelope and **PII-sanitized** to placeholders (real structure, fake identities)
   - Excluded functions → explicit error.
 - **Fixture-driven tests:** load every `test_data/**` file and assert representative
   name renders + conditions against the REAL github & linear shapes (e.g.
-  `linear.data.state.name == 'Done'` on the status_changed fixture is true; an `issues.opened`
+  `linear.issue.state.name == 'Done'` on the status_changed fixture is true; an `issues.opened`
   github fixture renders `pr-<repo>-<number>` correctly). This is what proves "github templates
   work" with zero guesswork.
 - **Store/service tests:** settings round-trip; TestTemplate returns expected name/condition for

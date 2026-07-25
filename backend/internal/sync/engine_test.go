@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/intent"
 	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
@@ -200,12 +201,14 @@ func (s *fakeSlack) UpdateMessage(_ context.Context, _ string, opts slackapi.Upd
 //
 // settings is the config returned for any mapped team; teamMapped controls which
 // teams resolve to it (nil → every team maps to settings, matching the old
-// single-config behavior so existing tests keep passing). issueTeamID is what
-// LinearIssueByID reports (used by the @notifbuddy path to resolve the team).
+// single-config behavior so existing tests keep passing). issue is what
+// LinearIssueByID reports; issueTeamID fills TeamID when issue.TeamID is empty
+// (used by the @notifbuddy path to resolve the team).
 type fakeIntg struct {
 	settings        integrations.LinearSettings
 	teamMapped      map[string]bool
 	issueTeamID     string
+	issue           integrations.LinearIssue
 	createdComments []integrations.LinearCreateCommentInput
 	nextCommentID   string
 	linearFiles     map[string][]byte // url -> bytes served by LinearFileDownload; missing url errors
@@ -221,9 +224,21 @@ func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrati
 	}
 	return integrations.LinearComment{ID: id}, nil
 }
-func (i *fakeIntg) LinearIssueByID(context.Context, string, string) (integrations.LinearIssue, error) {
-	return integrations.LinearIssue{TeamID: i.issueTeamID}, nil
+func (i *fakeIntg) LinearIssueByID(_ context.Context, _, issueID string) (integrations.LinearIssue, error) {
+	out := i.issue
+	if out.ID == "" {
+		out.ID = issueID
+	}
+	if out.TeamID == "" {
+		out.TeamID = i.issueTeamID
+	}
+	return out, nil
 }
+
+// fixedClassifier always returns the same Intent (for @notifbuddy path tests).
+type fixedClassifier intent.Intent
+
+func (f fixedClassifier) Classify(context.Context, string) intent.Intent { return intent.Intent(f) }
 func (i *fakeIntg) LinearAssetProxyURL(_ string, fileURL string) (string, error) {
 	return "https://proxy.test/asset?u=" + fileURL, nil
 }
@@ -262,29 +277,38 @@ func newEngine(st Store, sl SlackActions, ig Integrations, pub pubsub.Publisher)
 	return New(st, sl, ig, nil, pub, nil)
 }
 
+func newEngineWithClassifier(st Store, sl SlackActions, ig Integrations, pub pubsub.Publisher, c intent.Classifier) *Engine {
+	return New(st, sl, ig, c, pub, nil)
+}
+
 // --- helpers ----------------------------------------------------------------
 
 func linearCommentPayload(action, commentID, body, issueID, parentID, actorName, actorEmail string, botActor bool) json.RawMessage {
-	data := map[string]any{
+	comment := map[string]any{
 		"id":      commentID,
 		"body":    body,
 		"issueId": issueID,
 	}
 	if parentID != "" {
-		data["parentId"] = parentID
+		comment["parentId"] = parentID
 	}
 	if botActor {
-		data["botActor"] = map[string]any{"id": "app_1", "name": "NotifBuddy"}
+		comment["botActor"] = map[string]any{"id": "app_1", "name": "NotifBuddy"}
 	}
-	env := map[string]any{
-		"event_source": "linear",
-		"linear": map[string]any{
-			"action": action,
-			"type":   "Comment",
-			"actor":  map[string]any{"name": actorName, "email": actorEmail, "type": "user"},
-			"data":   data,
+	linear := map[string]any{
+		"action":  action,
+		"type":    "comment",
+		"actor":   map[string]any{"name": actorName, "email": actorEmail, "type": "user"},
+		"comment": comment,
+		// Injected at ingest for real Comment webhooks; tests include a minimal issue
+		// so @notifbuddy naming / team resolve works without a GraphQL round-trip.
+		"issue": map[string]any{
+			"id": issueID, "identifier": "NOT-1", "teamId": "team1",
+			"state": map[string]any{"name": "Todo"},
+			"team":  map[string]any{"id": "team1"},
 		},
 	}
+	env := map[string]any{"event_source": "linear", "linear": linear}
 	b, _ := json.Marshal(env)
 	return b
 }
@@ -407,6 +431,42 @@ func TestOnLinearEvent_ReplyGoesToThread(t *testing.T) {
 	}
 }
 
+// @notifbuddy create on a Comment webhook must name the channel from the
+// injected linear.issue (present on the normalized envelope) and must not
+// be blocked by ConditionExpr / CreationMode=manual.
+func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
+	st := newFakeStore()
+	// Normalized Comment envelope: comment + injected issue (as WriteLinearWebhook produces).
+	st.linearPayloads["d_nb"] = linearCommentPayload(
+		"create", "c_nb", "@notifbuddy create a channel regarding this", "issue54", "", "Nik", "nik@x.io", false)
+
+	sl := &fakeSlack{nextChannel: "C_NB"}
+	pub := &spyPub{}
+	ig := &fakeIntg{
+		settings: integrations.LinearSettings{
+			CreationMode:  "manual",
+			NameTemplate:  "tkt-${{ linear.issue.identifier }}",
+			ConditionExpr: "linear.issue.state.name == 'Done'", // would block if applied to auto path
+		},
+	}
+	e := newEngineWithClassifier(st, sl, ig, pub, fixedClassifier(intent.CreateChannel))
+
+	e.OnLinearEvent(context.Background(), linearRef("d_nb", "org1"))
+
+	if sl.createdName != "tkt-not-1" {
+		t.Errorf("channel name = %q, want tkt-not-1 (from injected linear.issue)", sl.createdName)
+	}
+	if c, _ := st.ChannelForIssue(context.Background(), "org1", "issue54"); c != "C_NB" {
+		t.Errorf("issue->channel mapping not stored: %q", c)
+	}
+	if !pub.has(TopicChannelCreated) {
+		t.Errorf("expected channel.created topic, got %v", pub.topics)
+	}
+	if len(sl.posted) != 0 {
+		t.Errorf("command must short-circuit mirroring; got %d posts", len(sl.posted))
+	}
+}
+
 // Status-trigger creates the channel when an issue reaches the configured
 // status, names it from the template, auto-adds bots, and fires the topics.
 func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
@@ -414,9 +474,9 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	env := map[string]any{
 		"event_source": "linear",
 		"linear": map[string]any{
-			"action": "update", "type": "Issue",
+			"action": "update", "type": "issue",
 			"actor": map[string]any{"name": "Ada"},
-			"data":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 		},
 	}
 	b, _ := json.Marshal(env)
@@ -427,7 +487,7 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:   "status",
 		TriggerStatus:  "In Progress",
-		NameTemplate:   "tkt-${{ linear.data.identifier }}",
+		NameTemplate:   "tkt-${{ linear.issue.identifier }}",
 		AutoAddMembers: []string{"UBOT1", "UBOT2"},
 	}}
 	e := newEngine(st, sl, ig, pub)
@@ -452,8 +512,8 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
-		"action": "update", "type": "Issue", "actor": map[string]any{},
-		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
+		"action": "update", "type": "issue", "actor": map[string]any{},
+		"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
 	}}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d5"] = b
@@ -471,8 +531,8 @@ func TestOnLinearEvent_StatusTriggerIgnoresOtherStatus(t *testing.T) {
 func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
-		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
-		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Done"}},
+		"action": "update", "type": "issue", "actor": map[string]any{"name": "Ada"},
+		"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Done"}},
 	}}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["dc1"] = b
@@ -480,8 +540,8 @@ func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 	pub := &spyPub{}
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:  "condition",
-		ConditionExpr: "linear.data.state.name == 'Done'",
-		NameTemplate:  "tkt-${{ linear.data.identifier }}",
+		ConditionExpr: "linear.issue.state.name == 'Done'",
+		NameTemplate:  "tkt-${{ linear.issue.identifier }}",
 	}}
 	e := newEngine(st, sl, ig, pub)
 
@@ -499,15 +559,15 @@ func TestOnLinearEvent_ConditionTriggerCreatesChannel(t *testing.T) {
 func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
-		"action": "update", "type": "Issue", "actor": map[string]any{},
-		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
+		"action": "update", "type": "issue", "actor": map[string]any{},
+		"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "Backlog"}},
 	}}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["dc2"] = b
 	sl := &fakeSlack{}
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:  "condition",
-		ConditionExpr: "linear.data.state.name == 'Done'",
+		ConditionExpr: "linear.issue.state.name == 'Done'",
 	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
@@ -520,8 +580,8 @@ func TestOnLinearEvent_ConditionFalseDoesNotCreate(t *testing.T) {
 // linearIssuePayload builds an Issue event envelope for the archive tests.
 func linearIssuePayload(issueID, identifier, teamID, stateName string) json.RawMessage {
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
-		"action": "update", "type": "Issue", "actor": map[string]any{"name": "Ada"},
-		"data": map[string]any{"id": issueID, "identifier": identifier, "teamId": teamID, "state": map[string]any{"name": stateName}},
+		"action": "update", "type": "issue", "actor": map[string]any{"name": "Ada"},
+		"issue": map[string]any{"id": issueID, "identifier": identifier, "teamId": teamID, "state": map[string]any{"name": stateName}},
 	}}
 	b, _ := json.Marshal(env)
 	return b
@@ -593,7 +653,7 @@ func TestOnLinearEvent_ArchiveConditionTriggerArchivesChannel(t *testing.T) {
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:         "manual",
 		ArchiveMode:          "condition",
-		ArchiveConditionExpr: "linear.data.state.name == 'Done'",
+		ArchiveConditionExpr: "linear.issue.state.name == 'Done'",
 	}}
 	e := newEngine(st, sl, ig, pub)
 
@@ -618,7 +678,7 @@ func TestOnLinearEvent_ArchiveConditionFalseDoesNotArchive(t *testing.T) {
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:         "manual",
 		ArchiveMode:          "condition",
-		ArchiveConditionExpr: "linear.data.state.name == 'Done'",
+		ArchiveConditionExpr: "linear.issue.state.name == 'Done'",
 	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
@@ -673,8 +733,8 @@ func TestOnLinearEvent_ArchiveTriggerWithoutChannelDoesNothing(t *testing.T) {
 func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 	st := newFakeStore()
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
-		"action": "update", "type": "Issue", "actor": map[string]any{},
-		"data": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "teamB", "state": map[string]any{"name": "In Progress"}},
+		"action": "update", "type": "issue", "actor": map[string]any{},
+		"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "teamB", "state": map[string]any{"name": "In Progress"}},
 	}}
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d6"] = b
@@ -697,8 +757,8 @@ func TestOnLinearEvent_UnmappedTeamIsIgnored(t *testing.T) {
 func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
 	workflowStatePayload := func(action, id, name string) json.RawMessage {
 		env := map[string]any{"event_source": "linear", "linear": map[string]any{
-			"action": action, "type": "WorkflowState", "actor": map[string]any{},
-			"data": map[string]any{
+			"action": action, "type": "workflow_state", "actor": map[string]any{},
+			"workflow_state": map[string]any{
 				"id": id, "name": name, "type": "started", "color": "#5e6ad2", "position": 1.5,
 				"team": map[string]any{"id": "teamX"},
 			},

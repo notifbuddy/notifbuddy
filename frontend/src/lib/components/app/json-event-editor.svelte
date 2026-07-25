@@ -195,7 +195,7 @@
 			spellcheck="false"
 			autocapitalize="off"
 			class="json-editor__textarea"
-			placeholder={'Paste raw event JSON:\n{ "event_type": "linear", "linear": { … } }'}
+			placeholder={'Paste NotifBuddy event JSON:\n{ "event_type": "linear", "linear": { "type": "issue", "issue": { … } } }'}
 		></textarea>
 	</div>
 </div>

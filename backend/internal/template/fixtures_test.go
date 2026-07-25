@@ -86,7 +86,7 @@ func TestFixtures_Linear(t *testing.T) {
 	removed := loadFixture(t, "linear/issue.removed.json")
 
 	t.Run("name renders from real fields", func(t *testing.T) {
-		name, err := e.Render("tkt-${{ linear.data.team.key }}-${{ linear.data.number }}", statusChanged)
+		name, err := e.Render("tkt-${{ linear.issue.team.key }}-${{ linear.issue.number }}", statusChanged)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +98,7 @@ func TestFixtures_Linear(t *testing.T) {
 
 	t.Run("status-change conditional", func(t *testing.T) {
 		// The status_changed fixture is action=update, state.name=Done.
-		ok, err := e.Evaluate("linear.action == 'update' && linear.data.state.name == 'Done'", statusChanged)
+		ok, err := e.Evaluate("linear.action == 'update' && linear.issue.state.name == 'Done'", statusChanged)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +106,7 @@ func TestFixtures_Linear(t *testing.T) {
 			t.Fatal("expected status-change conditional to be true on status_changed fixture")
 		}
 		// Same conditional must be false on the create fixture.
-		ok, err = e.Evaluate("linear.action == 'update' && linear.data.state.name == 'Done'", created)
+		ok, err = e.Evaluate("linear.action == 'update' && linear.issue.state.name == 'Done'", created)
 		if err != nil {
 			t.Fatal(err)
 		}

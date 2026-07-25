@@ -11,7 +11,8 @@ func evalCtx() map[string]any {
 		"event_type": "linear",
 		"linear": map[string]any{
 			"action": "update",
-			"data": map[string]any{
+			"type": "issue",
+			"issue": map[string]any{
 				"identifier": "ENG-42",
 				"number":     float64(42),
 				"state":      map[string]any{"name": "In Progress", "type": "started"},
@@ -55,8 +56,8 @@ func TestEvaluate_Booleans(t *testing.T) {
 		{"'Done' == 'done'", true},
 		{"'Done' != 'done'", false},
 		{"linear.action == 'UPDATE'", true},
-		{"linear.data.state.name == 'in progress'", true},
-		{"linear.data.identifier == 'ENG-42'", true},
+		{"linear.issue.state.name == 'in progress'", true},
+		{"linear.issue.identifier == 'ENG-42'", true},
 		{"linear.missing == null", true},
 		{"github == null", true},
 
@@ -70,9 +71,9 @@ func TestEvaluate_Booleans(t *testing.T) {
 		{"'abc' == 0", false}, // unparseable string -> NaN, never equal
 
 		// relational (numeric coercion)
-		{"linear.data.number > 41", true},
-		{"linear.data.number >= 42", true},
-		{"linear.data.number < 42", false},
+		{"linear.issue.number > 41", true},
+		{"linear.issue.number >= 42", true},
+		{"linear.issue.number < 42", false},
 		{"'10' > '9'", true},    // both coerce to numbers
 		{"'abc' > 1", false},    // NaN relational -> false
 		{"1 < 2 == true", true}, // precedence: (1<2) == true
@@ -84,14 +85,14 @@ func TestEvaluate_Booleans(t *testing.T) {
 		{"false || false", false},
 		{"true || false && false", true}, // && binds tighter than ||
 		{"(true || false) && false", false},
-		{"linear.action == 'update' && linear.data.state.type == 'started'", true},
-		{"linear.action == 'create' || linear.data.number == 42", true},
+		{"linear.action == 'update' && linear.issue.state.type == 'started'", true},
+		{"linear.action == 'create' || linear.issue.number == 42", true},
 
 		// functions
 		{"contains('hello world', 'WORLD')", true},
 		{"contains('hello', 'z')", false},
-		{"contains(linear.data.labels.*.name, 'sync')", true},
-		{"contains(linear.data.labels.*.name, 'nope')", false},
+		{"contains(linear.issue.labels.*.name, 'sync')", true},
+		{"contains(linear.issue.labels.*.name, 'nope')", false},
 		{"startsWith('NotifBuddy', 'notif')", true},
 		{"endsWith('channel.go', '.GO')", true},
 	}
@@ -171,16 +172,16 @@ func TestRender(t *testing.T) {
 		tmpl string
 		want string
 	}{
-		{"tkt-${{ linear.data.identifier }}", "tkt-ENG-42"},
-		{"pr-${{ linear.data.number }}", "pr-42"},
-		{"${{ linear.action }}-${{ linear.data.state.type }}", "update-started"},
+		{"tkt-${{ linear.issue.identifier }}", "tkt-ENG-42"},
+		{"pr-${{ linear.issue.number }}", "pr-42"},
+		{"${{ linear.action }}-${{ linear.issue.state.type }}", "update-started"},
 		{"no-interpolation", "no-interpolation"},
 		{"${{ linear.missing }}", ""}, // null -> empty
 		{"${{ 'literal' }}", "literal"},
 		{"${{ format('{0}/{1}', 'a', 'b') }}", "a/b"},
-		{"${{ join(linear.data.labels.*.name, '-') }}", "bug-sync"},
-		{"flag-${{ linear.data.number > 40 }}", "flag-true"},
-		{"tkt-${{ lowercase(linear.data.identifier) }}", "tkt-eng-42"},
+		{"${{ join(linear.issue.labels.*.name, '-') }}", "bug-sync"},
+		{"flag-${{ linear.issue.number > 40 }}", "flag-true"},
+		{"tkt-${{ lowercase(linear.issue.identifier) }}", "tkt-eng-42"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.tmpl, func(t *testing.T) {

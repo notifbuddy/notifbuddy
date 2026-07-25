@@ -1,9 +1,9 @@
 // Package template implements GitHub Actions expression syntax for two jobs:
 //
 //   - Render — expand ${{ <expr> }} interpolations in a string (channel naming),
-//     e.g. "tkt-${{ linear.data.identifier }}".
+//     e.g. "tkt-${{ linear.issue.identifier }}".
 //   - Evaluate — evaluate a single expression for truthiness (channel-creation
-//     conditional), e.g. "linear.action == 'update' && linear.data.state.name == 'Done'".
+//     conditional), e.g. "linear.action == 'update' && linear.issue.state.name == 'Done'".
 //
 // It is provider-agnostic: expressions run against a forwarded event envelope
 // ({event_type, linear|github: raw}), so the same engine serves both the Linear
@@ -28,7 +28,7 @@ import (
 
 // Event is the forwarded envelope expressions evaluate against. Exactly one of
 // Linear/GitHub is populated, matching EventType. The raw provider payload is a
-// decoded JSON object so expressions can walk it (linear.data.state.name, …).
+// decoded JSON object so expressions can walk it (linear.issue.state.name, …).
 type Event struct {
 	EventType string         `json:"event_type"`
 	Linear    map[string]any `json:"linear,omitempty"`

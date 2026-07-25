@@ -86,7 +86,7 @@ func TestLinearSettings_Lifecycle(t *testing.T) {
 	// Create.
 	create := linearSettings{
 		CreationMode:   "manual",
-		NameTemplate:   "tkt-${{ linear.data.identifier }}",
+		NameTemplate:   "tkt-${{ linear.issue.identifier }}",
 		ArchiveMode:    "manual",
 		AutoAddMembers: []string{},
 		TeamID:         "team-e2e-alpha",
@@ -125,11 +125,11 @@ func TestLinearSettings_Lifecycle(t *testing.T) {
 
 	// Update.
 	update := create
-	update.NameTemplate = "chan-${{ linear.data.identifier }}"
+	update.NameTemplate = "chan-${{ linear.issue.identifier }}"
 	r = putJSON(t, s, "/integrations/linear/settings/"+id, update)
 	requireStatus(t, r, http.StatusOK)
 	r.decode(t, &got)
-	if len(got.Configs) != 1 || got.Configs[0].NameTemplate != "chan-${{ linear.data.identifier }}" {
+	if len(got.Configs) != 1 || got.Configs[0].NameTemplate != "chan-${{ linear.issue.identifier }}" {
 		t.Fatalf("after update: %+v", got.Configs)
 	}
 
@@ -148,7 +148,7 @@ func TestLinearSettings_Lifecycle(t *testing.T) {
 func TestTemplateTest_RendersName(t *testing.T) {
 	s := newSession(t, "user_tt", "tt@e2e.test", "org_tt", "admin")
 	body := map[string]any{
-		"nameTemplate": "tkt-${{ linear.data.identifier }}",
+		"nameTemplate": "tkt-${{ linear.issue.identifier }}",
 		"creationMode": "manual",
 		"sampleId":     "issue.status_changed",
 	}

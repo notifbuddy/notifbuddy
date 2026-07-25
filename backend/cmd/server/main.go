@@ -133,8 +133,8 @@ func main() {
 		return len(members), nil
 	})
 
-	// Consumers: the writer (persists raw webhook deliveries, then fires the
-	// processed topic) and the sync engine (bidirectional Slack<->Linear sync).
+	// Consumers: the writer (normalizes + persists webhook deliveries, then
+	// fires the processed topic) and the sync engine (bidirectional Slack<->Linear sync).
 	// Each Subscription is an independent consumer — every one receives every
 	// message of its topic, with its own retry state, on both providers.
 	if bus != nil {
