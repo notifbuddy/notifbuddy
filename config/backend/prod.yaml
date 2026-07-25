@@ -54,9 +54,6 @@ encryption:
   kms_key_id: "${KMS_KEY_ID}" # resource name, not a secret (infra output kms_key_id)
 
 pubsub:
-  # OVH k3s keeps a warm backend replica, so watermill over the app DB is
-  # fine (no GCP Pub/Sub push / OIDC endpoint). Matches the Helm chart
-  # ConfigMap that prod actually mounts at /config/config.yaml.
   provider: "postgres"
   postgres:
     poll_interval: "1s"

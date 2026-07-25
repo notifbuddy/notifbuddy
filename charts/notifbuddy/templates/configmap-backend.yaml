@@ -49,8 +49,7 @@ data:
       kms_key_id: ""
 
     pubsub:
-      # Events ride on the application database (watermill). Prod (OVH) and
-      # self-host both use this; GCP Pub/Sub push is preview/legacy only.
+      # Events ride on the application database (watermill).
       provider: "postgres"
       postgres:
         poll_interval: "1s"
