@@ -240,6 +240,10 @@ type fakeIntg struct {
 	linearFileCT    map[string]string // url -> content type; missing = application/octet-stream
 	// linearMentions maps slack user id → Linear markdown mention (profile URL).
 	linearMentions map[string]string
+	// invitees is what LinearIssueInvitees returns (creator/assignee/mentions).
+	invitees      []integrations.LinearInvitee
+	inviteeBodies []string // last extraBodies passed to LinearIssueInvitees
+	inviteesErr   error
 }
 
 func (i *fakeIntg) SlackBotToken(context.Context, string) (string, error) { return "xoxb-test", nil }
@@ -260,6 +264,13 @@ func (i *fakeIntg) LinearIssueByID(_ context.Context, _, issueID string) (integr
 		out.TeamID = i.issueTeamID
 	}
 	return out, nil
+}
+func (i *fakeIntg) LinearIssueInvitees(_ context.Context, _, _ string, extraBodies ...string) ([]integrations.LinearInvitee, error) {
+	i.inviteeBodies = append([]string(nil), extraBodies...)
+	if i.inviteesErr != nil {
+		return nil, i.inviteesErr
+	}
+	return append([]integrations.LinearInvitee(nil), i.invitees...), nil
 }
 
 // fixedClassifier always returns the same Intent (for @notifbuddy path tests).
@@ -478,13 +489,22 @@ func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
 	st.linearPayloads["d_nb"] = linearCommentPayload(
 		"create", "c_nb", "@notifbuddy create a channel regarding this", "issue54", "", "Nik", "nik@x.io", false)
 
-	sl := withBotIdentity(&fakeSlack{nextChannel: "C_NB"}, "U_BOT", "notifbuddy")
+	sl := withBotIdentity(&fakeSlack{
+		nextChannel: "C_NB",
+		usersByEmail: map[string]slackapi.User{
+			"nik@x.io":       {ID: "U_NIK"},
+			"mentioned@x.io": {ID: "U_MENTION"},
+		},
+	}, "U_BOT", "notifbuddy")
 	pub := &spyPub{}
 	ig := &fakeIntg{
 		settings: integrations.LinearSettings{
 			CreationMode:  "manual",
 			NameTemplate:  "tkt-${{ linear.issue.identifier }}",
 			ConditionExpr: "linear.issue.state.name == 'Done'", // would block if applied to auto path
+		},
+		invitees: []integrations.LinearInvitee{
+			{Email: "mentioned@x.io"},
 		},
 	}
 	e := newEngineWithClassifier(st, sl, ig, pub, fixedClassifier(intent.CreateChannel))
@@ -502,6 +522,14 @@ func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
 	}
 	if len(sl.posted) != 0 {
 		t.Errorf("command must short-circuit mirroring; got %d posts", len(sl.posted))
+	}
+	// Manual path passes the comment body for mention scan + actor email.
+	if len(ig.inviteeBodies) != 1 || !strings.Contains(ig.inviteeBodies[0], "@notifbuddy") {
+		t.Errorf("inviteeBodies = %v, want command body", ig.inviteeBodies)
+	}
+	wantInvited := []string{"U_NIK", "U_MENTION"}
+	if !sameMembers(sl.invited, wantInvited) {
+		t.Errorf("invited = %v, want %v (actor + mention)", sl.invited, wantInvited)
 	}
 }
 
@@ -550,6 +578,42 @@ func TestOnLinearEvent_NotifBuddySkipsNLPWhenBotIdentityFails(t *testing.T) {
 	// Ordinary mirroring still proceeds (command path skipped).
 	if len(sl.posted) != 1 {
 		t.Fatalf("want comment mirrored to Slack, got %d posts", len(sl.posted))
+	}
+}
+
+// Slack <@BOT> create invites the Slack author plus Linear issue people.
+func TestOnSlackEvent_BotMentionCreateInvitesAuthor(t *testing.T) {
+	st := newFakeStore()
+	// Channel knows its issue, but the issue has no channel yet (create path).
+	st.channelToIssue["org1|C_SRC"] = "issue54"
+	st.slackPayloads["e_create"] = slackMessagePayload(
+		"U_HUMAN", "", "", "<@U_BOT> create a channel", "C_SRC", "TS_CREATE", "")
+
+	sl := withBotIdentity(&fakeSlack{
+		nextChannel: "C_NEW",
+		usersByEmail: map[string]slackapi.User{
+			"assignee@x.io": {ID: "U_ASSIGNEE"},
+		},
+	}, "U_BOT", "notifbuddy")
+	ig := &fakeIntg{
+		settings:    integrations.LinearSettings{CreationMode: "manual", NameTemplate: "tkt-${{ linear.issue.identifier }}"},
+		issueTeamID: "team1",
+		issue:       integrations.LinearIssue{ID: "issue54", Identifier: "NOT-1", TeamID: "team1"},
+		invitees:    []integrations.LinearInvitee{{Email: "assignee@x.io"}},
+	}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.CreateChannel))
+
+	e.OnSlackEvent(context.Background(), slackRef("e_create", "org1"))
+
+	if sl.createdName != "tkt-not-1" {
+		t.Errorf("channel name = %q, want tkt-not-1", sl.createdName)
+	}
+	want := []string{"U_HUMAN", "U_ASSIGNEE"}
+	if !sameMembers(sl.invited, want) {
+		t.Errorf("invited = %v, want %v", sl.invited, want)
+	}
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("command must not mirror; got %d comments", len(ig.createdComments))
 	}
 }
 
@@ -668,14 +732,26 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	b, _ := json.Marshal(env)
 	st.linearPayloads["d4"] = b
 
-	sl := &fakeSlack{nextChannel: "C_MADE"}
+	sl := &fakeSlack{
+		nextChannel: "C_MADE",
+		usersByEmail: map[string]slackapi.User{
+			"creator@x.io":  {ID: "U_CREATOR"},
+			"assignee@x.io": {ID: "U_ASSIGNEE"},
+		},
+	}
 	pub := &spyPub{}
-	ig := &fakeIntg{settings: integrations.LinearSettings{
-		CreationMode:   "status",
-		TriggerStatus:  "In Progress",
-		NameTemplate:   "tkt-${{ linear.issue.identifier }}",
-		AutoAddMembers: []string{"UBOT1", "UBOT2"},
-	}}
+	ig := &fakeIntg{
+		settings: integrations.LinearSettings{
+			CreationMode:   "status",
+			TriggerStatus:  "In Progress",
+			NameTemplate:   "tkt-${{ linear.issue.identifier }}",
+			AutoAddMembers: []string{"UBOT1", "UBOT2"},
+		},
+		invitees: []integrations.LinearInvitee{
+			{Email: "creator@x.io", Name: "Creator"},
+			{Email: "assignee@x.io", Name: "Assignee"},
+		},
+	}
 	e := newEngine(st, sl, ig, pub)
 
 	e.OnLinearEvent(context.Background(), linearRef("d4", "org1"))
@@ -686,12 +762,107 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 	if c, _ := st.ChannelForIssue(context.Background(), "org1", "issue9"); c != "C_MADE" {
 		t.Errorf("issue->channel mapping not stored: %q", c)
 	}
-	if len(sl.invited) != 2 {
-		t.Errorf("expected 2 bots invited, got %v", sl.invited)
+	wantInvited := []string{"UBOT1", "UBOT2", "U_CREATOR", "U_ASSIGNEE"}
+	if !sameMembers(sl.invited, wantInvited) {
+		t.Errorf("invited = %v, want %v", sl.invited, wantInvited)
 	}
 	if !pub.has(TopicChannelCreated) || !pub.has(TopicBotsAdded) {
 		t.Errorf("expected channel.created + bots.added topics, got %v", pub.topics)
 	}
+}
+
+// Channel create invites AutoAddMembers ∪ Linear invitees; duplicates and
+// unresolved emails are skipped; invitee fetch errors do not block create.
+func TestOnLinearEvent_ChannelCreateInvitesIssuePeople(t *testing.T) {
+	st := newFakeStore()
+	env := map[string]any{
+		"event_source": "linear",
+		"linear": map[string]any{
+			"action": "update", "type": "issue",
+			"actor": map[string]any{"name": "Ada"},
+			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+		},
+	}
+	b, _ := json.Marshal(env)
+	st.linearPayloads["d_inv"] = b
+
+	sl := &fakeSlack{
+		nextChannel: "C_INV",
+		usersByEmail: map[string]slackapi.User{
+			"creator@x.io": {ID: "U_CREATOR"},
+			// assignee@x.io intentionally missing → skipped
+			"mentioned@x.io": {ID: "U_MENTION"},
+		},
+	}
+	ig := &fakeIntg{
+		settings: integrations.LinearSettings{
+			CreationMode:   "status",
+			TriggerStatus:  "In Progress",
+			NameTemplate:   "tkt-${{ linear.issue.identifier }}",
+			AutoAddMembers: []string{"UBOT1", "U_CREATOR"}, // U_CREATOR also in invitees → dedupe
+		},
+		invitees: []integrations.LinearInvitee{
+			{Email: "creator@x.io"},
+			{Email: "assignee@x.io"},
+			{Email: "mentioned@x.io"},
+		},
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+	e.OnLinearEvent(context.Background(), linearRef("d_inv", "org1"))
+
+	want := []string{"UBOT1", "U_CREATOR", "U_MENTION"}
+	if !sameMembers(sl.invited, want) {
+		t.Errorf("invited = %v, want %v", sl.invited, want)
+	}
+	if sl.createdName == "" {
+		t.Fatal("channel should still be created when some emails do not resolve")
+	}
+}
+
+func TestOnLinearEvent_ChannelCreateContinuesWhenInviteesFetchFails(t *testing.T) {
+	st := newFakeStore()
+	env := map[string]any{
+		"event_source": "linear",
+		"linear": map[string]any{
+			"action": "update", "type": "issue",
+			"actor": map[string]any{"name": "Ada"},
+			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+		},
+	}
+	b, _ := json.Marshal(env)
+	st.linearPayloads["d_inv_err"] = b
+
+	sl := &fakeSlack{nextChannel: "C_OK"}
+	ig := &fakeIntg{
+		settings: integrations.LinearSettings{
+			CreationMode:   "status",
+			TriggerStatus:  "In Progress",
+			NameTemplate:   "tkt-${{ linear.issue.identifier }}",
+			AutoAddMembers: []string{"UBOT1"},
+		},
+		inviteesErr: fmt.Errorf("graphql down"),
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+	e.OnLinearEvent(context.Background(), linearRef("d_inv_err", "org1"))
+
+	if sl.createdName != "tkt-sko-9" {
+		t.Errorf("channel name = %q, want tkt-sko-9", sl.createdName)
+	}
+	if !sameMembers(sl.invited, []string{"UBOT1"}) {
+		t.Errorf("invited = %v, want [UBOT1]", sl.invited)
+	}
+}
+
+// sameMembers reports whether a and b contain the same strings (order ignored).
+func sameMembers(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	ac := append([]string(nil), a...)
+	bc := append([]string(nil), b...)
+	slices.Sort(ac)
+	slices.Sort(bc)
+	return slices.Equal(ac, bc)
 }
 
 // Wrong status must not create a channel.

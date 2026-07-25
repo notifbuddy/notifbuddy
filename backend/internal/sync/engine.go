@@ -49,6 +49,10 @@ type Integrations interface {
 	SlackBotToken(ctx context.Context, orgID string) (string, error)
 	LinearCreateComment(ctx context.Context, orgID string, in integrations.LinearCreateCommentInput) (integrations.LinearComment, error)
 	LinearIssueByID(ctx context.Context, orgID, issueID string) (integrations.LinearIssue, error)
+	// LinearIssueInvitees returns creator/assignee/profile-mentioned users for
+	// inviting into a newly created Slack channel. extraBodies are additional
+	// markdown bodies to scan for profile URLs (e.g. the @notifbuddy comment).
+	LinearIssueInvitees(ctx context.Context, orgID, issueID string, extraBodies ...string) ([]integrations.LinearInvitee, error)
 	// LinearFileDownload fetches a private Linear upload (uploads.linear.app)
 	// with the org's workspace token, for re-hosting in Slack.
 	LinearFileDownload(ctx context.Context, orgID, fileURL string) (data []byte, contentType string, err error)

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -587,16 +588,28 @@ type LinearIssue struct {
 }
 
 // linearIssueQuery fetches the fields templates and sync need when injecting
-// an issue into a Comment envelope (and for LinearIssueByID).
+// an issue into a Comment envelope (and for LinearIssueByID / invitees).
 const linearIssueQuery = `query($id: String!) {
 	issue(id: $id) {
 		id identifier title number description url
 		state { id name type color }
 		team { id key name }
 		labels { nodes { id name color } }
-		assignee { id name email }
+		creator { id name email url displayName }
+		assignee { id name email url displayName }
 	}
 }`
+
+// linearUserRef is the subset of a Linear user we need for Slack invites.
+type linearUserRef struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	URL         string `json:"url"`
+	DisplayName string `json:"displayName"`
+	Active      bool   `json:"active"`
+	App         bool   `json:"app"`
+}
 
 type linearIssueGQL struct {
 	ID          string `json:"id"`
@@ -623,11 +636,43 @@ type linearIssueGQL struct {
 			Color string `json:"color"`
 		} `json:"nodes"`
 	} `json:"labels"`
-	Assignee *struct {
-		ID    string `json:"id"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
-	} `json:"assignee"`
+	Creator  *linearUserRef `json:"creator"`
+	Assignee *linearUserRef `json:"assignee"`
+}
+
+// LinearInvitee is a Linear user (email) to invite into a newly created Slack channel.
+type LinearInvitee struct {
+	ID    string
+	Email string
+	Name  string
+}
+
+// linearProfileSlugRE matches Linear user profile URLs in markdown (bare or linked).
+// Mentions are encoded as https://linear.app/<workspace>/profiles/<displayName>.
+var linearProfileSlugRE = regexp.MustCompile(`https://linear\.app/[^/\s)"']+/profiles/([A-Za-z0-9._-]+)`)
+
+// profileSlugsFromMarkdown returns unique Linear displayName slugs mentioned via
+// profile URLs in the given markdown bodies.
+func profileSlugsFromMarkdown(bodies ...string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, body := range bodies {
+		if body == "" {
+			continue
+		}
+		for _, m := range linearProfileSlugRE.FindAllStringSubmatch(body, -1) {
+			if len(m) < 2 || m[1] == "" {
+				continue
+			}
+			slug := m[1]
+			if _, ok := seen[slug]; ok {
+				continue
+			}
+			seen[slug] = struct{}{}
+			out = append(out, slug)
+		}
+	}
+	return out
 }
 
 // LinearIssueByID fetches an issue by id using the org's workspace token.
@@ -668,13 +713,118 @@ func (s *Service) LinearIssueMapByID(ctx context.Context, orgID, issueID string)
 		},
 		"labels": labels,
 	}
+	if i.Creator != nil {
+		out["creatorId"] = i.Creator.ID
+		out["creator"] = map[string]any{
+			"id": i.Creator.ID, "name": i.Creator.Name, "email": i.Creator.Email, "url": i.Creator.URL,
+		}
+	}
 	if i.Assignee != nil {
 		out["assigneeId"] = i.Assignee.ID
 		out["assignee"] = map[string]any{
-			"id": i.Assignee.ID, "name": i.Assignee.Name, "email": i.Assignee.Email,
+			"id": i.Assignee.ID, "name": i.Assignee.Name, "email": i.Assignee.Email, "url": i.Assignee.URL,
 		}
 	}
 	return out, nil
+}
+
+// LinearIssueInvitees returns Linear users who should be invited when a Slack
+// channel is created for issueID: creator, assignee, and anyone @mentioned via
+// a profile URL in the issue description or extraBodies (e.g. the @notifbuddy
+// command comment). Unresolved mentions and users without email are skipped.
+func (s *Service) LinearIssueInvitees(ctx context.Context, orgID, issueID string, extraBodies ...string) ([]LinearInvitee, error) {
+	i, err := s.fetchLinearIssue(ctx, orgID, issueID)
+	if err != nil {
+		return nil, err
+	}
+	byEmail := map[string]LinearInvitee{}
+	add := func(u *linearUserRef) {
+		if u == nil || u.Email == "" {
+			return
+		}
+		email := strings.ToLower(strings.TrimSpace(u.Email))
+		if email == "" {
+			return
+		}
+		if _, ok := byEmail[email]; ok {
+			return
+		}
+		byEmail[email] = LinearInvitee{ID: u.ID, Email: email, Name: u.Name}
+	}
+	add(i.Creator)
+	add(i.Assignee)
+
+	bodies := append([]string{i.Description}, extraBodies...)
+	slugs := profileSlugsFromMarkdown(bodies...)
+	// Drop slugs we already have from creator/assignee (by displayName).
+	haveSlug := map[string]struct{}{}
+	for _, u := range []*linearUserRef{i.Creator, i.Assignee} {
+		if u == nil {
+			continue
+		}
+		if dn := strings.TrimSpace(u.DisplayName); dn != "" {
+			haveSlug[dn] = struct{}{}
+		}
+	}
+	var need []string
+	for _, slug := range slugs {
+		if _, ok := haveSlug[slug]; ok {
+			continue
+		}
+		need = append(need, slug)
+	}
+	if len(need) > 0 {
+		users, err := s.linearUsersByDisplayNames(ctx, orgID, need)
+		if err != nil {
+			slog.WarnContext(ctx, "integrations: linear invitees: resolve profile mentions failed",
+				"org_id", orgID, "issue_id", issueID, "error", err)
+		} else {
+			for idx := range users {
+				u := users[idx]
+				if u.App || !u.Active || u.Email == "" {
+					continue
+				}
+				add(&u)
+			}
+		}
+	}
+
+	out := make([]LinearInvitee, 0, len(byEmail))
+	for _, inv := range byEmail {
+		out = append(out, inv)
+	}
+	return out, nil
+}
+
+// linearUsersByDisplayNames looks up active workspace users by Linear displayName
+// (the slug in /profiles/<displayName> URLs).
+func (s *Service) linearUsersByDisplayNames(ctx context.Context, orgID string, displayNames []string) ([]linearUserRef, error) {
+	if len(displayNames) == 0 {
+		return nil, nil
+	}
+	token, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	const query = `query($filter: UserFilter) {
+		users(filter: $filter) {
+			nodes { id name email url displayName active app }
+		}
+	}`
+	var resp struct {
+		Data struct {
+			Users struct {
+				Nodes []linearUserRef `json:"nodes"`
+			} `json:"users"`
+		} `json:"data"`
+	}
+	filter := map[string]any{
+		"displayName": map[string]any{"in": displayNames},
+	}
+	if err := s.linearGraphQL(ctx, token, query, map[string]any{"filter": filter}, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data.Users.Nodes, nil
 }
 
 func (s *Service) fetchLinearIssue(ctx context.Context, orgID, issueID string) (linearIssueGQL, error) {
