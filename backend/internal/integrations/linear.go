@@ -373,13 +373,13 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 // LinearReactionResult is the outcome of LinearCreateReaction.
 type LinearReactionResult struct {
 	ID           string // Linear reaction UUID
-	ActingUserID string // NotifBuddy user id when posted with a user token; empty = app
+	ActingUserID string // NotifBuddy user id whose Linear token authored the reaction
 }
 
 // LinearCreateReaction adds an emoji reaction to a Linear comment via
 // reactionCreate. emoji is the Unicode form Linear expects (e.g. "👍").
-// When slackAuthorID resolves to a linked Linear user token, the reaction is
-// authored as that user; otherwise the org's actor=app token is used.
+// Requires slackAuthorID to resolve to a linked Linear user token; returns
+// store.ErrNotFound when unlinked (no app fallback — NOT-66).
 // A client-generated UUID is supplied so the sync engine can record the
 // reaction id before/alongside the webhook echo.
 func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, emoji, slackAuthorID string) (LinearReactionResult, error) {
@@ -419,9 +419,9 @@ func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, em
 	return LinearReactionResult{ID: rid, ActingUserID: actingUserID}, nil
 }
 
-// LinearDeleteReaction removes a reaction by its Linear id. When actingUserID
-// is set, uses that user's Linear token (must match who created it); otherwise
-// the org app token.
+// LinearDeleteReaction removes a reaction by its Linear id using actingUserID's
+// Linear user token (must match who created it). Returns store.ErrNotFound when
+// that user has no personal Linear connection (NOT-66).
 func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID, actingUserID string) error {
 	token, _, err := s.linearReactionToken(ctx, orgID, actingUserID, "")
 	if err != nil {
@@ -1087,10 +1087,10 @@ func (s *Service) LinearMentionForSlackUser(ctx context.Context, orgID, slackUse
 	return url, true
 }
 
-// linearReactionToken picks the Linear token for a reaction mutation.
+// linearReactionToken picks the Linear user token for a reaction mutation.
 // Prefer actingUserID (NotifBuddy user) when set; else resolve slackAuthorID to
-// a linked Linear user; else the org app token. Returns the acting user id when
-// a user token is used (empty for app).
+// a linked Linear user. Returns store.ErrNotFound when nobody has a personal
+// Linear connection — reactions never use the org app token (NOT-66).
 func (s *Service) linearReactionToken(ctx context.Context, orgID, actingUserID, slackAuthorID string) (token, usedUserID string, err error) {
 	uid := actingUserID
 	if uid == "" && slackAuthorID != "" {
@@ -1102,20 +1102,14 @@ func (s *Service) linearReactionToken(ctx context.Context, orgID, actingUserID, 
 			return "", "", lerr
 		}
 	}
-	if uid != "" {
-		t, terr := s.LinearUserToken(ctx, orgID, uid)
-		switch {
-		case terr == nil:
-			return t, uid, nil
-		case !errors.Is(terr, store.ErrNotFound):
-			return "", "", terr
-		}
+	if uid == "" {
+		return "", "", store.ErrNotFound
 	}
-	t, err := s.LinearAccessToken(ctx, orgID)
+	t, err := s.LinearUserToken(ctx, orgID, uid)
 	if err != nil {
 		return "", "", err
 	}
-	return t, "", nil
+	return t, uid, nil
 }
 
 // ResolveUserIDByLinearUserID maps a Linear user id to a NotifBuddy user via

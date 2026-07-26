@@ -338,9 +338,12 @@ func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrati
 	return integrations.LinearComment{ID: id}, nil
 }
 func (i *fakeIntg) LinearCreateReaction(_ context.Context, _, commentID, emoji, slackAuthorID string) (integrations.LinearReactionResult, error) {
-	acting := ""
-	if i.linkedSlackAuthors != nil {
-		acting = i.linkedSlackAuthors[slackAuthorID]
+	if i.linkedSlackAuthors == nil {
+		return integrations.LinearReactionResult{}, store.ErrNotFound
+	}
+	acting, ok := i.linkedSlackAuthors[slackAuthorID]
+	if !ok || acting == "" {
+		return integrations.LinearReactionResult{}, store.ErrNotFound
 	}
 	i.createdReactions = append(i.createdReactions, struct{ CommentID, Emoji, SlackAuthorID, ActingUserID string }{
 		commentID, emoji, slackAuthorID, acting,
@@ -354,6 +357,9 @@ func (i *fakeIntg) LinearCreateReaction(_ context.Context, _, commentID, emoji, 
 	return integrations.LinearReactionResult{ID: id, ActingUserID: acting}, nil
 }
 func (i *fakeIntg) LinearDeleteReaction(_ context.Context, _, reactionID, actingUserID string) error {
+	if actingUserID == "" {
+		return store.ErrNotFound
+	}
 	i.deletedReactions = append(i.deletedReactions, struct{ ReactionID, ActingUserID string }{reactionID, actingUserID})
 	return nil
 }
@@ -1881,16 +1887,19 @@ func TestOnSlackEvent_ReactionAddedMirrorsToLinear(t *testing.T) {
 	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
 		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
 	})
-	st.slackPayloads["r1"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS1")
-	ig := &fakeIntg{nextReactionID: "react1"}
+	st.slackPayloads["r1"] = slackReactionPayload("reaction_added", "U_LINKED", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{
+		nextReactionID:     "react1",
+		linkedSlackAuthors: map[string]string{"U_LINKED": "nb_user1"},
+	}
 	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
 
 	if err := e.OnSlackEvent(context.Background(), slackRef("r1", "org1")); err != nil {
 		t.Fatal(err)
 	}
 	if len(ig.createdReactions) != 1 || ig.createdReactions[0].CommentID != "cmt1" ||
-		ig.createdReactions[0].Emoji != "👍" || ig.createdReactions[0].SlackAuthorID != "U_HUMAN" ||
-		ig.createdReactions[0].ActingUserID != "" {
+		ig.createdReactions[0].Emoji != "👍" || ig.createdReactions[0].SlackAuthorID != "U_LINKED" ||
+		ig.createdReactions[0].ActingUserID != "nb_user1" {
 		t.Fatalf("createdReactions = %+v", ig.createdReactions)
 	}
 	row, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1")
@@ -1898,35 +1907,25 @@ func TestOnSlackEvent_ReactionAddedMirrorsToLinear(t *testing.T) {
 		t.Fatal(err)
 	}
 	if row.CounterpartEmoji != "thumbsup" || row.CounterpartParentID != "C1:TS1" ||
-		row.CounterpartActorID != "U_HUMAN" || row.ActingUserID != "" {
+		row.CounterpartActorID != "U_LINKED" || row.ActingUserID != "nb_user1" {
 		t.Errorf("row = %+v", row)
 	}
 }
 
-func TestOnSlackEvent_ReactionAddedUsesLinkedLinearUser(t *testing.T) {
+func TestOnSlackEvent_ReactionAddedUnlinkedDropped(t *testing.T) {
 	st := newFakeStore()
 	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
 		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
 	})
-	st.slackPayloads["r1a"] = slackReactionPayload("reaction_added", "U_LINKED", "thumbsup", "C1", "TS1")
-	ig := &fakeIntg{
-		nextReactionID:     "react1",
-		linkedSlackAuthors: map[string]string{"U_LINKED": "nb_user1"},
-	}
+	st.slackPayloads["r1u"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{} // no linkedSlackAuthors
 	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
 
-	if err := e.OnSlackEvent(context.Background(), slackRef("r1a", "org1")); err != nil {
+	if err := e.OnSlackEvent(context.Background(), slackRef("r1u", "org1")); err != nil {
 		t.Fatal(err)
 	}
-	if ig.createdReactions[0].ActingUserID != "nb_user1" {
-		t.Fatalf("expected user-token path, got %+v", ig.createdReactions[0])
-	}
-	row, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if row.ActingUserID != "nb_user1" || row.CounterpartActorID != "U_LINKED" {
-		t.Errorf("row = %+v", row)
+	if len(ig.createdReactions) != 0 {
+		t.Fatalf("unlinked slack user must not create linear reaction: %+v", ig.createdReactions)
 	}
 }
 
@@ -1964,7 +1963,9 @@ func TestOnSlackEvent_TwoActorsSameEmoji(t *testing.T) {
 	})
 	st.slackPayloads["r2a"] = slackReactionPayload("reaction_added", "U_A", "thumbsup", "C1", "TS1")
 	st.slackPayloads["r2b"] = slackReactionPayload("reaction_added", "U_B", "thumbsup", "C1", "TS1")
-	ig := &fakeIntg{}
+	ig := &fakeIntg{
+		linkedSlackAuthors: map[string]string{"U_A": "nb_a", "U_B": "nb_b"},
+	}
 	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
 
 	if err := e.OnSlackEvent(context.Background(), slackRef("r2a", "org1")); err != nil {
@@ -2037,8 +2038,11 @@ func TestOnSlackEvent_ReactionAddRedeliveryIdempotent(t *testing.T) {
 	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
 		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
 	})
-	st.slackPayloads["r6"] = slackReactionPayload("reaction_added", "U_HUMAN", "thumbsup", "C1", "TS1")
-	ig := &fakeIntg{nextReactionID: "react1"}
+	st.slackPayloads["r6"] = slackReactionPayload("reaction_added", "U_LINKED", "thumbsup", "C1", "TS1")
+	ig := &fakeIntg{
+		nextReactionID:     "react1",
+		linkedSlackAuthors: map[string]string{"U_LINKED": "nb_user1"},
+	}
 	e := newEngine(st, withBotIdentity(&fakeSlack{}, "U_BOT", "bot"), ig, &spyPub{})
 
 	_ = e.OnSlackEvent(context.Background(), slackRef("r6", "org1"))
@@ -2053,32 +2057,7 @@ func TestOnLinearEvent_ReactionCreateMirrorsToSlack(t *testing.T) {
 	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
 		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
 	})
-	st.linearPayloads["lr1"] = linearReactionPayload("create", "react1", "👍", "cmt1", "user", "lin_u1")
-	sl := &fakeSlack{}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
-
-	if err := e.OnLinearEvent(context.Background(), linearRef("lr1", "org1")); err != nil {
-		t.Fatal(err)
-	}
-	// gemoji's primary alias for 👍 is "+1" (Slack accepts +1 and thumbsup).
-	if len(sl.reactionsAdded) != 1 || sl.reactionsAdded[0] != "xoxb-test|C1|TS1|+1" {
-		t.Fatalf("reactionsAdded = %v", sl.reactionsAdded)
-	}
-	row, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if row.CounterpartActorID != "" || row.ActingUserID != "" {
-		t.Errorf("unlinked create should use bot fallback: %+v", row)
-	}
-}
-
-func TestOnLinearEvent_ReactionCreateUsesLinkedSlackUser(t *testing.T) {
-	st := newFakeStore()
-	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
-		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
-	})
-	st.linearPayloads["lr1b"] = linearReactionPayload("create", "react1", "👍", "cmt1", "user", "lin_linked")
+	st.linearPayloads["lr1"] = linearReactionPayload("create", "react1", "👍", "cmt1", "user", "lin_linked")
 	sl := &fakeSlack{}
 	ig := &fakeIntg{
 		linearUserToNB:  map[string]string{"lin_linked": "nb_user1"},
@@ -2087,9 +2066,10 @@ func TestOnLinearEvent_ReactionCreateUsesLinkedSlackUser(t *testing.T) {
 	}
 	e := newEngine(st, sl, ig, &spyPub{})
 
-	if err := e.OnLinearEvent(context.Background(), linearRef("lr1b", "org1")); err != nil {
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr1", "org1")); err != nil {
 		t.Fatal(err)
 	}
+	// gemoji's primary alias for 👍 is "+1" (Slack accepts +1 and thumbsup).
 	if len(sl.reactionsAdded) != 1 || sl.reactionsAdded[0] != "xoxp-user|C1|TS1|+1" {
 		t.Fatalf("reactionsAdded = %v", sl.reactionsAdded)
 	}
@@ -2099,6 +2079,23 @@ func TestOnLinearEvent_ReactionCreateUsesLinkedSlackUser(t *testing.T) {
 	}
 	if row.ActingUserID != "nb_user1" || row.CounterpartActorID != "U_LINKED" {
 		t.Errorf("row = %+v", row)
+	}
+}
+
+func TestOnLinearEvent_ReactionCreateUnlinkedDropped(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.linearPayloads["lr1u"] = linearReactionPayload("create", "react1", "👍", "cmt1", "user", "lin_u1")
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr1u", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.reactionsAdded) != 0 {
+		t.Fatalf("unlinked linear user must not add slack reaction: %v", sl.reactionsAdded)
 	}
 }
 
