@@ -166,11 +166,6 @@ settings:
 The client ID, client secret, and signing secret are on the app's **Basic
 Information** page.
 
-Adding a **bot** scope later requires reinstalling the app to every connected
-workspace before the new permissions take effect. Adding a **user** scope
-(e.g. `reactions:write`) requires each person to reconnect their personal Slack
-link in the dashboard — a workspace reconnect alone is not enough.
-
 ### Linear
 
 Create an OAuth application in [Linear → Settings → API → OAuth
@@ -180,9 +175,7 @@ JSON below (replace `api.example.com` with your API hostname). Keep a copy of
 this file with your install — it is the checklist for redirect URL, webhook URL,
 and webhook resource types.
 
-Request the `read` and `write` scopes (no extra scopes for user-attributed
-reactions — personal Linear connects store the viewer id automatically).
-Webhooks must include **`Issue`**,
+Request the `read` and `write` scopes. Webhooks must include **`Issue`**,
 **`Comment`**, and **`Reaction`** so channel sync, comment mirroring, and
 reaction sync all receive events. Copy the signing secret Linear generates into
 `integrations.linear.webhookSecret`.
