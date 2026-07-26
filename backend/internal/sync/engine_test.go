@@ -180,8 +180,10 @@ type fakeSlack struct {
 	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
 	uploads         []slackapi.UploadOptions
 	updates         []slackapi.UpdateOptions
-	reactionsAdded   []string // "token|channel|ts|name"
-	reactionsRemoved []string
+	reactionsAdded       []string // "token|channel|ts|name"
+	reactionsRemoved     []string
+	addReactionErr       error  // when set, AddReaction fails (optionally only for addReactionErrToken)
+	addReactionErrToken  string // empty = fail for every token
 }
 
 func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, error) {
@@ -261,6 +263,9 @@ func (s *fakeSlack) UpdateMessage(_ context.Context, _ string, opts slackapi.Upd
 	return nil
 }
 func (s *fakeSlack) AddReaction(_ context.Context, token, channelID, ts, name string) error {
+	if s.addReactionErr != nil && (s.addReactionErrToken == "" || s.addReactionErrToken == token) {
+		return s.addReactionErr
+	}
 	s.reactionsAdded = append(s.reactionsAdded, token+"|"+channelID+"|"+ts+"|"+name)
 	return nil
 }
@@ -1861,13 +1866,17 @@ func slackReactionPayload(eventType, user, reaction, channel, ts string) json.Ra
 }
 
 func linearReactionPayload(action, reactionID, emoji, commentID, actorType, linearUserID string) json.RawMessage {
+	return linearReactionPayloadEmail(action, reactionID, emoji, commentID, actorType, linearUserID, "ada@example.com")
+}
+
+func linearReactionPayloadEmail(action, reactionID, emoji, commentID, actorType, linearUserID, actorEmail string) json.RawMessage {
 	if linearUserID == "" {
 		linearUserID = "lin_u1"
 	}
 	env := map[string]any{"event_source": "linear", "linear": map[string]any{
 		"action": action,
 		"type":   "reaction",
-		"actor":  map[string]any{"type": actorType, "name": "Ada"},
+		"actor":  map[string]any{"type": actorType, "name": "Ada", "email": actorEmail},
 		"reaction": map[string]any{
 			"id": reactionID, "emoji": emoji, "commentId": commentID, "userId": linearUserID,
 		},
@@ -2133,7 +2142,11 @@ func TestOnLinearEvent_AppAuthoredReactionDropped(t *testing.T) {
 	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
 		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
 	})
-	st.linearPayloads["lr3"] = linearReactionPayload("create", "react1", "👍", "cmt1", "application", "")
+	// Linear OAuth apps often land as type=user with an @oauthapp.linear.app email.
+	st.linearPayloads["lr3"] = linearReactionPayloadEmail(
+		"create", "react1", "+1", "cmt1", "user", "oauth_app_user",
+		"a763d111-6666-4c46-8360-a2786b6d26b0@oauthapp.linear.app",
+	)
 	sl := &fakeSlack{}
 	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
 
@@ -2142,5 +2155,55 @@ func TestOnLinearEvent_AppAuthoredReactionDropped(t *testing.T) {
 	}
 	if len(sl.reactionsAdded) != 0 {
 		t.Fatalf("app reaction must not mirror: %v", sl.reactionsAdded)
+	}
+}
+
+func TestOnLinearEvent_ReactionCreateFallsBackToBotWhenUserTokenFails(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	st.linearPayloads["lr1c"] = linearReactionPayload("create", "react1", "+1", "cmt1", "user", "lin_linked")
+	sl := &fakeSlack{
+		addReactionErr:      fmt.Errorf("slackapi: reactions.add: missing_scope"),
+		addReactionErrToken: "xoxp-user",
+	}
+	ig := &fakeIntg{
+		linearUserToNB:  map[string]string{"lin_linked": "nb_user1"},
+		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
+		slackUserIDs:    map[string]string{"nb_user1": "U_LINKED"},
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr1c", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.reactionsAdded) != 1 || sl.reactionsAdded[0] != "xoxb-test|C1|TS1|+1" {
+		t.Fatalf("expected bot fallback, got %v", sl.reactionsAdded)
+	}
+	row, err := st.MirroredReactionBySource(context.Background(), "org1", sourceLinear, "react1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.ActingUserID != "" || row.CounterpartActorID != "" {
+		t.Errorf("fallback should record bot attribution: %+v", row)
+	}
+}
+
+func TestOnLinearEvent_ReactionCreateAcceptsLinearEmojiName(t *testing.T) {
+	st := newFakeStore()
+	_ = st.RecordMirroredMessage(context.Background(), store.MirroredMessage{
+		OrgID: "org1", LinearCommentID: "cmt1", SlackChannelID: "C1", SlackTS: "TS1",
+	})
+	// Linear webhooks send emoji *names* (e.g. "+1", "heart"), not Unicode.
+	st.linearPayloads["lr1d"] = linearReactionPayload("create", "react1", "heart", "cmt1", "user", "lin_u1")
+	sl := &fakeSlack{}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("lr1d", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.reactionsAdded) != 1 || sl.reactionsAdded[0] != "xoxb-test|C1|TS1|heart" {
+		t.Fatalf("reactionsAdded = %v", sl.reactionsAdded)
 	}
 }

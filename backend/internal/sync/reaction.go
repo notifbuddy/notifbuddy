@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"xolo/backend/internal/store"
 )
@@ -94,10 +95,22 @@ func (e *Engine) onSlackReaction(ctx context.Context, orgID, eventID, ownBotID s
 	return nil
 }
 
+// linearReactionFromApp reports whether a Linear reaction webhook was caused by
+// an OAuth application (our own reactionCreate echoes). Linear often labels
+// these actor.type=user with an @oauthapp.linear.app email.
+func linearReactionFromApp(a linearActor) bool {
+	if a.Type != "" && a.Type != "user" {
+		return true
+	}
+	email := strings.ToLower(strings.TrimSpace(a.Email))
+	return strings.HasSuffix(email, "@oauthapp.linear.app")
+}
+
 // onLinearReaction mirrors a human Linear comment reaction into Slack.
-// Defense 1 for app-authored reactions is the actor.type != "user" check in
+// Defense 1 for app-authored reactions is linearReactionFromApp in
 // OnLinearEvent before this is called. When the Linear user has a linked Slack
-// user token, the Slack reaction is attributed to that person.
+// user token, the Slack reaction is attributed to that person; if that token
+// can't react (missing scope / not in channel), we fall back to the bot.
 func (e *Engine) onLinearReaction(ctx context.Context, orgID string, p linearPayload) error {
 	r := p.Linear.Reaction
 	if r == nil || r.CommentID == "" || r.Emoji == "" || r.ID == "" {
@@ -106,6 +119,8 @@ func (e *Engine) onLinearReaction(ctx context.Context, orgID string, p linearPay
 
 	link, err := e.store.LinkByLinearComment(ctx, orgID, r.CommentID)
 	if errors.Is(err, store.ErrNotFound) {
+		slog.InfoContext(ctx, "sync: linear reaction: skip unmapped comment",
+			"org_id", orgID, "reaction_id", r.ID, "comment_id", r.CommentID)
 		return nil
 	}
 	if err != nil {
@@ -133,7 +148,21 @@ func (e *Engine) onLinearReaction(ctx context.Context, orgID string, p linearPay
 			return fmt.Errorf("linear reaction %s: slack token: %w", r.ID, err)
 		}
 		if err := e.slack.AddReaction(ctx, token, link.SlackChannelID, link.SlackTS, shortcode); err != nil {
-			return fmt.Errorf("linear reaction %s: slack add: %w", r.ID, err)
+			if actingUserID == "" {
+				return fmt.Errorf("linear reaction %s: slack add: %w", r.ID, err)
+			}
+			// User token often lacks reactions:write (pre-reconnect) or the
+			// person isn't in the issue channel — fall back to the bot.
+			slog.InfoContext(ctx, "sync: linear reaction: user token failed, falling back to bot",
+				"org_id", orgID, "reaction_id", r.ID, "error", err)
+			botToken, berr := e.intg.SlackBotToken(ctx, orgID)
+			if berr != nil {
+				return fmt.Errorf("linear reaction %s: slack add (user): %w; bot token: %v", r.ID, err, berr)
+			}
+			if err := e.slack.AddReaction(ctx, botToken, link.SlackChannelID, link.SlackTS, shortcode); err != nil {
+				return fmt.Errorf("linear reaction %s: slack add: %w", r.ID, err)
+			}
+			actingUserID, slackActorID = "", ""
 		}
 		if err := e.store.RecordMirroredReaction(ctx, orgID, store.MirroredReaction{
 			EventSource:         sourceLinear,
@@ -179,7 +208,18 @@ func (e *Engine) onLinearReaction(ctx context.Context, orgID string, p linearPay
 			return fmt.Errorf("linear reaction %s: slack token: %w", r.ID, err)
 		}
 		if err := e.slack.RemoveReaction(ctx, token, link.SlackChannelID, link.SlackTS, shortcode); err != nil {
-			return fmt.Errorf("linear reaction %s: slack remove: %w", r.ID, err)
+			if actingUserID == "" {
+				return fmt.Errorf("linear reaction %s: slack remove: %w", r.ID, err)
+			}
+			slog.InfoContext(ctx, "sync: linear reaction: user token remove failed, falling back to bot",
+				"org_id", orgID, "reaction_id", r.ID, "error", err)
+			botToken, berr := e.intg.SlackBotToken(ctx, orgID)
+			if berr != nil {
+				return fmt.Errorf("linear reaction %s: slack remove (user): %w; bot token: %v", r.ID, err, berr)
+			}
+			if err := e.slack.RemoveReaction(ctx, botToken, link.SlackChannelID, link.SlackTS, shortcode); err != nil {
+				return fmt.Errorf("linear reaction %s: slack remove: %w", r.ID, err)
+			}
 		}
 		if err := e.store.DeleteMirroredReaction(ctx, orgID, sourceLinear, r.ID); err != nil {
 			slog.ErrorContext(ctx, "sync: linear reaction: delete link failed",
