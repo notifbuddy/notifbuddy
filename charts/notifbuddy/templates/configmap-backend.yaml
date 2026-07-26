@@ -83,6 +83,7 @@ data:
       user_scopes:
         - chat:write
         - channels:write
+        - reactions:write # react as the linked user when mirroring Linear reactions
       callback_url: "https://{{ $api }}/integrations/slack/callback"
       signing_secret: "${SLACK_SIGNING_SECRET}"
     {{- end }}

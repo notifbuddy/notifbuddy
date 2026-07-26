@@ -133,6 +133,42 @@ func (s *Store) UserIDBySlackUserID(ctx context.Context, orgID, slackUserID stri
 	return userID, nil
 }
 
+// UserIDByLinearUserID resolves the backend user whose user-level Linear
+// connection belongs to the given Linear user id (metadata.linear_user_id).
+// ErrNotFound when nobody in the org has linked that Linear account.
+func (s *Store) UserIDByLinearUserID(ctx context.Context, orgID, linearUserID string) (string, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT connected_user_id
+		FROM org_integrations
+		WHERE org_id = $1 AND provider = $2 AND level = $3
+		  AND metadata->>'linear_user_id' = $4
+		LIMIT 1
+	`, orgID, string(ProviderLinear), string(LevelUser), linearUserID)
+	var userID string
+	if err := row.Scan(&userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("store: user by linear user id: %w", err)
+	}
+	return userID, nil
+}
+
+// SlackUserIDByUserID returns the Slack member id stored on a user's Slack
+// connection (metadata.slack_user_id). ErrNotFound when they have no user-level
+// Slack link or the metadata is missing.
+func (s *Store) SlackUserIDByUserID(ctx context.Context, orgID, userID string) (string, error) {
+	in, err := s.GetIntegration(ctx, orgID, ProviderSlack, LevelUser, userID)
+	if err != nil {
+		return "", err
+	}
+	id, _ := in.Metadata["slack_user_id"].(string)
+	if id == "" {
+		return "", ErrNotFound
+	}
+	return id, nil
+}
+
 // ListIntegrations returns an organization's workspace-level integrations.
 func (s *Store) ListIntegrations(ctx context.Context, orgID string) ([]Integration, error) {
 	return s.listIntegrations(ctx, orgID, LevelWorkspace, "")

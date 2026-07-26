@@ -18,6 +18,7 @@ oauth_config:
     user:
       - chat:write
       - channels:write
+      - reactions:write # react as the linked user when mirroring Linear reactions
     bot:
       - app_mentions:read
       - channels:manage
