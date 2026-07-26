@@ -221,6 +221,12 @@ func (s *Service) SlackUserToken(ctx context.Context, orgID, userID string) (str
 	return s.slackToken(ctx, orgID, store.LevelUser, userID)
 }
 
+// SlackUserIDByUserID returns the Slack member id (U…) stored on a user's
+// Slack link metadata.
+func (s *Service) SlackUserIDByUserID(ctx context.Context, orgID, userID string) (string, error) {
+	return s.store.SlackUserIDByUserID(ctx, orgID, userID)
+}
+
 func (s *Service) slackToken(ctx context.Context, orgID string, level store.Level, userID string) (string, error) {
 	in, err := s.store.GetIntegration(ctx, orgID, store.ProviderSlack, level, userID)
 	if err != nil {

@@ -79,6 +79,7 @@ slack:
   user_scopes:
     - chat:write
     - channels:write
+    - reactions:write # react as the linked user when mirroring Linear reactions
   callback_url: "http://localhost:8080/integrations/slack/callback"
   # Verifies inbound Slack Events API requests (X-Slack-Signature). SECRET.
   # Empty disables verification (and the Slack → Linear sync direction).

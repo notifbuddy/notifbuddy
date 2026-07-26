@@ -132,6 +132,12 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 	if st.Level == string(store.LevelUser) {
 		in.Level = store.LevelUser
 		in.ConnectedUserID = st.UserID
+		// Persist Linear viewer id so reaction sync can map Linear→Slack actors.
+		if vid, err := s.linearViewerID(r.Context(), access.AccessToken); err == nil && vid != "" {
+			in.Metadata["linear_user_id"] = vid
+		} else if err != nil {
+			slog.WarnContext(r.Context(), "integrations: linear viewer id lookup failed", "error", err)
+		}
 	}
 	if err := s.store.UpsertIntegration(r.Context(), in); err != nil {
 		slog.ErrorContext(r.Context(), "integrations: store linear token", "error", err)
@@ -364,14 +370,22 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 	return LinearComment{ID: resp.Data.CommentCreate.Comment.ID}, nil
 }
 
+// LinearReactionResult is the outcome of LinearCreateReaction.
+type LinearReactionResult struct {
+	ID           string // Linear reaction UUID
+	ActingUserID string // NotifBuddy user id when posted with a user token; empty = app
+}
+
 // LinearCreateReaction adds an emoji reaction to a Linear comment via
 // reactionCreate. emoji is the Unicode form Linear expects (e.g. "👍").
+// When slackAuthorID resolves to a linked Linear user token, the reaction is
+// authored as that user; otherwise the org's actor=app token is used.
 // A client-generated UUID is supplied so the sync engine can record the
 // reaction id before/alongside the webhook echo.
-func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, emoji string) (string, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
+func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, emoji, slackAuthorID string) (LinearReactionResult, error) {
+	token, actingUserID, err := s.linearReactionToken(ctx, orgID, "", slackAuthorID)
 	if err != nil {
-		return "", err
+		return LinearReactionResult{}, err
 	}
 	id := uuid.New().String()
 	const mutation = `mutation($input: ReactionCreateInput!) {
@@ -393,20 +407,23 @@ func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, em
 		} `json:"data"`
 	}
 	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"input": input}, &resp); err != nil {
-		return "", err
+		return LinearReactionResult{}, err
 	}
 	if !resp.Data.ReactionCreate.Success {
-		return "", fmt.Errorf("integrations: linear reactionCreate returned success=false")
+		return LinearReactionResult{}, fmt.Errorf("integrations: linear reactionCreate returned success=false")
 	}
-	if rid := resp.Data.ReactionCreate.Reaction.ID; rid != "" {
-		return rid, nil
+	rid := resp.Data.ReactionCreate.Reaction.ID
+	if rid == "" {
+		rid = id
 	}
-	return id, nil
+	return LinearReactionResult{ID: rid, ActingUserID: actingUserID}, nil
 }
 
-// LinearDeleteReaction removes a reaction by its Linear id.
-func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID string) error {
-	token, err := s.LinearAccessToken(ctx, orgID)
+// LinearDeleteReaction removes a reaction by its Linear id. When actingUserID
+// is set, uses that user's Linear token (must match who created it); otherwise
+// the org app token.
+func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID, actingUserID string) error {
+	token, _, err := s.linearReactionToken(ctx, orgID, actingUserID, "")
 	if err != nil {
 		return err
 	}
@@ -1068,6 +1085,74 @@ func (s *Service) LinearMentionForSlackUser(ctx context.Context, orgID, slackUse
 		return "", false
 	}
 	return url, true
+}
+
+// linearReactionToken picks the Linear token for a reaction mutation.
+// Prefer actingUserID (NotifBuddy user) when set; else resolve slackAuthorID to
+// a linked Linear user; else the org app token. Returns the acting user id when
+// a user token is used (empty for app).
+func (s *Service) linearReactionToken(ctx context.Context, orgID, actingUserID, slackAuthorID string) (token, usedUserID string, err error) {
+	uid := actingUserID
+	if uid == "" && slackAuthorID != "" {
+		id, lerr := s.store.UserIDBySlackUserID(ctx, orgID, slackAuthorID)
+		switch {
+		case lerr == nil:
+			uid = id
+		case !errors.Is(lerr, store.ErrNotFound):
+			return "", "", lerr
+		}
+	}
+	if uid != "" {
+		t, terr := s.LinearUserToken(ctx, orgID, uid)
+		switch {
+		case terr == nil:
+			return t, uid, nil
+		case !errors.Is(terr, store.ErrNotFound):
+			return "", "", terr
+		}
+	}
+	t, err := s.LinearAccessToken(ctx, orgID)
+	if err != nil {
+		return "", "", err
+	}
+	return t, "", nil
+}
+
+// ResolveUserIDByLinearUserID maps a Linear user id to a NotifBuddy user via
+// metadata.linear_user_id stored on user-level Linear connect.
+func (s *Service) ResolveUserIDByLinearUserID(ctx context.Context, orgID, linearUserID string) (string, error) {
+	if linearUserID == "" {
+		return "", store.ErrNotFound
+	}
+	return s.store.UserIDByLinearUserID(ctx, orgID, linearUserID)
+}
+
+// linearViewerID queries viewer { id } with a Linear access token.
+func (s *Service) linearViewerID(ctx context.Context, token string) (string, error) {
+	const query = `{"query":"{ viewer { id } }"}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.linear.app/graphql", bytes.NewReader([]byte(query)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Data struct {
+			Viewer struct {
+				ID string `json:"id"`
+			} `json:"viewer"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(body.Data.Viewer.ID), nil
 }
 
 // linearViewerProfileURL queries viewer { url } with a user-level Linear token.

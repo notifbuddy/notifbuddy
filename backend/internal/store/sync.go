@@ -211,6 +211,9 @@ func (s *Store) MirroredAssets(ctx context.Context, orgID, source, sourceID stri
 // MirroredReaction links a reaction mirrored across tools. Fields use envelope
 // vocabulary (event_source / parent_source / counterpart_source) so additional
 // providers can share the table without Linear/Slack-named columns.
+// CounterpartActorID is the Slack U… when attributed to a linked user (empty
+// for bot/app fallback). ActingUserID is the NotifBuddy user used for Linear
+// token selection on delete.
 type MirroredReaction struct {
 	OrgID               string
 	EventSource         string
@@ -221,6 +224,8 @@ type MirroredReaction struct {
 	CounterpartSource   string
 	CounterpartParentID string
 	CounterpartEmoji    string
+	CounterpartActorID  string
+	ActingUserID        string
 }
 
 // RecordMirroredReaction stores a mirror link after a successful sync.
@@ -230,12 +235,14 @@ func (s *Store) RecordMirroredReaction(ctx context.Context, orgID string, r Mirr
 		INSERT INTO mirrored_reactions (
 			org_id, event_source, event_source_id,
 			parent_source, parent_source_id, emoji,
-			counterpart_source, counterpart_parent_id, counterpart_emoji)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			counterpart_source, counterpart_parent_id, counterpart_emoji,
+			counterpart_actor_id, acting_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (org_id, event_source, event_source_id) DO NOTHING
 	`, orgID, r.EventSource, r.EventSourceID,
 		r.ParentSource, r.ParentSourceID, r.Emoji,
-		r.CounterpartSource, r.CounterpartParentID, r.CounterpartEmoji)
+		r.CounterpartSource, r.CounterpartParentID, r.CounterpartEmoji,
+		r.CounterpartActorID, r.ActingUserID)
 	if err != nil {
 		return fmt.Errorf("store: record mirrored reaction: %w", err)
 	}
@@ -247,23 +254,27 @@ func (s *Store) MirroredReactionBySource(ctx context.Context, orgID, eventSource
 	return s.scanMirroredReaction(ctx, `
 		SELECT org_id, event_source, event_source_id,
 		       parent_source, parent_source_id, emoji,
-		       counterpart_source, counterpart_parent_id, counterpart_emoji
+		       counterpart_source, counterpart_parent_id, counterpart_emoji,
+		       counterpart_actor_id, acting_user_id
 		FROM mirrored_reactions
 		WHERE org_id = $1 AND event_source = $2 AND event_source_id = $3
 	`, orgID, eventSource, eventSourceID)
 }
 
-// MirroredReactionByCounterpart looks up a row by the counterpart parent + emoji
-// (e.g. Slack channel:ts + shortcode) so remove can resolve the Linear reaction id.
-func (s *Store) MirroredReactionByCounterpart(ctx context.Context, orgID, counterpartSource, counterpartParentID, counterpartEmoji string) (MirroredReaction, error) {
+// MirroredReactionByCounterpart looks up a row by the counterpart parent +
+// emoji + actor (Slack channel:ts + shortcode + U…) so remove can resolve the
+// Linear reaction id for that person's reaction.
+func (s *Store) MirroredReactionByCounterpart(ctx context.Context, orgID, counterpartSource, counterpartParentID, counterpartEmoji, counterpartActorID string) (MirroredReaction, error) {
 	return s.scanMirroredReaction(ctx, `
 		SELECT org_id, event_source, event_source_id,
 		       parent_source, parent_source_id, emoji,
-		       counterpart_source, counterpart_parent_id, counterpart_emoji
+		       counterpart_source, counterpart_parent_id, counterpart_emoji,
+		       counterpart_actor_id, acting_user_id
 		FROM mirrored_reactions
 		WHERE org_id = $1 AND counterpart_source = $2
 		  AND counterpart_parent_id = $3 AND counterpart_emoji = $4
-	`, orgID, counterpartSource, counterpartParentID, counterpartEmoji)
+		  AND counterpart_actor_id = $5
+	`, orgID, counterpartSource, counterpartParentID, counterpartEmoji, counterpartActorID)
 }
 
 // DeleteMirroredReaction removes a mirror row after a successful unreact.
@@ -283,7 +294,8 @@ func (s *Store) scanMirroredReaction(ctx context.Context, query string, args ...
 	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&r.OrgID, &r.EventSource, &r.EventSourceID,
 		&r.ParentSource, &r.ParentSourceID, &r.Emoji,
-		&r.CounterpartSource, &r.CounterpartParentID, &r.CounterpartEmoji)
+		&r.CounterpartSource, &r.CounterpartParentID, &r.CounterpartEmoji,
+		&r.CounterpartActorID, &r.ActingUserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MirroredReaction{}, ErrNotFound
 	}
