@@ -165,9 +165,10 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 	case "workflow_state":
 		return e.onLinearWorkflowState(ctx, ref.OrgID, p)
 	case "reaction":
-		// Defense 1 for reactions: only mirror human-authored reactions.
-		// App/OAuth echoes from our reactionCreate have a non-user actor.
-		if p.Linear.Actor.Type != "" && p.Linear.Actor.Type != "user" {
+		// Defense 1 for reactions: drop non-human actors. Linear OAuth apps
+		// often arrive as actor.type=user with an @oauthapp.linear.app email
+		// (not application / botActor), so type alone is not enough.
+		if linearReactionFromApp(p.Linear.Actor) {
 			return nil
 		}
 		return e.onLinearReaction(ctx, ref.OrgID, p)
