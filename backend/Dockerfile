@@ -23,6 +23,7 @@ COPY --from=build /out/server /app/server
 COPY config /app/config
 ENV NB_ENV=prod
 ENV CONFIG_FILE=config/backend/prod.yaml
+ENV FEATUREFLAGS_FILE=config/featureflags/prod.yaml
 
 USER 65532:65532
 EXPOSE 8080

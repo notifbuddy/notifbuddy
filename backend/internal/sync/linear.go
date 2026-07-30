@@ -135,6 +135,10 @@ func (e *Engine) OnLinearEvent(ctx context.Context, msg pubsub.Message) error {
 		slog.InfoContext(ctx, "sync: linear event dropped: org locked (billing)", "delivery_id", ref.DeliveryID, "org_id", ref.OrgID)
 		return nil
 	}
+	if e.orgSyncDisabled(ctx, ref.OrgID) {
+		slog.InfoContext(ctx, "sync: linear event dropped: sync disabled", "delivery_id", ref.DeliveryID, "org_id", ref.OrgID)
+		return nil
+	}
 
 	// Load the full stored payload (the ingestion topic carries only routing).
 	// The writer persisted it before publishing the envelope, so a failure here

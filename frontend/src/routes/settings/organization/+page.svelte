@@ -25,6 +25,7 @@
 		updateMemberRole,
 		revokeInvitation,
 		updateOrgName,
+		updateOrgSyncEnabled,
 		uploadOrgAvatar,
 		regenerateOrgAvatar,
 		deleteOrgAvatar,
@@ -53,6 +54,8 @@
 	let avatarBusy = $state<string | null>(null);
 	let profileError = $state<string | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
+	let savingSync = $state(false);
+	let syncError = $state<string | null>(null);
 
 	$effect(() => {
 		if (user?.organizationId) orgProfileStore.load(user.organizationId);
@@ -75,6 +78,25 @@
 		}
 		orgProfileStore.set(updated);
 		userStore.load(true); // top-nav shows the org name
+	}
+
+	async function setSyncEnabled(syncEnabled: boolean) {
+		if (
+			!isAdmin ||
+			savingSync ||
+			!profile?.developerSettings.enabled ||
+			profile.developerSettings.sync_enabled === syncEnabled
+		)
+			return;
+		savingSync = true;
+		syncError = null;
+		const { profile: updated, error } = await updateOrgSyncEnabled(syncEnabled);
+		savingSync = false;
+		if (!updated) {
+			syncError = error ?? "Couldn't update sync setting.";
+			return;
+		}
+		orgProfileStore.set(updated);
 	}
 
 	// Downscale an uploaded file to a 256px cover-cropped PNG data URL, so
@@ -376,6 +398,65 @@
 			{/if}
 		</Card.Content>
 	</Card.Root>
+
+	{#if profile?.developerSettings.enabled}
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">Developer</Card.Title>
+				<Card.Description>
+					Local testing against a shared Linear/Slack workspace — turn sync off here so another
+					environment can handle the events.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				{#if isAdmin}
+					<Field.FieldGroup>
+						<Field.Field orientation="horizontal" data-disabled={savingSync ? true : undefined}>
+							<Field.FieldContent>
+								<Field.FieldLabel for="org-sync">Sync</Field.FieldLabel>
+								<Field.FieldDescription>
+									Process Linear ↔ Slack events for this organization. When off, events are
+									acknowledged but not mirrored.
+								</Field.FieldDescription>
+							</Field.FieldContent>
+							<Select.Root
+								type="single"
+								value={profile.developerSettings.sync_enabled ? 'enabled' : 'disabled'}
+								onValueChange={(v) => {
+									if (v === 'enabled') setSyncEnabled(true);
+									else if (v === 'disabled') setSyncEnabled(false);
+								}}
+								disabled={savingSync}
+							>
+								<Select.Trigger id="org-sync" class="w-36 shrink-0" aria-label="Sync">
+									{#if savingSync}
+										<LoaderIcon class="animate-spin" />
+									{/if}
+									{profile.developerSettings.sync_enabled ? 'Enabled' : 'Disabled'}
+								</Select.Trigger>
+								<Select.Content align="end">
+									<Select.Group>
+										<Select.Item value="enabled" label="Enabled">Enabled</Select.Item>
+										<Select.Item value="disabled" label="Disabled">Disabled</Select.Item>
+									</Select.Group>
+								</Select.Content>
+							</Select.Root>
+						</Field.Field>
+						{#if syncError}
+							<Field.FieldError>{syncError}</Field.FieldError>
+						{/if}
+					</Field.FieldGroup>
+				{:else}
+					<div class="flex flex-col gap-0.5">
+						<span class="text-sm font-medium">Sync</span>
+						<span class="text-muted-foreground text-sm">
+							{profile.developerSettings.sync_enabled ? 'Enabled' : 'Disabled'}
+						</span>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- Members -->
 	<Card.Root>

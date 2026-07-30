@@ -26,9 +26,9 @@ type Handler interface {
 	CreateBillingPortal(ctx context.Context) (CreateBillingPortalRes, error)
 	// CreateInvitation implements createInvitation operation.
 	//
-	// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
-	// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
-	// creates their membership.
+	// Sends an invitation for the given email to the caller's active organization (optionally with a
+	// role). authd emails the invitee a link; accepting it (by signing in with the invitation) creates
+	// their membership.
 	//
 	// POST /invitations
 	CreateInvitation(ctx context.Context, req *CreateInvitationRequest) (CreateInvitationRes, error)
@@ -74,9 +74,8 @@ type Handler interface {
 	// Returns the active organization's billing state: plan, whether features are locked, the trial
 	// deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
 	// When the org has an active subscription this also reconciles the Stripe seat quantity with the
-	// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
-	// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
-	// spec.
+	// current member count. The Stripe webhook (POST /billing/stripe/webhook) is a signature-verified raw
+	// route and not part of this JSON spec.
 	//
 	// GET /billing
 	GetBilling(ctx context.Context) (GetBillingRes, error)
@@ -98,9 +97,9 @@ type Handler interface {
 	GetLinearSettings(ctx context.Context) (GetLinearSettingsRes, error)
 	// GetMe implements getMe operation.
 	//
-	// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
-	// 401 when unauthenticated. The SPA calls this on load to decide whether to show the signed-in or
-	// signed-out UI.
+	// Returns the authenticated user backing the current session. Requires a valid authd session cookie;
+	// returns 401 when unauthenticated. The SPA calls this on load to decide whether to show the signed-in
+	// or signed-out UI.
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
@@ -129,15 +128,15 @@ type Handler interface {
 	ListLinearWebhooks(ctx context.Context) (ListLinearWebhooksRes, error)
 	// ListMembers implements listMembers operation.
 	//
-	// Returns the active members of the caller's active organization, resolved from WorkOS organization
+	// Returns the active members of the caller's active organization, resolved from the organization's
 	// memberships. Requires a session scoped to an organization.
 	//
 	// GET /members
 	ListMembers(ctx context.Context) (ListMembersRes, error)
 	// Ping implements ping operation.
 	//
-	// Returns a pong message. Requires an authenticated session — the request must carry a valid
-	// `wos_session` cookie. Used to verify the end-to-end authenticated transport.
+	// Returns a pong message. Requires an authenticated session — the request must carry a valid authd
+	// session cookie. Used to verify the end-to-end authenticated transport.
 	//
 	// GET /ping
 	Ping(ctx context.Context) (PingRes, error)
@@ -199,7 +198,9 @@ type Handler interface {
 	UpdateMemberRole(ctx context.Context, req *UpdateMemberRoleRequest, params UpdateMemberRoleParams) (UpdateMemberRoleRes, error)
 	// UpdateOrganizationProfile implements updateOrganizationProfile operation.
 	//
-	// Updates the organization's name in WorkOS. Admin-only.
+	// Updates the organization's name in authd and/or developer settings. Admin-only. developerSettings
+	// may only be set when the developer_settings feature flag is on for this deployment; otherwise the
+	// request is rejected with 403.
 	//
 	// PUT /organization/profile
 	UpdateOrganizationProfile(ctx context.Context, req *UpdateOrgProfileRequest) (UpdateOrganizationProfileRes, error)

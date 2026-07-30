@@ -483,6 +483,36 @@ type DeleteOrganizationAvatarUnauthorized Error
 
 func (*DeleteOrganizationAvatarUnauthorized) deleteOrganizationAvatarRes() {}
 
+// Ref: #/components/schemas/DeveloperSettings
+type DeveloperSettings struct {
+	// Whether developer settings are available on this deployment (the developer_settings feature flag).
+	// When false, hide the Developer card and ignore sync_enabled for product behavior.
+	Enabled bool `json:"enabled"`
+	// Whether the sync engine processes Linear/Slack events for this organization. Only honored when
+	// enabled is true.
+	SyncEnabled bool `json:"sync_enabled"`
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *DeveloperSettings) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetSyncEnabled returns the value of SyncEnabled.
+func (s *DeveloperSettings) GetSyncEnabled() bool {
+	return s.SyncEnabled
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *DeveloperSettings) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetSyncEnabled sets the value of SyncEnabled.
+func (s *DeveloperSettings) SetSyncEnabled(val bool) {
+	s.SyncEnabled = val
+}
+
 type DisconnectIntegrationLevel string
 
 const (
@@ -619,7 +649,7 @@ type IntegrationStatus struct {
 	Connected bool `json:"connected"`
 	// The connected account/workspace label (Slack team, Linear workspace).
 	Account OptString `json:"account"`
-	// The WorkOS user id who connected it, if known.
+	// The user id who connected it, if known.
 	ConnectedBy OptString `json:"connectedBy"`
 }
 
@@ -765,7 +795,7 @@ func (s *InvitationListResponse) SetInvitations(val []InvitationResponse) {
 
 func (*InvitationListResponse) listInvitationsRes() {}
 
-// A WorkOS organization invitation.
+// An organization invitation.
 // Ref: #/components/schemas/InvitationResponse
 type InvitationResponse struct {
 	ID    string `json:"id"`
@@ -1250,12 +1280,12 @@ func (s *MemberListResponse) SetMembers(val []MemberResponse) {
 
 func (*MemberListResponse) listMembersRes() {}
 
-// A member of the active organization (a WorkOS organization membership).
+// A member of the active organization.
 // Ref: #/components/schemas/MemberResponse
 type MemberResponse struct {
-	// The WorkOS organization membership ID.
+	// The organization membership ID.
 	ID string `json:"id"`
-	// The WorkOS user ID of the member.
+	// The user ID of the member.
 	UserId string `json:"userId"`
 	// The member's email address.
 	Email string `json:"email"`
@@ -1265,8 +1295,8 @@ type MemberResponse struct {
 	LastName OptString `json:"lastName"`
 	// The member's role slug within the organization, if any.
 	Role OptString `json:"role"`
-	// URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar,
-	// captured by WorkOS at sign-in.
+	// URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar from
+	// sign-in.
 	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 }
 
@@ -1428,6 +1458,52 @@ func (o OptBillingSummary) Get() (v BillingSummary, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptBillingSummary) Or(d BillingSummary) BillingSummary {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDeveloperSettings returns new OptDeveloperSettings with value set to v.
+func NewOptDeveloperSettings(v DeveloperSettings) OptDeveloperSettings {
+	return OptDeveloperSettings{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDeveloperSettings is optional DeveloperSettings.
+type OptDeveloperSettings struct {
+	Value DeveloperSettings
+	Set   bool
+}
+
+// IsSet returns true if OptDeveloperSettings was set.
+func (o OptDeveloperSettings) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDeveloperSettings) Reset() {
+	var v DeveloperSettings
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDeveloperSettings) SetTo(v DeveloperSettings) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDeveloperSettings) Get() (v DeveloperSettings, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDeveloperSettings) Or(d DeveloperSettings) DeveloperSettings {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -1667,7 +1743,7 @@ func (o OptString) Or(d string) string {
 // The active organization's editable profile.
 // Ref: #/components/schemas/OrgProfileResponse
 type OrgProfileResponse struct {
-	// The WorkOS organization ID.
+	// The organization ID.
 	ID string `json:"id"`
 	// The organization's display name.
 	Name string `json:"name"`
@@ -1675,7 +1751,8 @@ type OrgProfileResponse struct {
 	AvatarSeed string `json:"avatarSeed"`
 	// Data URL of the uploaded avatar image. Absent when no image has been uploaded; render the generated
 	// avatar from avatarSeed instead.
-	AvatarUrl OptString `json:"avatarUrl"`
+	AvatarUrl         OptString         `json:"avatarUrl"`
+	DeveloperSettings DeveloperSettings `json:"developerSettings"`
 }
 
 // GetID returns the value of ID.
@@ -1698,6 +1775,11 @@ func (s *OrgProfileResponse) GetAvatarUrl() OptString {
 	return s.AvatarUrl
 }
 
+// GetDeveloperSettings returns the value of DeveloperSettings.
+func (s *OrgProfileResponse) GetDeveloperSettings() DeveloperSettings {
+	return s.DeveloperSettings
+}
+
 // SetID sets the value of ID.
 func (s *OrgProfileResponse) SetID(val string) {
 	s.ID = val
@@ -1718,16 +1800,21 @@ func (s *OrgProfileResponse) SetAvatarUrl(val OptString) {
 	s.AvatarUrl = val
 }
 
+// SetDeveloperSettings sets the value of DeveloperSettings.
+func (s *OrgProfileResponse) SetDeveloperSettings(val DeveloperSettings) {
+	s.DeveloperSettings = val
+}
+
 func (*OrgProfileResponse) deleteOrganizationAvatarRes()     {}
 func (*OrgProfileResponse) getOrganizationProfileRes()       {}
 func (*OrgProfileResponse) regenerateOrganizationAvatarRes() {}
 func (*OrgProfileResponse) updateOrganizationProfileRes()    {}
 func (*OrgProfileResponse) uploadOrganizationAvatarRes()     {}
 
-// A WorkOS organization the user belongs to.
+// An organization the user belongs to.
 // Ref: #/components/schemas/Organization
 type Organization struct {
-	// The WorkOS organization ID.
+	// The organization ID.
 	ID string `json:"id"`
 	// The organization's display name.
 	Name string `json:"name"`
@@ -2233,21 +2320,34 @@ type UpdateMemberRoleUnauthorized Error
 
 func (*UpdateMemberRoleUnauthorized) updateMemberRoleRes() {}
 
-// Rename the active organization.
+// Update the organization name and/or developer settings. At least one field must be set. Setting
+// developerSettings requires the developer_settings feature flag.
 // Ref: #/components/schemas/UpdateOrgProfileRequest
 type UpdateOrgProfileRequest struct {
 	// The new organization name.
-	Name string `json:"name"`
+	Name OptString `json:"name"`
+	// Rejected with 403 when developer settings are not available on this deployment.
+	DeveloperSettings OptDeveloperSettings `json:"developerSettings"`
 }
 
 // GetName returns the value of Name.
-func (s *UpdateOrgProfileRequest) GetName() string {
+func (s *UpdateOrgProfileRequest) GetName() OptString {
 	return s.Name
 }
 
+// GetDeveloperSettings returns the value of DeveloperSettings.
+func (s *UpdateOrgProfileRequest) GetDeveloperSettings() OptDeveloperSettings {
+	return s.DeveloperSettings
+}
+
 // SetName sets the value of Name.
-func (s *UpdateOrgProfileRequest) SetName(val string) {
+func (s *UpdateOrgProfileRequest) SetName(val OptString) {
 	s.Name = val
+}
+
+// SetDeveloperSettings sets the value of DeveloperSettings.
+func (s *UpdateOrgProfileRequest) SetDeveloperSettings(val OptDeveloperSettings) {
+	s.DeveloperSettings = val
 }
 
 type UpdateOrganizationProfileBadRequest Error
@@ -2291,10 +2391,10 @@ type UploadOrganizationAvatarUnauthorized Error
 
 func (*UploadOrganizationAvatarUnauthorized) uploadOrganizationAvatarRes() {}
 
-// The authenticated WorkOS user and their active organization context.
+// The authenticated user and their active organization context.
 // Ref: #/components/schemas/UserResponse
 type UserResponse struct {
-	// The WorkOS user ID.
+	// The user ID.
 	ID string `json:"id"`
 	// The user's email address.
 	Email string `json:"email"`
@@ -2302,8 +2402,8 @@ type UserResponse struct {
 	FirstName OptString `json:"firstName"`
 	// The user's last name, if set.
 	LastName OptString `json:"lastName"`
-	// URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar,
-	// captured by WorkOS at sign-in.
+	// URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar from
+	// sign-in.
 	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 	// The ID of the organization the current session is scoped to, if any.
 	OrganizationId OptString `json:"organizationId"`
@@ -2418,7 +2518,7 @@ type WebhookEvent struct {
 	Action OptString `json:"action"`
 	// ISO 8601 timestamp when we received it.
 	ReceivedAt string `json:"receivedAt"`
-	// The raw webhook JSON payload (as a string).
+	// The stored event envelope JSON (as a string).
 	Payload OptString `json:"payload"`
 }
 

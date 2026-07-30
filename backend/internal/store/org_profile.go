@@ -15,6 +15,7 @@ type OrgProfile struct {
 	AvatarSeed        string
 	AvatarImage       []byte
 	AvatarContentType string
+	SyncEnabled       bool
 }
 
 // newAvatarSeed returns a fresh random seed for the generated avatar.
@@ -31,13 +32,26 @@ func (s *Store) GetOrgProfile(ctx context.Context, orgID string) (OrgProfile, er
 		INSERT INTO org_profile (org_id, avatar_seed)
 		VALUES ($1, $2)
 		ON CONFLICT (org_id) DO UPDATE SET org_id = org_profile.org_id
-		RETURNING org_id, avatar_seed, avatar_image, avatar_content_type
+		RETURNING org_id, avatar_seed, avatar_image, avatar_content_type, sync_enabled
 	`, orgID, newAvatarSeed())
 	var p OrgProfile
-	if err := row.Scan(&p.OrgID, &p.AvatarSeed, &p.AvatarImage, &p.AvatarContentType); err != nil {
+	if err := row.Scan(&p.OrgID, &p.AvatarSeed, &p.AvatarImage, &p.AvatarContentType, &p.SyncEnabled); err != nil {
 		return OrgProfile{}, fmt.Errorf("store: get org profile: %w", err)
 	}
 	return p, nil
+}
+
+func (s *Store) SetOrgSyncEnabled(ctx context.Context, orgID string, enabled bool) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO org_profile (org_id, avatar_seed, sync_enabled)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (org_id) DO UPDATE
+		SET sync_enabled = $3, updated_at = now()
+	`, orgID, newAvatarSeed(), enabled)
+	if err != nil {
+		return fmt.Errorf("store: set org sync enabled: %w", err)
+	}
+	return nil
 }
 
 // SetOrgAvatarImage stores an uploaded avatar image for the org.

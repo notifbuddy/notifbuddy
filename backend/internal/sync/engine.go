@@ -121,40 +121,48 @@ type Store interface {
 // orgs — this is the product's valuable path. nil means never locked.
 type LockedCheck func(ctx context.Context, orgID string) bool
 
+type SyncEnabledCheck func(ctx context.Context, orgID string) bool
+
 // Engine wires the stores, Slack/Linear action clients, the intent classifier
 // (for @notifbuddy commands), the template engine (channel naming/conditions),
 // and the publisher (processing topics). It is safe for concurrent use.
 type Engine struct {
-	store      Store
-	slack      SlackActions
-	intg       Integrations
-	classifier intent.Classifier
-	tmpl       template.Engine
-	pub        pubsub.Publisher
-	locked     LockedCheck
+	store       Store
+	slack       SlackActions
+	intg        Integrations
+	classifier  intent.Classifier
+	tmpl        template.Engine
+	pub         pubsub.Publisher
+	locked      LockedCheck
+	syncEnabled SyncEnabledCheck
 }
 
 // New builds the engine. pub may be nil (pubsub.Nop is used); the classifier may
 // be nil (@notifbuddy commands then resolve to no-action); locked may be nil
 // (no billing enforcement).
-func New(st Store, slack SlackActions, intg Integrations, classifier intent.Classifier, pub pubsub.Publisher, locked LockedCheck) *Engine {
+func New(st Store, slack SlackActions, intg Integrations, classifier intent.Classifier, pub pubsub.Publisher, locked LockedCheck, syncEnabled SyncEnabledCheck) *Engine {
 	if pub == nil {
 		pub = pubsub.Nop
 	}
 	return &Engine{
-		store:      st,
-		slack:      slack,
-		intg:       intg,
-		classifier: classifier,
-		tmpl:       template.New(),
-		pub:        pub,
-		locked:     locked,
+		store:       st,
+		slack:       slack,
+		intg:        intg,
+		classifier:  classifier,
+		tmpl:        template.New(),
+		pub:         pub,
+		locked:      locked,
+		syncEnabled: syncEnabled,
 	}
 }
 
 // orgLocked reports whether billing enforcement should drop this org's events.
 func (e *Engine) orgLocked(ctx context.Context, orgID string) bool {
 	return e.locked != nil && e.locked(ctx, orgID)
+}
+
+func (e *Engine) orgSyncDisabled(ctx context.Context, orgID string) bool {
+	return e.syncEnabled != nil && !e.syncEnabled(ctx, orgID)
 }
 
 // publish fires a processing topic best-effort; a failure is logged, never

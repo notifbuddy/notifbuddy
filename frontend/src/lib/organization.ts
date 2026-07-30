@@ -66,13 +66,24 @@ export async function fetchOrgProfile(): Promise<OrgProfile | null> {
 }
 
 // Rename the active org. Admin-only. On failure, error carries the reason
-// (WorkOS rejections are passed through, e.g. for default test orgs).
+	// (authd rejections are passed through).
 export async function updateOrgName(
 	name: string
 ): Promise<{ profile?: OrgProfile; error?: string }> {
 	const { data, error } = await api.PUT('/organization/profile', { body: { name } });
 	if (error) return { error: error.message ?? "couldn't rename the organization" };
 	if (!data) return { error: "couldn't rename the organization" };
+	return { profile: data as OrgProfile };
+}
+
+export async function updateOrgSyncEnabled(
+	syncEnabled: boolean
+): Promise<{ profile?: OrgProfile; error?: string }> {
+	const { data, error } = await api.PUT('/organization/profile', {
+		body: { developerSettings: { enabled: true, sync_enabled: syncEnabled } }
+	});
+	if (error) return { error: error.message ?? "couldn't update sync setting" };
+	if (!data) return { error: "couldn't update sync setting" };
 	return { profile: data as OrgProfile };
 }
 

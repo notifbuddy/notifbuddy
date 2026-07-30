@@ -14,7 +14,7 @@ export interface paths {
         /**
          * Ping the server
          * @description Returns a pong message. Requires an authenticated session — the request
-         *     must carry a valid `wos_session` cookie. Used to verify the end-to-end
+         *     must carry a valid authd session cookie. Used to verify the end-to-end
          *     authenticated transport.
          */
         get: operations["ping"];
@@ -35,8 +35,8 @@ export interface paths {
         };
         /**
          * Get the current user
-         * @description Returns the WorkOS user backing the current session. Requires a valid
-         *     `wos_session` cookie; returns 401 when unauthenticated. The SPA calls this
+         * @description Returns the authenticated user backing the current session. Requires a valid
+         *     authd session cookie; returns 401 when unauthenticated. The SPA calls this
          *     on load to decide whether to show the signed-in or signed-out UI.
          */
         get: operations["getMe"];
@@ -64,10 +64,9 @@ export interface paths {
         put?: never;
         /**
          * Invite an email to the active organization
-         * @description Sends a WorkOS invitation for the given email to the caller's active
-         *     organization (optionally with a role). WorkOS emails the invitee a link;
-         *     accepting it (by logging in with the invitation token) creates their
-         *     membership.
+         * @description Sends an invitation for the given email to the caller's active organization
+         *     (optionally with a role). authd emails the invitee a link; accepting it
+         *     (by signing in with the invitation) creates their membership.
          */
         post: operations["createInvitation"];
         delete?: never;
@@ -108,7 +107,7 @@ export interface paths {
         /**
          * List the active organization's members
          * @description Returns the active members of the caller's active organization, resolved
-         *     from WorkOS organization memberships. Requires a session scoped to an
+         *     from the organization's memberships. Requires a session scoped to an
          *     organization.
          */
         get: operations["listMembers"];
@@ -182,8 +181,11 @@ export interface paths {
          */
         get: operations["getOrganizationProfile"];
         /**
-         * Rename the active organization
-         * @description Updates the organization's name in WorkOS. Admin-only.
+         * Update the active organization profile
+         * @description Updates the organization's name in authd and/or developer settings.
+         *     Admin-only. developerSettings may only be set when the
+         *     developer_settings feature flag is on for this deployment; otherwise
+         *     the request is rejected with 403.
          */
         put: operations["updateOrganizationProfile"];
         post?: never;
@@ -473,8 +475,7 @@ export interface paths {
          *     starts the 21-day trial on the org's first touch. When the org has an
          *     active subscription this also reconciles the Stripe seat quantity with
          *     the current member count. The Stripe webhook
-         *     (POST /billing/stripe/webhook) and the WorkOS membership webhook
-         *     (POST /auth/workos/webhook) are signature-verified raw routes and not
+         *     (POST /billing/stripe/webhook) is a signature-verified raw route and not
          *     part of this JSON spec.
          */
         get: operations["getBilling"];
@@ -567,10 +568,10 @@ export interface components {
              */
             message: string;
         };
-        /** @description The authenticated WorkOS user and their active organization context. */
+        /** @description The authenticated user and their active organization context. */
         UserResponse: {
             /**
-             * @description The WorkOS user ID.
+             * @description The user ID.
              * @example user_01H...
              */
             id: string;
@@ -590,7 +591,7 @@ export interface components {
              */
             lastName?: string;
             /**
-             * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in.
+             * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar from sign-in.
              * @example https://avatars.githubusercontent.com/u/12345?v=4
              */
             profilePictureUrl?: string;
@@ -693,10 +694,10 @@ export interface components {
              */
             note?: string;
         };
-        /** @description A WorkOS organization the user belongs to. */
+        /** @description An organization the user belongs to. */
         Organization: {
             /**
-             * @description The WorkOS organization ID.
+             * @description The organization ID.
              * @example org_01H...
              */
             id: string;
@@ -722,7 +723,7 @@ export interface components {
         /** @description The active organization's editable profile. */
         OrgProfileResponse: {
             /**
-             * @description The WorkOS organization ID.
+             * @description The organization ID.
              * @example org_01H...
              */
             id: string;
@@ -741,14 +742,37 @@ export interface components {
              *     been uploaded; render the generated avatar from avatarSeed instead.
              */
             avatarUrl?: string;
+            developerSettings: components["schemas"]["DeveloperSettings"];
         };
-        /** @description Rename the active organization. */
+        DeveloperSettings: {
+            /**
+             * @description Whether developer settings are available on this deployment (the
+             *     developer_settings feature flag). When false, hide the Developer card
+             *     and ignore sync_enabled for product behavior.
+             */
+            enabled: boolean;
+            /**
+             * @description Whether the sync engine processes Linear/Slack events for this
+             *     organization. Only honored when enabled is true.
+             */
+            sync_enabled: boolean;
+        };
+        /**
+         * @description Update the organization name and/or developer settings. At least one
+         *     field must be set. Setting developerSettings requires the
+         *     developer_settings feature flag.
+         */
         UpdateOrgProfileRequest: {
             /**
              * @description The new organization name.
              * @example Acme Inc.
              */
-            name: string;
+            name?: string;
+            /**
+             * @description Rejected with 403 when developer settings are not available on this
+             *     deployment.
+             */
+            developerSettings?: components["schemas"]["DeveloperSettings"];
         };
         /** @description An uploaded avatar image, as a data URL. */
         UploadOrgAvatarRequest: {
@@ -779,7 +803,7 @@ export interface components {
             /** @description The role slug to assign to the member. */
             role: components["schemas"]["RoleSlug"];
         };
-        /** @description A WorkOS organization invitation. */
+        /** @description An organization invitation. */
         InvitationResponse: {
             /** @example invitation_01H... */
             id: string;
@@ -805,15 +829,15 @@ export interface components {
         InvitationListResponse: {
             invitations: components["schemas"]["InvitationResponse"][];
         };
-        /** @description A member of the active organization (a WorkOS organization membership). */
+        /** @description A member of the active organization. */
         MemberResponse: {
             /**
-             * @description The WorkOS organization membership ID.
+             * @description The organization membership ID.
              * @example om_01H...
              */
             id: string;
             /**
-             * @description The WorkOS user ID of the member.
+             * @description The user ID of the member.
              * @example user_01H...
              */
             userId: string;
@@ -837,7 +861,7 @@ export interface components {
              * @example admin
              */
             role?: string;
-            /** @description URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar, captured by WorkOS at sign-in. */
+            /** @description URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar from sign-in. */
             profilePictureUrl?: string;
         };
         /** @description A list of members for the active organization. */
@@ -866,7 +890,7 @@ export interface components {
              */
             account?: string;
             /**
-             * @description The WorkOS user id who connected it, if known.
+             * @description The user id who connected it, if known.
              * @example user_01H...
              */
             connectedBy?: string;
@@ -899,7 +923,7 @@ export interface components {
              * @example 2026-06-26T12:00:00Z
              */
             receivedAt: string;
-            /** @description The raw webhook JSON payload (as a string). */
+            /** @description The stored event envelope JSON (as a string). */
             payload?: string;
         };
         /** @description Recent webhook events for the active organization. */
@@ -1511,7 +1535,7 @@ export interface operations {
                     "application/json": components["schemas"]["OrgProfileResponse"];
                 };
             };
-            /** @description The request was invalid (e.g. an empty name). */
+            /** @description The request was invalid (e.g. an empty name, or neither field set). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1529,7 +1553,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The caller is not an admin of the organization. */
+            /**
+             * @description The caller is not an admin, or developer settings are not available
+             *     on this deployment (developerSettings was set while the feature is off).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;

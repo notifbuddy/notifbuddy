@@ -19,6 +19,8 @@ const avatarMaxBytes = 512 * 1024
 // orgAdminOnlyMsg is the 403 body for organization-profile mutations.
 const orgAdminOnlyMsg = "only admins can edit the organization profile"
 
+const developerSettingsOffMsg = "developer settings are not available on this deployment"
+
 // avatarContentTypes are the image types an uploaded avatar may use.
 var avatarContentTypes = map[string]bool{
 	"image/png":  true,
@@ -45,7 +47,7 @@ func (h Handler) GetOrganizationProfile(ctx context.Context) (api.GetOrganizatio
 }
 
 // UpdateOrganizationProfile implements `updateOrganizationProfile`: PUT /organization/profile.
-// Renames the organization in WorkOS. Admin-only.
+// Renames the organization. Admin-only.
 func (h Handler) UpdateOrganizationProfile(ctx context.Context, req *api.UpdateOrgProfileRequest) (api.UpdateOrganizationProfileRes, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil {
@@ -57,18 +59,38 @@ func (h Handler) UpdateOrganizationProfile(ctx context.Context, req *api.UpdateO
 	if user.Role != auth.RoleAdmin {
 		return &api.UpdateOrganizationProfileForbidden{Message: orgAdminOnlyMsg}, nil
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		return &api.UpdateOrganizationProfileBadRequest{Message: "name must not be empty"}, nil
+
+	nameSet := req.Name.IsSet()
+	devSet := req.DeveloperSettings.IsSet()
+	if !nameSet && !devSet {
+		return &api.UpdateOrganizationProfileBadRequest{Message: "provide name and/or developerSettings"}, nil
 	}
-	if _, err := h.auth.UpdateOrganizationName(ctx, user.OrgID, name); err != nil {
-		msg := "failed to rename the organization"
-		var userMsg auth.UserMessageError
-		if errors.As(err, &userMsg) {
-			msg = userMsg.Msg
+
+	if devSet {
+		if !h.flags.DeveloperSettings {
+			return &api.UpdateOrganizationProfileForbidden{Message: developerSettingsOffMsg}, nil
 		}
-		return &api.UpdateOrganizationProfileBadRequest{Message: msg}, nil
+		if err := h.store.SetOrgSyncEnabled(ctx, user.OrgID, req.DeveloperSettings.Value.SyncEnabled); err != nil {
+			slog.ErrorContext(ctx, "httpapi: set org sync enabled failed", "org_id", user.OrgID, "error", err)
+			return &api.UpdateOrganizationProfileBadRequest{Message: "failed to update sync setting"}, nil
+		}
 	}
+
+	if nameSet {
+		name := strings.TrimSpace(req.Name.Value)
+		if name == "" {
+			return &api.UpdateOrganizationProfileBadRequest{Message: "name must not be empty"}, nil
+		}
+		if _, err := h.auth.UpdateOrganizationName(ctx, user.OrgID, name); err != nil {
+			msg := "failed to rename the organization"
+			var userMsg auth.UserMessageError
+			if errors.As(err, &userMsg) {
+				msg = userMsg.Msg
+			}
+			return &api.UpdateOrganizationProfileBadRequest{Message: msg}, nil
+		}
+	}
+
 	resp, err := h.orgProfileResponse(ctx, user.OrgID)
 	if err != nil {
 		return &api.UpdateOrganizationProfileBadRequest{Message: "failed to load the organization profile"}, nil
@@ -165,7 +187,15 @@ func (h Handler) orgProfileResponse(ctx context.Context, orgID string) (*api.Org
 		slog.ErrorContext(ctx, "httpapi: get org profile failed", "org_id", orgID, "error", err)
 		return nil, err
 	}
-	resp := &api.OrgProfileResponse{ID: orgID, Name: name, AvatarSeed: p.AvatarSeed}
+	resp := &api.OrgProfileResponse{
+		ID:         orgID,
+		Name:       name,
+		AvatarSeed: p.AvatarSeed,
+		DeveloperSettings: api.DeveloperSettings{
+			Enabled:     h.flags.DeveloperSettings,
+			SyncEnabled: p.SyncEnabled,
+		},
+	}
 	if len(p.AvatarImage) > 0 && p.AvatarContentType != "" {
 		resp.AvatarUrl = api.NewOptString(
 			"data:" + p.AvatarContentType + ";base64," + base64.StdEncoding.EncodeToString(p.AvatarImage))
