@@ -10,6 +10,7 @@ import (
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
 	"xolo/backend/internal/billing"
+	"xolo/backend/internal/featureflags"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
@@ -31,11 +32,12 @@ type Handler struct {
 	integrations *integrations.Service
 	billing      *billing.Service
 	store        *store.Store
+	flags        featureflags.Flags
 }
 
 // New builds the API handler with its service dependencies.
-func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store) *Handler {
-	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st}
+func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store, flags featureflags.Flags) *Handler {
+	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st, flags: flags}
 }
 
 // invitationListLimit caps how many invitations GET /invitations returns.

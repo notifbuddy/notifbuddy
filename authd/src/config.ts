@@ -30,6 +30,7 @@ export interface Config {
 
 export interface FeatureFlags {
 	github_oauth_login: boolean;
+	developer_settings: boolean;
 }
 
 function resolveEnvRefs(value: unknown): unknown {

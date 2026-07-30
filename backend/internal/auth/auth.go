@@ -125,6 +125,10 @@ func UserFromContext(ctx context.Context) *SessionUser {
 	return u
 }
 
+func ContextWithUser(ctx context.Context, user *SessionUser) context.Context {
+	return context.WithValue(ctx, ctxKey{}, user)
+}
+
 // HTTPFromContext returns the raw HTTP pair stashed by WithSession.
 func HTTPFromContext(ctx context.Context) (HTTPPair, bool) {
 	p, ok := ctx.Value(httpCtxKey{}).(HTTPPair)

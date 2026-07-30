@@ -83,6 +83,10 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		slog.InfoContext(ctx, "sync: slack event dropped: org locked (billing)", "event_id", ref.EventID, "org_id", ref.OrgID)
 		return nil
 	}
+	if e.orgSyncDisabled(ctx, ref.OrgID) {
+		slog.InfoContext(ctx, "sync: slack event dropped: sync disabled", "event_id", ref.EventID, "org_id", ref.OrgID)
+		return nil
+	}
 
 	// The writer persisted the payload before publishing the envelope, so a
 	// failure here is transient and worth a retry.

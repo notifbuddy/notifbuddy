@@ -1574,7 +1574,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								return r, true
 							case "PUT":
 								r.name = UpdateOrganizationProfileOperation
-								r.summary = "Rename the active organization"
+								r.summary = "Update the active organization profile"
 								r.operationID = "updateOrganizationProfile"
 								r.operationGroup = ""
 								r.pathPattern = "/organization/profile"

@@ -287,9 +287,9 @@ func (s *Server) handleCreateBillingPortalRequest(args [0]string, argsEscaped bo
 
 // handleCreateInvitationRequest handles createInvitation operation.
 //
-// Sends a WorkOS invitation for the given email to the caller's active organization (optionally with a
-// role). WorkOS emails the invitee a link; accepting it (by logging in with the invitation token)
-// creates their membership.
+// Sends an invitation for the given email to the caller's active organization (optionally with a
+// role). authd emails the invitee a link; accepting it (by signing in with the invitation) creates
+// their membership.
 //
 // POST /invitations
 func (s *Server) handleCreateInvitationRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -1142,9 +1142,8 @@ func (s *Server) handleDisconnectIntegrationRequest(args [1]string, argsEscaped 
 // Returns the active organization's billing state: plan, whether features are locked, the trial
 // deadline, and Stripe subscription facts. Lazily starts the 21-day trial on the org's first touch.
 // When the org has an active subscription this also reconciles the Stripe seat quantity with the
-// current member count. The Stripe webhook (POST /billing/stripe/webhook) and the WorkOS membership
-// webhook (POST /auth/workos/webhook) are signature-verified raw routes and not part of this JSON
-// spec.
+// current member count. The Stripe webhook (POST /billing/stripe/webhook) is a signature-verified raw
+// route and not part of this JSON spec.
 //
 // GET /billing
 func (s *Server) handleGetBillingRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -1520,9 +1519,9 @@ func (s *Server) handleGetLinearSettingsRequest(args [0]string, argsEscaped bool
 
 // handleGetMeRequest handles getMe operation.
 //
-// Returns the WorkOS user backing the current session. Requires a valid `wos_session` cookie; returns
-// 401 when unauthenticated. The SPA calls this on load to decide whether to show the signed-in or
-// signed-out UI.
+// Returns the authenticated user backing the current session. Requires a valid authd session cookie;
+// returns 401 when unauthenticated. The SPA calls this on load to decide whether to show the signed-in
+// or signed-out UI.
 //
 // GET /me
 func (s *Server) handleGetMeRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -2023,7 +2022,7 @@ func (s *Server) handleListLinearWebhooksRequest(args [0]string, argsEscaped boo
 
 // handleListMembersRequest handles listMembers operation.
 //
-// Returns the active members of the caller's active organization, resolved from WorkOS organization
+// Returns the active members of the caller's active organization, resolved from the organization's
 // memberships. Requires a session scoped to an organization.
 //
 // GET /members
@@ -2148,8 +2147,8 @@ func (s *Server) handleListMembersRequest(args [0]string, argsEscaped bool, w ht
 
 // handlePingRequest handles ping operation.
 //
-// Returns a pong message. Requires an authenticated session — the request must carry a valid
-// `wos_session` cookie. Used to verify the end-to-end authenticated transport.
+// Returns a pong message. Requires an authenticated session — the request must carry a valid authd
+// session cookie. Used to verify the end-to-end authenticated transport.
 //
 // GET /ping
 func (s *Server) handlePingRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3280,7 +3279,9 @@ func (s *Server) handleUpdateMemberRoleRequest(args [1]string, argsEscaped bool,
 
 // handleUpdateOrganizationProfileRequest handles updateOrganizationProfile operation.
 //
-// Updates the organization's name in WorkOS. Admin-only.
+// Updates the organization's name in authd and/or developer settings. Admin-only. developerSettings
+// may only be set when the developer_settings feature flag is on for this deployment; otherwise the
+// request is rejected with 403.
 //
 // PUT /organization/profile
 func (s *Server) handleUpdateOrganizationProfileRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3377,7 +3378,7 @@ func (s *Server) handleUpdateOrganizationProfileRequest(args [0]string, argsEsca
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    UpdateOrganizationProfileOperation,
-			OperationSummary: "Rename the active organization",
+			OperationSummary: "Update the active organization profile",
 			OperationID:      "updateOrganizationProfile",
 			Body:             request,
 			RawBody:          rawBody,

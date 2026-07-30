@@ -427,11 +427,11 @@ func (p *spyPub) has(topic string) bool {
 
 // newEngine builds an engine over the fakes.
 func newEngine(st Store, sl SlackActions, ig Integrations, pub pubsub.Publisher) *Engine {
-	return New(st, sl, ig, nil, pub, nil)
+	return New(st, sl, ig, nil, pub, nil, nil)
 }
 
 func newEngineWithClassifier(st Store, sl SlackActions, ig Integrations, pub pubsub.Publisher, c intent.Classifier) *Engine {
-	return New(st, sl, ig, c, pub, nil)
+	return New(st, sl, ig, c, pub, nil, nil)
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -498,6 +498,62 @@ func slackRef(eventID, orgID string) pubsub.Message {
 }
 
 // --- tests ------------------------------------------------------------------
+
+func TestOnLinearEvent_DropsWhenSyncDisabled(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d_off"] = linearCommentPayload("create", "c_off", "LGTM", "issue1", "", "Ada", "ada@x.io", false)
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+
+	sl := &fakeSlack{nextTS: "ts"}
+	e := New(st, sl, &fakeIntg{}, nil, &spyPub{}, nil, func(_ context.Context, _ string) bool {
+		return false
+	})
+
+	if err := e.OnLinearEvent(context.Background(), linearRef("d_off", "org1")); err != nil {
+		t.Fatalf("drop must ack (nil error), got %v", err)
+	}
+	if len(sl.posted) != 0 {
+		t.Fatalf("sync-disabled org must not post to Slack; got %d", len(sl.posted))
+	}
+}
+
+func TestOnSlackEvent_DropsWhenSyncDisabled(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e_off"] = slackMessagePayload("U_HUMAN", "", "", "hello", "C1", "TS1", "")
+
+	ig := &fakeIntg{nextCommentID: "cmt_off"}
+	e := New(st, &fakeSlack{botUserID: "U_BOT"}, ig, nil, &spyPub{}, nil, func(_ context.Context, _ string) bool {
+		return false
+	})
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("e_off", "org1")); err != nil {
+		t.Fatalf("drop must ack (nil error), got %v", err)
+	}
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("sync-disabled org must not create Linear comments; got %d", len(ig.createdComments))
+	}
+}
+
+func TestOnLinearEvent_ProcessesWhenSyncCheckNil(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d_on"] = linearCommentPayload("create", "c_on", "ok", "issue1", "", "Ada", "ada@x.io", false)
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+
+	sl := &fakeSlack{
+		nextTS:       "1700000000.000001",
+		usersByEmail: map[string]slackapi.User{"ada@x.io": {ID: "U_ADA", Name: "Ada", IconURL: ""}},
+	}
+	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d_on", "org1"))
+	if len(sl.posted) != 1 {
+		t.Fatalf("nil sync check should process; got %d posts", len(sl.posted))
+	}
+}
 
 // Defense 1: a Linear comment our own app authored (botActor present) must NOT
 // be mirrored back into Slack — that is what breaks the loop.

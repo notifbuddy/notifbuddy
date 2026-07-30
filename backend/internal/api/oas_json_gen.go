@@ -1591,6 +1591,119 @@ func (s *DeleteOrganizationAvatarUnauthorized) UnmarshalJSON(data []byte) error 
 }
 
 // Encode implements json.Marshaler.
+func (s *DeveloperSettings) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *DeveloperSettings) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("enabled")
+		e.Bool(s.Enabled)
+	}
+	{
+		e.FieldStart("sync_enabled")
+		e.Bool(s.SyncEnabled)
+	}
+}
+
+var jsonFieldsNameOfDeveloperSettings = [2]string{
+	0: "enabled",
+	1: "sync_enabled",
+}
+
+// Decode decodes DeveloperSettings from json.
+func (s *DeveloperSettings) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode DeveloperSettings to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "enabled":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Bool()
+				s.Enabled = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"enabled\"")
+			}
+		case "sync_enabled":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Bool()
+				s.SyncEnabled = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sync_enabled\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode DeveloperSettings")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfDeveloperSettings) {
+					name = jsonFieldsNameOfDeveloperSettings[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *DeveloperSettings) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *DeveloperSettings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *Error) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -3655,6 +3768,39 @@ func (s *OptBillingSummary) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes DeveloperSettings as json.
+func (o OptDeveloperSettings) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes DeveloperSettings from json.
+func (o *OptDeveloperSettings) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptDeveloperSettings to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptDeveloperSettings) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptDeveloperSettings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes int as json.
 func (o OptInt) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -3818,13 +3964,18 @@ func (s *OrgProfileResponse) encodeFields(e *jx.Encoder) {
 			s.AvatarUrl.Encode(e)
 		}
 	}
+	{
+		e.FieldStart("developerSettings")
+		s.DeveloperSettings.Encode(e)
+	}
 }
 
-var jsonFieldsNameOfOrgProfileResponse = [4]string{
+var jsonFieldsNameOfOrgProfileResponse = [5]string{
 	0: "id",
 	1: "name",
 	2: "avatarSeed",
 	3: "avatarUrl",
+	4: "developerSettings",
 }
 
 // Decode decodes OrgProfileResponse from json.
@@ -3882,6 +4033,16 @@ func (s *OrgProfileResponse) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"avatarUrl\"")
 			}
+		case "developerSettings":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				if err := s.DeveloperSettings.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"developerSettings\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -3892,7 +4053,7 @@ func (s *OrgProfileResponse) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00010111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -5920,13 +6081,22 @@ func (s *UpdateOrgProfileRequest) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *UpdateOrgProfileRequest) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("name")
-		e.Str(s.Name)
+		if s.Name.Set {
+			e.FieldStart("name")
+			s.Name.Encode(e)
+		}
+	}
+	{
+		if s.DeveloperSettings.Set {
+			e.FieldStart("developerSettings")
+			s.DeveloperSettings.Encode(e)
+		}
 	}
 }
 
-var jsonFieldsNameOfUpdateOrgProfileRequest = [1]string{
+var jsonFieldsNameOfUpdateOrgProfileRequest = [2]string{
 	0: "name",
+	1: "developerSettings",
 }
 
 // Decode decodes UpdateOrgProfileRequest from json.
@@ -5934,21 +6104,28 @@ func (s *UpdateOrgProfileRequest) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode UpdateOrgProfileRequest to nil")
 	}
-	var requiredBitSet [1]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
 		case "name":
-			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
-				v, err := d.Str()
-				s.Name = string(v)
-				if err != nil {
+				s.Name.Reset()
+				if err := s.Name.Decode(d); err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "developerSettings":
+			if err := func() error {
+				s.DeveloperSettings.Reset()
+				if err := s.DeveloperSettings.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"developerSettings\"")
 			}
 		default:
 			return d.Skip()
@@ -5956,38 +6133,6 @@ func (s *UpdateOrgProfileRequest) Decode(d *jx.Decoder) error {
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "decode UpdateOrgProfileRequest")
-	}
-	// Validate required fields.
-	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b00000001,
-	} {
-		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
-			// Mask only required fields and check equality to mask using XOR.
-			//
-			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
-			// Bits of fields which would be set are actually bits of missed fields.
-			missed := bits.OnesCount8(result)
-			for bitN := 0; bitN < missed; bitN++ {
-				bitIdx := bits.TrailingZeros8(result)
-				fieldIdx := i*8 + bitIdx
-				var name string
-				if fieldIdx < len(jsonFieldsNameOfUpdateOrgProfileRequest) {
-					name = jsonFieldsNameOfUpdateOrgProfileRequest[fieldIdx]
-				} else {
-					name = strconv.Itoa(fieldIdx)
-				}
-				failures = append(failures, validate.FieldError{
-					Name:  name,
-					Error: validate.ErrFieldRequired,
-				})
-				// Reset bit.
-				result &^= 1 << bitIdx
-			}
-		}
-	}
-	if len(failures) > 0 {
-		return &validate.Error{Fields: failures}
 	}
 
 	return nil
