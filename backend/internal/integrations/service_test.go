@@ -18,7 +18,7 @@ func newTestService(t *testing.T) *Service {
 		t.Fatalf("encryptor: %v", err)
 	}
 	// store is nil => Enabled() is false; that's fine for these tests.
-	return New(nil, enc, config.Config{}, nil, nil)
+	return New(nil, enc, config.Config{}, nil, nil, nil)
 }
 
 func TestOAuthState_RoundTripPreservesLevel(t *testing.T) {

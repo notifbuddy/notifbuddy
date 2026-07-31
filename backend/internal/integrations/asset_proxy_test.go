@@ -19,7 +19,7 @@ func newProxyTestService(t *testing.T) *Service {
 	}
 	cfg := config.Config{}
 	cfg.Server.PublicBaseURL = "https://api.example.com"
-	return New(nil, enc, cfg, nil, nil)
+	return New(nil, enc, cfg, nil, nil, nil)
 }
 
 func (s *Service) sealAssetPayload(t *testing.T, p assetProxyPayload) string {
@@ -107,7 +107,7 @@ func TestAssetProxyToken_TamperRejected(t *testing.T) {
 
 func TestLinearAssetProxyURL_RequiresPublicBaseURL(t *testing.T) {
 	enc, _ := crypto.NewLocalKeyEncryptor(make([]byte, 32))
-	s := New(nil, enc, config.Config{}, nil, nil) // no public_base_url
+	s := New(nil, enc, config.Config{}, nil, nil, nil) // no public_base_url
 	if _, err := s.LinearAssetProxyURL("org1", "https://uploads.linear.app/a"); err == nil {
 		t.Fatal("missing public_base_url must be a loud error, not a silent bad URL")
 	}
