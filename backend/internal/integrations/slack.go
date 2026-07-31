@@ -128,8 +128,13 @@ func (s *Service) HandleSlackCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The token is the sensitive value; encrypt it before storing.
-	encToken, err := s.enc.Encrypt([]byte(rawToken))
+	bundle, err := marshalTokenBundle(tokenBundle{AccessToken: rawToken})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "integrations: marshal slack token", "error", err)
+		s.RedirectBrowserError(w, r, "slack", http.StatusInternalServerError, ErrToken)
+		return
+	}
+	encToken, err := s.enc.Encrypt(bundle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: encrypt slack token", "error", err)
 		s.RedirectBrowserError(w, r, "slack", http.StatusInternalServerError, ErrToken)
@@ -236,5 +241,5 @@ func (s *Service) slackToken(ctx context.Context, orgID string, level store.Leve
 	if err != nil {
 		return "", err
 	}
-	return string(tok), nil
+	return parseTokenBundle(tok).AccessToken, nil
 }

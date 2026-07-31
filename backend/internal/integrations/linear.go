@@ -105,12 +105,26 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		s.RedirectBrowserError(w, r, "linear", http.StatusBadGateway, ErrToken)
 		return
 	}
+	if access.RefreshToken == "" {
+		slog.ErrorContext(r.Context(), "integrations: linear exchange missing refresh_token")
+		s.RedirectBrowserError(w, r, "linear", http.StatusBadGateway, ErrToken)
+		return
+	}
 
 	// Best-effort: resolve the workspace name + id for display. A failure here
 	// shouldn't block storing a working token.
 	workspaceID, workspaceName := s.linearWorkspace(r.Context(), access.AccessToken)
 
-	encToken, err := s.enc.Encrypt([]byte(access.AccessToken))
+	bundle, err := marshalTokenBundle(tokenBundle{
+		AccessToken:  access.AccessToken,
+		RefreshToken: access.RefreshToken,
+	})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "integrations: marshal linear token", "error", err)
+		s.RedirectBrowserError(w, r, "linear", http.StatusInternalServerError, ErrToken)
+		return
+	}
+	encToken, err := s.enc.Encrypt(bundle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "integrations: encrypt linear token", "error", err)
 		s.RedirectBrowserError(w, r, "linear", http.StatusInternalServerError, ErrToken)
@@ -123,6 +137,7 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 		Level:          store.LevelWorkspace,
 		ExternalID:     workspaceID,
 		EncryptedToken: encToken,
+		TokenExpiresAt: expiryFromExpiresIn(access.ExpiresIn, time.Now()),
 		ConnectedBy:    st.UserID,
 		Metadata: map[string]any{
 			"workspace_name": workspaceName,
@@ -165,9 +180,11 @@ func (s *Service) HandleLinearCallback(w http.ResponseWriter, r *http.Request) {
 
 // linearAccessResponse is the subset of the token response we use.
 type linearAccessResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	Scope       string `json:"scope"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
+	Scope        string `json:"scope"`
 }
 
 // linearExchangeCode posts the code to Linear's token endpoint.
@@ -209,6 +226,49 @@ func (s *Service) linearExchangeCode(ctx context.Context, code string) (*linearA
 		return nil, fmt.Errorf("linear token exchange: empty access token (body: %s)", string(body))
 	}
 	return &out, nil
+}
+
+func (s *Service) linearRefresh(ctx context.Context, refreshToken string) (access, refresh string, expiresIn int, err error) {
+	form := url.Values{}
+	form.Set("client_id", s.cfg.Linear.ClientID)
+	form.Set("client_secret", s.cfg.Linear.ClientSecret)
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.linear.app/oauth/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", "", 0, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", "", 0, err
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if readErr != nil {
+		return "", "", 0, fmt.Errorf("linear token refresh: read body: %w", readErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", 0, fmt.Errorf("linear token refresh: status %d: %s", resp.StatusCode, string(body))
+	}
+	var out linearAccessResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", "", 0, fmt.Errorf("linear token refresh: decode: %w (body: %s)", err, string(body))
+	}
+	if out.AccessToken == "" {
+		return "", "", 0, fmt.Errorf("linear token refresh: empty access token (body: %s)", string(body))
+	}
+	return out.AccessToken, out.RefreshToken, out.ExpiresIn, nil
+}
+
+func (s *Service) linearHTTP(orgID string, level store.Level, userID string) *http.Client {
+	return s.oauthHTTPClient(orgID, store.ProviderLinear, level, userID, s.linearRefresh, func(tok string) string {
+		return tok
+	})
 }
 
 // linearWorkspace queries the Linear GraphQL API for the connected workspace's
@@ -284,23 +344,25 @@ type LinearCommentAttachment struct {
 // actor=app workspace token (the comment is then authored by the app —
 // explicitly app-level, never another user's credentials).
 func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in LinearCreateCommentInput) (LinearComment, error) {
-	var token string
+	level := store.LevelWorkspace
+	connUserID := ""
 	byline := ""
 	if in.SlackAuthorID != "" {
 		uid, err := s.store.UserIDBySlackUserID(ctx, orgID, in.SlackAuthorID)
 		switch {
 		case err == nil:
-			t, terr := s.LinearUserToken(ctx, orgID, uid)
+			_, terr := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, store.LevelUser, uid)
 			switch {
 			case terr == nil:
-				token = t
+				level = store.LevelUser
+				connUserID = uid
 			case !errors.Is(terr, store.ErrNotFound):
 				return LinearComment{}, terr // transient; caller retries
 			}
 		case !errors.Is(err, store.ErrNotFound):
 			return LinearComment{}, err // transient; caller retries
 		}
-		if token == "" {
+		if level == store.LevelWorkspace {
 			slog.InfoContext(ctx, "integrations: slack author has no linked linear identity; posting app-level",
 				"org_id", orgID, "slack_user_id", in.SlackAuthorID)
 			// Plain-text provenance so readers still know who spoke — this is
@@ -313,20 +375,13 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 			}
 		}
 	}
-	if token == "" {
-		t, err := s.LinearAccessToken(ctx, orgID)
-		if err != nil {
-			return LinearComment{}, err
-		}
-		token = t
-	}
 
 	// Upload attachments with the same token that authors the comment, and
 	// embed each as markdown (images render inline in Linear). A failed upload
 	// degrades to a note instead of failing the comment: an unuploadable file
 	// would otherwise nack and redeliver forever, and the text still matters.
 	for _, att := range in.Attachments {
-		assetURL, err := s.linearUploadFile(ctx, token, att)
+		assetURL, err := s.linearUploadFile(ctx, orgID, level, connUserID, att)
 		if err != nil {
 			slog.ErrorContext(ctx, "integrations: linear file upload failed",
 				"org_id", orgID, "filename", att.Filename, "error", err)
@@ -361,7 +416,7 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 			} `json:"commentCreate"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"input": input}, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, level, connUserID, mutation, map[string]any{"input": input}, &resp); err != nil {
 		return LinearComment{}, err
 	}
 	if !resp.Data.CommentCreate.Success {
@@ -383,7 +438,7 @@ type LinearReactionResult struct {
 // A client-generated UUID is supplied so the sync engine can record the
 // reaction id before/alongside the webhook echo.
 func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, emoji, slackAuthorID string) (LinearReactionResult, error) {
-	token, actingUserID, err := s.linearReactionToken(ctx, orgID, "", slackAuthorID)
+	actingUserID, err := s.linearReactionUserID(ctx, orgID, "", slackAuthorID)
 	if err != nil {
 		return LinearReactionResult{}, err
 	}
@@ -406,7 +461,7 @@ func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, em
 			} `json:"reactionCreate"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"input": input}, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, store.LevelUser, actingUserID, mutation, map[string]any{"input": input}, &resp); err != nil {
 		return LinearReactionResult{}, err
 	}
 	if !resp.Data.ReactionCreate.Success {
@@ -423,7 +478,7 @@ func (s *Service) LinearCreateReaction(ctx context.Context, orgID, commentID, em
 // Linear user token (must match who created it). Returns store.ErrNotFound when
 // that user has no personal Linear connection (NOT-66).
 func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID, actingUserID string) error {
-	token, _, err := s.linearReactionToken(ctx, orgID, actingUserID, "")
+	uid, err := s.linearReactionUserID(ctx, orgID, actingUserID, "")
 	if err != nil {
 		return err
 	}
@@ -437,7 +492,7 @@ func (s *Service) LinearDeleteReaction(ctx context.Context, orgID, reactionID, a
 			} `json:"reactionDelete"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, mutation, map[string]any{"id": reactionID}, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, store.LevelUser, uid, mutation, map[string]any{"id": reactionID}, &resp); err != nil {
 		return err
 	}
 	if !resp.Data.ReactionDelete.Success {
@@ -455,7 +510,7 @@ func mdLinkText(name string) string {
 // linearUploadFile reserves storage via the fileUpload mutation, PUTs the bytes
 // to the returned signed URL with the headers Linear requires, and returns the
 // asset URL to embed in a comment body.
-func (s *Service) linearUploadFile(ctx context.Context, token string, att LinearCommentAttachment) (string, error) {
+func (s *Service) linearUploadFile(ctx context.Context, orgID string, level store.Level, userID string, att LinearCommentAttachment) (string, error) {
 	const mutation = `mutation($contentType: String!, $filename: String!, $size: Int!) {
 		fileUpload(contentType: $contentType, filename: $filename, size: $size) {
 			success
@@ -482,7 +537,7 @@ func (s *Service) linearUploadFile(ctx context.Context, token string, att Linear
 		} `json:"data"`
 	}
 	vars := map[string]any{"contentType": contentType, "filename": att.Filename, "size": len(att.Data)}
-	if err := s.linearGraphQL(ctx, token, mutation, vars, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, level, userID, mutation, vars, &resp); err != nil {
 		return "", err
 	}
 	up := resp.Data.FileUpload.UploadFile
@@ -515,16 +570,11 @@ func (s *Service) linearUploadFile(ctx context.Context, token string, att Linear
 // re-host comment attachments in Slack, since Slack can't render URLs that
 // require Linear auth.
 func (s *Service) LinearFileDownload(ctx context.Context, orgID, fileURL string) ([]byte, string, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
-	if err != nil {
-		return nil, "", err
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("Authorization", token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.linearHTTP(orgID, store.LevelWorkspace, "").Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("integrations: linear file download: %w", err)
 	}
@@ -629,18 +679,12 @@ func (s *Service) HandleLinearAssetProxy(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	token, err := s.LinearAccessToken(r.Context(), p.OrgID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, p.FileURL, nil)
 	if err != nil {
 		http.Error(w, "proxy failed", http.StatusBadGateway)
 		return
 	}
-	req.Header.Set("Authorization", token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.linearHTTP(p.OrgID, store.LevelWorkspace, "").Do(req)
 	if err != nil {
 		http.Error(w, "proxy failed", http.StatusBadGateway)
 		return
@@ -886,10 +930,6 @@ func (s *Service) linearUsersByDisplayNames(ctx context.Context, orgID string, d
 	if len(displayNames) == 0 {
 		return nil, nil
 	}
-	token, err := s.LinearAccessToken(ctx, orgID)
-	if err != nil {
-		return nil, err
-	}
 	const query = `query($filter: UserFilter) {
 		users(filter: $filter) {
 			nodes { id name email url displayName active app }
@@ -905,23 +945,19 @@ func (s *Service) linearUsersByDisplayNames(ctx context.Context, orgID string, d
 	filter := map[string]any{
 		"displayName": map[string]any{"in": displayNames},
 	}
-	if err := s.linearGraphQL(ctx, token, query, map[string]any{"filter": filter}, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, store.LevelWorkspace, "", query, map[string]any{"filter": filter}, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Data.Users.Nodes, nil
 }
 
 func (s *Service) fetchLinearIssue(ctx context.Context, orgID, issueID string) (linearIssueGQL, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
-	if err != nil {
-		return linearIssueGQL{}, err
-	}
 	var resp struct {
 		Data struct {
 			Issue linearIssueGQL `json:"issue"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, linearIssueQuery, map[string]any{"id": issueID}, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, store.LevelWorkspace, "", linearIssueQuery, map[string]any{"id": issueID}, &resp); err != nil {
 		return linearIssueGQL{}, err
 	}
 	if resp.Data.Issue.ID == "" {
@@ -952,10 +988,6 @@ type LinearTeamStates struct {
 // settings UI. Linear caps page size; 250 comfortably covers a workspace's teams
 // and each team's states (both are small sets in practice).
 func (s *Service) LinearTeamStates(ctx context.Context, orgID string) ([]LinearTeamStates, error) {
-	token, err := s.LinearAccessToken(ctx, orgID)
-	if err != nil {
-		return nil, err
-	}
 	// Keep page sizes modest: Linear enforces a query-complexity budget and
 	// rejects overly broad nested pagination with a 400. A workspace's teams and
 	// each team's states are small sets, so these bounds are comfortable while
@@ -988,7 +1020,7 @@ func (s *Service) LinearTeamStates(ctx context.Context, orgID string) ([]LinearT
 			} `json:"teams"`
 		} `json:"data"`
 	}
-	if err := s.linearGraphQL(ctx, token, query, nil, &resp); err != nil {
+	if err := s.linearGraphQL(ctx, orgID, store.LevelWorkspace, "", query, nil, &resp); err != nil {
 		return nil, err
 	}
 	out := make([]LinearTeamStates, 0, len(resp.Data.Teams.Nodes))
@@ -1006,11 +1038,7 @@ func (s *Service) LinearTeamStates(ctx context.Context, orgID string) ([]LinearT
 	return out, nil
 }
 
-// linearGraphQL executes a GraphQL query/mutation against Linear's API with the
-// given token and decodes the JSON response into out. It surfaces transport,
-// HTTP-status, and GraphQL-level errors. Kept unexported: callers use the typed
-// helpers above rather than issuing raw GraphQL.
-func (s *Service) linearGraphQL(ctx context.Context, token, query string, variables map[string]any, out any) error {
+func (s *Service) linearGraphQL(ctx context.Context, orgID string, level store.Level, userID, query string, variables map[string]any, out any) error {
 	reqBody, err := json.Marshal(map[string]any{"query": query, "variables": variables})
 	if err != nil {
 		return fmt.Errorf("integrations: marshal linear request: %w", err)
@@ -1020,10 +1048,9 @@ func (s *Service) linearGraphQL(ctx context.Context, token, query string, variab
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.linearHTTP(orgID, level, userID).Do(req)
 	if err != nil {
 		return fmt.Errorf("integrations: linear graphql: %w", err)
 	}
@@ -1076,22 +1103,14 @@ func (s *Service) LinearMentionForSlackUser(ctx context.Context, orgID, slackUse
 	if err != nil {
 		return "", false
 	}
-	token, err := s.LinearUserToken(ctx, orgID, uid)
-	if err != nil {
-		return "", false
-	}
-	url, err := s.linearViewerProfileURL(ctx, token)
+	url, err := s.linearViewerProfileURL(ctx, orgID, uid)
 	if err != nil || url == "" {
 		return "", false
 	}
 	return url, true
 }
 
-// linearReactionToken picks the Linear user token for a reaction mutation.
-// Prefer actingUserID (NotifBuddy user) when set; else resolve slackAuthorID to
-// a linked Linear user. Returns store.ErrNotFound when nobody has a personal
-// Linear connection — reactions never use the org app token (NOT-66).
-func (s *Service) linearReactionToken(ctx context.Context, orgID, actingUserID, slackAuthorID string) (token, usedUserID string, err error) {
+func (s *Service) linearReactionUserID(ctx context.Context, orgID, actingUserID, slackAuthorID string) (string, error) {
 	uid := actingUserID
 	if uid == "" && slackAuthorID != "" {
 		id, lerr := s.store.UserIDBySlackUserID(ctx, orgID, slackAuthorID)
@@ -1099,17 +1118,16 @@ func (s *Service) linearReactionToken(ctx context.Context, orgID, actingUserID, 
 		case lerr == nil:
 			uid = id
 		case !errors.Is(lerr, store.ErrNotFound):
-			return "", "", lerr
+			return "", lerr
 		}
 	}
 	if uid == "" {
-		return "", "", store.ErrNotFound
+		return "", store.ErrNotFound
 	}
-	t, err := s.LinearUserToken(ctx, orgID, uid)
-	if err != nil {
-		return "", "", err
+	if _, err := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, store.LevelUser, uid); err != nil {
+		return "", err
 	}
-	return t, uid, nil
+	return uid, nil
 }
 
 // ResolveUserIDByLinearUserID maps a Linear user id to a NotifBuddy user via
@@ -1150,16 +1168,15 @@ func (s *Service) linearViewerID(ctx context.Context, token string) (string, err
 }
 
 // linearViewerProfileURL queries viewer { url } with a user-level Linear token.
-func (s *Service) linearViewerProfileURL(ctx context.Context, token string) (string, error) {
+func (s *Service) linearViewerProfileURL(ctx context.Context, orgID, userID string) (string, error) {
 	const query = `{"query":"{ viewer { url } }"}`
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"https://api.linear.app/graphql", bytes.NewReader([]byte(query)))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.linearHTTP(orgID, store.LevelUser, userID).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -1186,5 +1203,5 @@ func (s *Service) linearToken(ctx context.Context, orgID string, level store.Lev
 	if err != nil {
 		return "", err
 	}
-	return string(tok), nil
+	return parseTokenBundle(tok).AccessToken, nil
 }

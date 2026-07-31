@@ -24,6 +24,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -125,17 +126,23 @@ func revokeTokens(ctx context.Context, pool *pgxpool.Pool, enc crypto.Encryptor)
 
 	revoked, failed := 0, 0
 	for _, r := range all {
-		token, err := enc.Decrypt(r.ct)
+		plain, err := enc.Decrypt(r.ct)
 		if err != nil {
 			slog.Warn("nuke: decrypt token failed — skipping", "provider", r.provider, "level", r.level, "org_id", r.orgID, "error", err)
 			failed++
 			continue
 		}
+		token := accessTokenFromBundle(plain)
+		if token == "" {
+			slog.Warn("nuke: empty access token — skipping", "provider", r.provider, "level", r.level, "org_id", r.orgID)
+			failed++
+			continue
+		}
 		switch r.provider {
 		case "slack":
-			err = revokeSlack(ctx, string(token))
+			err = revokeSlack(ctx, token)
 		case "linear":
-			err = revokeLinear(ctx, string(token))
+			err = revokeLinear(ctx, token)
 		default:
 			continue // nothing revocable stored for other providers
 		}
@@ -147,6 +154,16 @@ func revokeTokens(ctx context.Context, pool *pgxpool.Pool, enc crypto.Encryptor)
 		revoked++
 	}
 	slog.Info("nuke: token revocation done", "revoked", revoked, "failed", failed)
+}
+
+func accessTokenFromBundle(plaintext []byte) string {
+	var b struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(plaintext, &b); err == nil && b.AccessToken != "" {
+		return b.AccessToken
+	}
+	return string(plaintext)
 }
 
 func revokeSlack(ctx context.Context, token string) error {

@@ -23,6 +23,7 @@ import (
 
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
+	"xolo/backend/internal/lock"
 	"xolo/backend/internal/pubsub"
 	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
@@ -40,6 +41,7 @@ type SessionResolver func(r *http.Request) (orgID, userID string)
 type Service struct {
 	store   *store.Store
 	enc     crypto.Encryptor
+	locker  lock.Locker
 	cfg     config.Config
 	resolve SessionResolver
 	pub     pubsub.Publisher
@@ -50,13 +52,17 @@ type Service struct {
 // New builds the integrations service. store/enc may be nil when the app runs
 // without a database; in that case Enabled() returns false. pub is the
 // provider-agnostic publisher for integration events; pass pubsub.Nop to disable.
-func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve SessionResolver, pub pubsub.Publisher) *Service {
+func New(st *store.Store, enc crypto.Encryptor, cfg config.Config, resolve SessionResolver, pub pubsub.Publisher, locker lock.Locker) *Service {
 	if pub == nil {
 		pub = pubsub.Nop
+	}
+	if locker == nil {
+		locker = lock.Nop{}
 	}
 	return &Service{
 		store:   st,
 		enc:     enc,
+		locker:  locker,
 		cfg:     cfg,
 		resolve: resolve,
 		pub:     pub,

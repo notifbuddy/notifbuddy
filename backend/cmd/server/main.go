@@ -23,6 +23,7 @@ import (
 	"xolo/backend/internal/httpapi"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/intent"
+	"xolo/backend/internal/lock"
 	"xolo/backend/internal/logging"
 	"xolo/backend/internal/otelsetup"
 	"xolo/backend/internal/pubsub"
@@ -120,10 +121,15 @@ func main() {
 		publisher = bus
 	}
 
+	var locker lock.Locker = lock.Nop{}
+	if st != nil {
+		locker = lock.NewPostgres(st.Pool())
+	}
+
 	// Integrations (Slack/Linear): reads the caller's org/user from the
 	// session via auth.OrgUserFromRequest. Runs with a nil store when no DB is
 	// configured (Enabled() == false), reporting "not configured".
-	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher)
+	intgSvc := integrations.New(st, enc, cfg, auth.OrgUserFromRequest, publisher, locker)
 
 	// Billing (Stripe): 21-day trials + per-seat Pro subscriptions. Seat counts
 	// come from authd org memberships via the auth service. NB: the member list

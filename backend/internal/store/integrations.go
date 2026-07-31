@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -48,6 +49,7 @@ type Integration struct {
 	ConnectedUserID string // the user this row belongs to (level=user); "" for workspace
 	ExternalID      string
 	EncryptedToken  []byte
+	TokenExpiresAt  *time.Time
 	Metadata        map[string]any
 	ConnectedBy     string
 }
@@ -65,18 +67,34 @@ func (s *Store) UpsertIntegration(ctx context.Context, in Integration) error {
 	}
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO org_integrations
-			(org_id, provider, level, connected_user_id, external_id, encrypted_token, metadata, connected_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			(org_id, provider, level, connected_user_id, external_id, encrypted_token, token_expires_at, metadata, connected_by, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		ON CONFLICT (org_id, provider, level, connected_user_id) DO UPDATE SET
-			external_id     = EXCLUDED.external_id,
-			encrypted_token = EXCLUDED.encrypted_token,
-			metadata        = EXCLUDED.metadata,
-			connected_by    = EXCLUDED.connected_by,
-			updated_at      = now()
+			external_id       = EXCLUDED.external_id,
+			encrypted_token   = EXCLUDED.encrypted_token,
+			token_expires_at  = EXCLUDED.token_expires_at,
+			metadata          = EXCLUDED.metadata,
+			connected_by      = EXCLUDED.connected_by,
+			updated_at        = now()
 	`, in.OrgID, string(in.Provider), string(in.Level.Norm()), in.ConnectedUserID,
-		in.ExternalID, in.EncryptedToken, metaJSON, in.ConnectedBy)
+		in.ExternalID, in.EncryptedToken, in.TokenExpiresAt, metaJSON, in.ConnectedBy)
 	if err != nil {
 		return fmt.Errorf("store: upsert integration: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) UpdateIntegrationTokens(ctx context.Context, orgID string, provider Provider, level Level, userID string, encryptedToken []byte, expiresAt *time.Time) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE org_integrations
+		SET encrypted_token = $5, token_expires_at = $6, updated_at = now()
+		WHERE org_id = $1 AND provider = $2 AND level = $3 AND connected_user_id = $4
+	`, orgID, string(provider), string(level.Norm()), userID, encryptedToken, expiresAt)
+	if err != nil {
+		return fmt.Errorf("store: update integration tokens: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -86,7 +104,7 @@ func (s *Store) UpsertIntegration(ctx context.Context, in Integration) error {
 func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provider, level Level, userID string) (*Integration, error) {
 	level = level.Norm()
 	row := s.pool.QueryRow(ctx, `
-		SELECT external_id, encrypted_token, metadata, connected_by
+		SELECT external_id, encrypted_token, token_expires_at, metadata, connected_by
 		FROM org_integrations
 		WHERE org_id = $1 AND provider = $2 AND level = $3 AND connected_user_id = $4
 	`, orgID, string(provider), string(level), userID)
@@ -94,7 +112,7 @@ func (s *Store) GetIntegration(ctx context.Context, orgID string, provider Provi
 	in := Integration{OrgID: orgID, Provider: provider, Level: level, ConnectedUserID: userID}
 	var metaJSON []byte
 	var connectedBy *string
-	if err := row.Scan(&in.ExternalID, &in.EncryptedToken, &metaJSON, &connectedBy); err != nil {
+	if err := row.Scan(&in.ExternalID, &in.EncryptedToken, &in.TokenExpiresAt, &metaJSON, &connectedBy); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -183,7 +201,7 @@ func (s *Store) ListUserIntegrations(ctx context.Context, orgID, userID string) 
 // (and connected_user_id for user rows).
 func (s *Store) listIntegrations(ctx context.Context, orgID string, level Level, userID string) ([]Integration, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT provider, external_id, encrypted_token, metadata, connected_by
+		SELECT provider, external_id, encrypted_token, token_expires_at, metadata, connected_by
 		FROM org_integrations
 		WHERE org_id = $1 AND level = $2 AND connected_user_id = $3
 		ORDER BY provider
@@ -199,7 +217,7 @@ func (s *Store) listIntegrations(ctx context.Context, orgID string, level Level,
 		var provider string
 		var metaJSON []byte
 		var connectedBy *string
-		if err := rows.Scan(&provider, &in.ExternalID, &in.EncryptedToken, &metaJSON, &connectedBy); err != nil {
+		if err := rows.Scan(&provider, &in.ExternalID, &in.EncryptedToken, &in.TokenExpiresAt, &metaJSON, &connectedBy); err != nil {
 			return nil, fmt.Errorf("store: scan integration: %w", err)
 		}
 		in.Provider = Provider(provider)
