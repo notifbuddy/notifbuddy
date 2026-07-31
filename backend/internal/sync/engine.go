@@ -3,13 +3,11 @@
 // integrations.slack.webhook_event), decides what to mirror, performs the
 // Slack/Linear actions, and fires a processing topic per action.
 //
-// Loop prevention is Defense 1: every message we write is authored by our
-// bot/app (Slack posts as the bot with a per-message name/avatar override;
-// Linear comments are created with actor=app + createAsUser). So the echo of
-// our own write arrives tagged as bot/app-authored, and the engine drops it
-// before mirroring it back. The routing tables (issue_channels,
-// mirrored_messages) are used only to place messages and resolve thread
-// parents — they are not part of loop prevention.
+// Loop prevention: Linear→Slack prefers a linked Slack user token (else bot +
+// name/avatar override). Bot-authored Slack echoes drop on bot_id; user-token
+// echoes drop via mirrored_messages (LinkBySlackTS). Linear comments we create
+// arrive as actor=app and drop on botActor. Routing tables place messages and
+// resolve thread parents.
 package sync
 
 import (

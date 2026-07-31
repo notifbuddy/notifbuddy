@@ -381,7 +381,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, p linearPayl
 		return fmt.Errorf("linear comment: mirror lookup: %w", err)
 	}
 
-	token, err := e.intg.SlackBotToken(ctx, orgID)
+	botToken, err := e.intg.SlackBotToken(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("linear comment: slack token: %w", err)
 	}
@@ -401,18 +401,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, p linearPayl
 		}
 	}
 
-	// Attribution: show the Linear author's name + avatar (resolved via their
-	// email in Slack) while the message is authored by our bot (Defense 1).
-	username := p.Linear.Actor.Name
-	iconURL := ""
-	if p.Linear.Actor.Email != "" {
-		if u, err := e.slack.LookupUserByEmail(ctx, token, p.Linear.Actor.Email); err == nil {
-			if u.Name != "" {
-				username = u.Name
-			}
-			iconURL = u.IconURL
-		}
-	}
+	postToken, username, iconURL := e.slackCommentPostAuth(ctx, orgID, p.Linear.Actor, botToken)
 
 	// Attachments: Linear embeds uploads as markdown links on uploads.linear.app,
 	// which only serve with Linear auth — Slack can't render them. Re-host each
@@ -428,7 +417,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, p linearPayl
 		text = "📎 shared from Linear"
 	}
 
-	ts, err := e.slack.PostMessage(ctx, token, slackapi.PostOptions{
+	ts, err := e.slack.PostMessage(ctx, postToken, slackapi.PostOptions{
 		ChannelID: channelID,
 		Text:      text,
 		Username:  username,
@@ -448,7 +437,7 @@ func (e *Engine) onLinearComment(ctx context.Context, orgID string, p linearPayl
 		e.recordAsset(ctx, orgID, d.ID, img.asset)
 	}
 	fileThread := firstNonEmpty(threadTS, ts)
-	e.shareFiles(ctx, orgID, d.ID, token, channelID, fileThread, fileShares)
+	e.shareFiles(ctx, orgID, d.ID, botToken, channelID, fileThread, fileShares)
 
 	if rootSlackTS == "" {
 		rootSlackTS = ts // this is a thread root
@@ -516,10 +505,11 @@ func (e *Engine) onLinearCommentUpdate(ctx context.Context, orgID string, p line
 		return nil
 	}
 
-	token, err := e.intg.SlackBotToken(ctx, orgID)
+	botToken, err := e.intg.SlackBotToken(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("linear comment update: slack token: %w", err)
 	}
+	updateToken, _, _ := e.slackCommentPostAuth(ctx, orgID, p.Linear.Actor, botToken)
 
 	text, newImages, newFiles := e.pullLinearUploads(ctx, orgID, d.ID, d.Body, syncedURL)
 	if len(newImages) > 0 {
@@ -530,7 +520,7 @@ func (e *Engine) onLinearCommentUpdate(ctx context.Context, orgID string, p line
 			text = "📎 shared from Linear"
 		}
 		allImages := append(e.inlineImagesFor(ctx, orgID, synced), newImages...)
-		if err := e.slack.UpdateMessage(ctx, token, slackapi.UpdateOptions{
+		if err := e.slack.UpdateMessage(ctx, updateToken, slackapi.UpdateOptions{
 			ChannelID: link.SlackChannelID,
 			TS:        link.SlackTS,
 			Text:      text,
@@ -546,8 +536,24 @@ func (e *Engine) onLinearCommentUpdate(ctx context.Context, orgID string, p line
 			}
 		}
 	}
-	e.shareFiles(ctx, orgID, d.ID, token, link.SlackChannelID, firstNonEmpty(link.RootSlackTS, link.SlackTS), newFiles)
+	e.shareFiles(ctx, orgID, d.ID, botToken, link.SlackChannelID, firstNonEmpty(link.RootSlackTS, link.SlackTS), newFiles)
 	return nil
+}
+
+func (e *Engine) slackCommentPostAuth(ctx context.Context, orgID string, actor linearActor, botToken string) (token, username, iconURL string) {
+	if t, _, _, err := e.slackReactionToken(ctx, orgID, actor.ID); err == nil {
+		return t, "", ""
+	}
+	username = actor.Name
+	if actor.Email != "" {
+		if u, err := e.slack.LookupUserByEmail(ctx, botToken, actor.Email); err == nil {
+			if u.Name != "" {
+				username = u.Name
+			}
+			iconURL = u.IconURL
+		}
+	}
+	return botToken, username, iconURL
 }
 
 // inlineImage is an image embed rendered inside the mirrored message's blocks:
