@@ -168,6 +168,7 @@ func (f *fakeStore) PatchLinearTeamState(_ context.Context, _ string, teamID str
 // fakeSlack records calls and returns canned ids.
 type fakeSlack struct {
 	posted          []slackapi.PostOptions
+	postedTokens    []string
 	createdName     string
 	archivedChannel string
 	invited         []string
@@ -180,6 +181,7 @@ type fakeSlack struct {
 	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
 	uploads         []slackapi.UploadOptions
 	updates         []slackapi.UpdateOptions
+	updateTokens    []string
 	reactionsAdded   []string // "token|channel|ts|name"
 	reactionsRemoved []string
 }
@@ -200,8 +202,9 @@ func (s *fakeSlack) InviteUsers(_ context.Context, _, _ string, ids []string) er
 	s.invited = append(s.invited, ids...)
 	return nil
 }
-func (s *fakeSlack) PostMessage(_ context.Context, _ string, opts slackapi.PostOptions) (string, error) {
+func (s *fakeSlack) PostMessage(_ context.Context, token string, opts slackapi.PostOptions) (string, error) {
 	s.posted = append(s.posted, opts)
+	s.postedTokens = append(s.postedTokens, token)
 	if s.nextTS == "" {
 		return "1700000000.000001", nil
 	}
@@ -256,8 +259,9 @@ func (s *fakeSlack) UploadFile(_ context.Context, _ string, opts slackapi.Upload
 	s.uploads = append(s.uploads, opts)
 	return nil
 }
-func (s *fakeSlack) UpdateMessage(_ context.Context, _ string, opts slackapi.UpdateOptions) error {
+func (s *fakeSlack) UpdateMessage(_ context.Context, token string, opts slackapi.UpdateOptions) error {
 	s.updates = append(s.updates, opts)
+	s.updateTokens = append(s.updateTokens, token)
 	return nil
 }
 func (s *fakeSlack) AddReaction(_ context.Context, token, channelID, ts, name string) error {
@@ -451,7 +455,7 @@ func linearCommentPayload(action, commentID, body, issueID, parentID, actorName,
 	linear := map[string]any{
 		"action":  action,
 		"type":    "comment",
-		"actor":   map[string]any{"name": actorName, "email": actorEmail, "type": "user"},
+		"actor":   map[string]any{"id": actorEmail, "name": actorName, "email": actorEmail, "type": "user"},
 		"comment": comment,
 		// Injected at ingest for real Comment webhooks; tests include a minimal issue
 		// so @notifbuddy naming / team resolve works without a GraphQL round-trip.
@@ -577,9 +581,9 @@ func TestOnLinearEvent_DropsAppAuthoredComment(t *testing.T) {
 	}
 }
 
-// A human Linear comment on an issue with a channel mirrors into Slack, posting
-// as the bot but with the author's name/avatar (attribution), and fires the
-// processing topic.
+// A human Linear comment on an issue with a channel mirrors into Slack. When
+// the author has no linked Slack user token, the bot posts with name/avatar
+// overrides (chat:write.customize fallback) and fires the processing topic.
 func TestOnLinearEvent_MirrorsHumanComment(t *testing.T) {
 	st := newFakeStore()
 	st.linearPayloads["d2"] = linearCommentPayload("create", "c2", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
@@ -605,12 +609,76 @@ func TestOnLinearEvent_MirrorsHumanComment(t *testing.T) {
 	if got.Username != "Ada Lovelace" || got.IconURL != "https://x.io/ada.png" {
 		t.Errorf("attribution not applied: username=%q icon=%q", got.Username, got.IconURL)
 	}
+	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxb-test" {
+		t.Errorf("unlinked author should post with bot token, got %v", sl.postedTokens)
+	}
 	if !pub.has(TopicSlackMessage) {
 		t.Error("expected sync.slack.message.posted")
 	}
 	// The link must be recorded so the echo can be dropped and threads resolved.
 	if len(st.recorded) != 1 || st.recorded[0].LinearCommentID != "c2" || st.recorded[0].SlackTS != "1700000000.000009" {
 		t.Errorf("mirror link not recorded correctly: %+v", st.recorded)
+	}
+}
+
+// Linked Slack user token: post as the real user (no username/icon overrides).
+func TestOnLinearEvent_PostsAsLinkedUser(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d2u"] = linearCommentPayload("create", "c2u", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+
+	sl := &fakeSlack{nextTS: "1700000000.000010"}
+	ig := &fakeIntg{
+		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
+		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
+		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d2u", "org1"))
+
+	if len(sl.posted) != 1 {
+		t.Fatalf("want 1 Slack post, got %d", len(sl.posted))
+	}
+	got := sl.posted[0]
+	if got.Username != "" || got.IconURL != "" {
+		t.Errorf("user-token post must not set customize overrides: username=%q icon=%q", got.Username, got.IconURL)
+	}
+	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxp-user" {
+		t.Errorf("want user token, got %v", sl.postedTokens)
+	}
+	if len(st.recorded) != 1 || st.recorded[0].SlackTS != "1700000000.000010" {
+		t.Errorf("mirror link not recorded: %+v", st.recorded)
+	}
+}
+
+// User-token mirrors have no bot_id; LinkBySlackTS must still stop the Slack→Linear echo.
+func TestOnSlackEvent_DropsAlreadyMirroredUserTokenPost(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.linearPayloads["d_echo"] = linearCommentPayload("create", "c_echo", "from linear", "issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_USER", botUserID: "U_BOT"}
+	ig := &fakeIntg{
+		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
+		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
+		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
+		nextCommentID:   "should_not_create",
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d_echo", "org1"))
+	if len(sl.posted) != 1 || sl.postedTokens[0] != "xoxp-user" {
+		t.Fatalf("setup: want user-token post, got posts=%v tokens=%v", sl.posted, sl.postedTokens)
+	}
+
+	st.slackPayloads["e_echo"] = slackMessagePayload("U_ADA", "", "", "from linear", "C1", "TS_USER", "")
+	e.OnSlackEvent(context.Background(), slackRef("e_echo", "org1"))
+
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("mirrored user-token post must not echo to Linear; got %d comments", len(ig.createdComments))
 	}
 }
 
@@ -1859,6 +1927,9 @@ func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
 	if up.ChannelID != "C1" || up.TS != "TS_C31" {
 		t.Errorf("must update the original mirrored message: %+v", up)
 	}
+	if len(sl.updateTokens) != 1 || sl.updateTokens[0] != "xoxb-test" {
+		t.Errorf("unlinked update should use bot token, got %v", sl.updateTokens)
+	}
 	if up.Text != "text first" {
 		t.Errorf("updated text wrong: %q", up.Text)
 	}
@@ -1870,6 +1941,33 @@ func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
 	e.OnLinearEvent(context.Background(), linearRef("d32", "org1"))
 	if len(sl.updates) != 1 {
 		t.Fatalf("redelivered update must not re-sync: %d updates", len(sl.updates))
+	}
+}
+
+func TestOnLinearEvent_LateImageUpdateUsesUserToken(t *testing.T) {
+	st := newFakeStore()
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.linearPayloads["d31u"] = linearCommentPayload("create", "c31u", "text first", "issue1", "", "Ada", "ada@x.io", false)
+	st.linearPayloads["d32u"] = linearCommentPayload("update", "c31u",
+		"text first\n\n![late.png](https://uploads.linear.app/abc/late.png)",
+		"issue1", "", "Ada", "ada@x.io", false)
+
+	sl := &fakeSlack{nextTS: "TS_C31U"}
+	ig := &fakeIntg{
+		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
+		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
+		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
+	}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("d31u", "org1"))
+	e.OnLinearEvent(context.Background(), linearRef("d32u", "org1"))
+
+	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxp-user" {
+		t.Errorf("create should use user token, got %v", sl.postedTokens)
+	}
+	if len(sl.updateTokens) != 1 || sl.updateTokens[0] != "xoxp-user" {
+		t.Errorf("update should use user token, got %v", sl.updateTokens)
 	}
 }
 
