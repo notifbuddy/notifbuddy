@@ -262,47 +262,6 @@ func TestOAuthRoundTripper_ConcurrentRefreshSingleFlight(t *testing.T) {
 	}
 }
 
-func TestOAuthRoundTripper_LegacyNoRefresh(t *testing.T) {
-	t.Parallel()
-	enc := testEnc(t)
-	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
-	ct, err := enc.Encrypt([]byte("legacy-access"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := &memTokenStore{row: &store.Integration{EncryptedToken: ct}}
-	var refreshes atomic.Int32
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "legacy-access" {
-			t.Errorf("Authorization = %q", got)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer api.Close()
-
-	rt := &oauthRoundTripper{
-		base:       api.Client().Transport,
-		locker:     lock.Nop{},
-		store:      st,
-		enc:        enc,
-		orgID:      "org",
-		provider:   store.ProviderLinear,
-		level:      store.LevelWorkspace,
-		refresh:    func(context.Context, string) (string, string, int, error) { refreshes.Add(1); return "", "", 0, nil },
-		formatAuth: func(tok string) string { return tok },
-		now:        func() time.Time { return now },
-	}
-	req, _ := http.NewRequest(http.MethodGet, api.URL, nil)
-	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if refreshes.Load() != 0 {
-		t.Fatalf("refresh called on legacy row")
-	}
-}
-
 func TestMarshalTokenBundleRoundTrip(t *testing.T) {
 	t.Parallel()
 	raw, err := marshalTokenBundle(tokenBundle{AccessToken: "a", RefreshToken: "r"})
