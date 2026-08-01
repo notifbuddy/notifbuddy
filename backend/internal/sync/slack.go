@@ -180,21 +180,7 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 		}
 	}
 
-	// Authorship: the service posts with the author's own linked Linear token,
-	// or app-level when their identity isn't connected — never with another
-	// user's credentials. The display name is best-effort provenance for the
-	// app-level byline; empty just means a generic byline.
-	var authorName string
-	if u, err := e.slack.UserByID(ctx, token, ev.User); err == nil {
-		authorName = u.Name
-	}
-
-	// Mirror attachments: pull each file with the bot token and hand the bytes
-	// to the comment create, which re-hosts them on Linear. Best-effort per
-	// file — a failed download (deleted file, over-cap, missing files:read
-	// scope) becomes a note in the comment rather than a redelivery loop.
 	var attachments []integrations.LinearCommentAttachment
-	// Resolve <@U…> mentions: linked Linear profile URL first, else @displayName.
 	body := e.rewriteSlackMentions(ctx, ref.OrgID, token, ev.Text)
 	for _, f := range ev.Files {
 		fileURL := firstNonEmpty(f.URLPrivateDownload, f.URLPrivate)
@@ -216,13 +202,17 @@ func (e *Engine) OnSlackEvent(ctx context.Context, msg pubsub.Message) error {
 	}
 
 	comment, err := e.intg.LinearCreateComment(ctx, ref.OrgID, integrations.LinearCreateCommentInput{
-		IssueID:           issueID,
-		Body:              body,
-		ParentID:          parentComment,
-		SlackAuthorID:     ev.User,
-		AuthorDisplayName: authorName,
-		Attachments:       attachments,
+		IssueID:       issueID,
+		Body:          body,
+		ParentID:      parentComment,
+		SlackAuthorID: ev.User,
+		Attachments:   attachments,
 	})
+	if errors.Is(err, store.ErrNotFound) {
+		slog.InfoContext(ctx, "sync: slack message: skip unlinked user",
+			"event_id", ref.EventID, "org_id", ref.OrgID, "slack_user", ev.User)
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("slack event %s: create linear comment: %w", ref.EventID, err)
 	}

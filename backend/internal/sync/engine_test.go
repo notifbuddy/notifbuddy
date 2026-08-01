@@ -30,7 +30,7 @@ type fakeStore struct {
 	recorded       []store.MirroredMessage
 	deletedIssues  []string
 	statePatches   []statePatch
-	assets         map[string][]store.MirroredAsset // key: org|comment
+	assets         map[string][]store.MirroredAsset  // key: org|comment
 	reactionsBySrc map[string]store.MirroredReaction // key: org|source|id
 	reactionsByCtr map[string]store.MirroredReaction // key: org|ctrSource|parent|emoji|actor
 }
@@ -167,21 +167,21 @@ func (f *fakeStore) PatchLinearTeamState(_ context.Context, _ string, teamID str
 
 // fakeSlack records calls and returns canned ids.
 type fakeSlack struct {
-	posted          []slackapi.PostOptions
-	postedTokens    []string
-	createdName     string
-	archivedChannel string
-	invited         []string
-	nextTS          string
-	nextChannel     string
-	botUserID       string
-	authTestErr     error // when set, AuthTestUserID fails (fail-closed NLP path)
-	usersByEmail    map[string]slackapi.User
-	usersByID       map[string]slackapi.User
-	files           map[string][]byte // url -> bytes served by DownloadFile; missing url errors
-	uploads         []slackapi.UploadOptions
-	updates         []slackapi.UpdateOptions
-	updateTokens    []string
+	posted           []slackapi.PostOptions
+	postedTokens     []string
+	createdName      string
+	archivedChannel  string
+	invited          []string
+	nextTS           string
+	nextChannel      string
+	botUserID        string
+	authTestErr      error // when set, AuthTestUserID fails (fail-closed NLP path)
+	usersByEmail     map[string]slackapi.User
+	usersByID        map[string]slackapi.User
+	files            map[string][]byte // url -> bytes served by DownloadFile; missing url errors
+	uploads          []slackapi.UploadOptions
+	updates          []slackapi.UpdateOptions
+	updateTokens     []string
 	reactionsAdded   []string // "token|channel|ts|name"
 	reactionsRemoved []string
 }
@@ -281,10 +281,10 @@ func (s *fakeSlack) RemoveReaction(_ context.Context, token, channelID, ts, name
 // LinearIssueByID reports; issueTeamID fills TeamID when issue.TeamID is empty
 // (used by the @notifbuddy path to resolve the team).
 type fakeIntg struct {
-	settings        integrations.LinearSettings
-	teamMapped      map[string]bool
-	issueTeamID     string
-	issue           integrations.LinearIssue
+	settings         integrations.LinearSettings
+	teamMapped       map[string]bool
+	issueTeamID      string
+	issue            integrations.LinearIssue
 	createdComments  []integrations.LinearCreateCommentInput
 	nextCommentID    string
 	createdReactions []struct{ CommentID, Emoji, SlackAuthorID, ActingUserID string }
@@ -334,12 +334,48 @@ func (i *fakeIntg) SlackUserIDByUserID(_ context.Context, _, userID string) (str
 	return "", store.ErrNotFound
 }
 func (i *fakeIntg) LinearCreateComment(_ context.Context, _ string, in integrations.LinearCreateCommentInput) (integrations.LinearComment, error) {
+	if i.linkedSlackAuthors == nil {
+		return integrations.LinearComment{}, store.ErrNotFound
+	}
+	if _, ok := i.linkedSlackAuthors[in.SlackAuthorID]; !ok || in.SlackAuthorID == "" {
+		return integrations.LinearComment{}, store.ErrNotFound
+	}
 	i.createdComments = append(i.createdComments, in)
 	id := i.nextCommentID
 	if id == "" {
 		id = "cmt_new"
 	}
 	return integrations.LinearComment{ID: id}, nil
+}
+
+func linkedAdaIntg(base *fakeIntg) *fakeIntg {
+	if base == nil {
+		base = &fakeIntg{}
+	}
+	if base.linearUserToNB == nil {
+		base.linearUserToNB = map[string]string{}
+	}
+	base.linearUserToNB["ada@x.io"] = "nb_user1"
+	if base.slackUserTokens == nil {
+		base.slackUserTokens = map[string]string{}
+	}
+	base.slackUserTokens["nb_user1"] = "xoxp-user"
+	if base.slackUserIDs == nil {
+		base.slackUserIDs = map[string]string{}
+	}
+	base.slackUserIDs["nb_user1"] = "U_ADA"
+	return base
+}
+
+func linkedSlackAuthor(base *fakeIntg, slackUserID, nbUserID string) *fakeIntg {
+	if base == nil {
+		base = &fakeIntg{}
+	}
+	if base.linkedSlackAuthors == nil {
+		base.linkedSlackAuthors = map[string]string{}
+	}
+	base.linkedSlackAuthors[slackUserID] = nbUserID
+	return base
 }
 func (i *fakeIntg) LinearCreateReaction(_ context.Context, _, commentID, emoji, slackAuthorID string) (integrations.LinearReactionResult, error) {
 	if i.linkedSlackAuthors == nil {
@@ -547,11 +583,8 @@ func TestOnLinearEvent_ProcessesWhenSyncCheckNil(t *testing.T) {
 	st.issueToChannel["org1|issue1"] = "C1"
 	st.channelToIssue["org1|C1"] = "issue1"
 
-	sl := &fakeSlack{
-		nextTS:       "1700000000.000001",
-		usersByEmail: map[string]slackapi.User{"ada@x.io": {ID: "U_ADA", Name: "Ada", IconURL: ""}},
-	}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+	sl := &fakeSlack{nextTS: "1700000000.000001"}
+	e := newEngine(st, sl, linkedAdaIntg(nil), &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d_on", "org1"))
 	if len(sl.posted) != 1 {
@@ -581,23 +614,41 @@ func TestOnLinearEvent_DropsAppAuthoredComment(t *testing.T) {
 	}
 }
 
-// A human Linear comment on an issue with a channel mirrors into Slack. When
-// the author has no linked Slack user token, the bot posts with name/avatar
-// overrides (chat:write.customize fallback) and fires the processing topic.
-func TestOnLinearEvent_MirrorsHumanComment(t *testing.T) {
+func TestOnLinearEvent_CommentUnlinkedDropped(t *testing.T) {
 	st := newFakeStore()
 	st.linearPayloads["d2"] = linearCommentPayload("create", "c2", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
 	st.issueToChannel["org1|issue1"] = "C1"
 	st.channelToIssue["org1|C1"] = "issue1"
 
-	sl := &fakeSlack{
-		nextTS:       "1700000000.000009",
-		usersByEmail: map[string]slackapi.User{"ada@x.io": {ID: "U_ADA", Name: "Ada Lovelace", IconURL: "https://x.io/ada.png"}},
-	}
+	sl := &fakeSlack{nextTS: "1700000000.000009"}
 	pub := &spyPub{}
 	e := newEngine(st, sl, &fakeIntg{}, pub)
 
-	e.OnLinearEvent(context.Background(), linearRef("d2", "org1"))
+	if err := e.OnLinearEvent(context.Background(), linearRef("d2", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.posted) != 0 {
+		t.Fatalf("unlinked linear user must not post to Slack: %d posts", len(sl.posted))
+	}
+	if pub.has(TopicSlackMessage) {
+		t.Error("no sync.slack.message.posted should fire for a dropped comment")
+	}
+	if len(st.recorded) != 0 {
+		t.Errorf("mirror link must not be recorded: %+v", st.recorded)
+	}
+}
+
+func TestOnLinearEvent_PostsAsLinkedUser(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["d2u"] = linearCommentPayload("create", "c2u", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.channelToIssue["org1|C1"] = "issue1"
+
+	sl := &fakeSlack{nextTS: "1700000000.000010"}
+	pub := &spyPub{}
+	e := newEngine(st, sl, linkedAdaIntg(nil), pub)
+
+	e.OnLinearEvent(context.Background(), linearRef("d2u", "org1"))
 
 	if len(sl.posted) != 1 {
 		t.Fatalf("want 1 Slack post, got %d", len(sl.posted))
@@ -606,47 +657,14 @@ func TestOnLinearEvent_MirrorsHumanComment(t *testing.T) {
 	if got.ChannelID != "C1" || got.Text != "LGTM" {
 		t.Errorf("post routing wrong: %+v", got)
 	}
-	if got.Username != "Ada Lovelace" || got.IconURL != "https://x.io/ada.png" {
-		t.Errorf("attribution not applied: username=%q icon=%q", got.Username, got.IconURL)
-	}
-	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxb-test" {
-		t.Errorf("unlinked author should post with bot token, got %v", sl.postedTokens)
-	}
-	if !pub.has(TopicSlackMessage) {
-		t.Error("expected sync.slack.message.posted")
-	}
-	// The link must be recorded so the echo can be dropped and threads resolved.
-	if len(st.recorded) != 1 || st.recorded[0].LinearCommentID != "c2" || st.recorded[0].SlackTS != "1700000000.000009" {
-		t.Errorf("mirror link not recorded correctly: %+v", st.recorded)
-	}
-}
-
-// Linked Slack user token: post as the real user (no username/icon overrides).
-func TestOnLinearEvent_PostsAsLinkedUser(t *testing.T) {
-	st := newFakeStore()
-	st.linearPayloads["d2u"] = linearCommentPayload("create", "c2u", "LGTM", "issue1", "", "Ada Lovelace", "ada@x.io", false)
-	st.issueToChannel["org1|issue1"] = "C1"
-	st.channelToIssue["org1|C1"] = "issue1"
-
-	sl := &fakeSlack{nextTS: "1700000000.000010"}
-	ig := &fakeIntg{
-		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
-		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
-		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
-	}
-	e := newEngine(st, sl, ig, &spyPub{})
-
-	e.OnLinearEvent(context.Background(), linearRef("d2u", "org1"))
-
-	if len(sl.posted) != 1 {
-		t.Fatalf("want 1 Slack post, got %d", len(sl.posted))
-	}
-	got := sl.posted[0]
 	if got.Username != "" || got.IconURL != "" {
 		t.Errorf("user-token post must not set customize overrides: username=%q icon=%q", got.Username, got.IconURL)
 	}
 	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxp-user" {
 		t.Errorf("want user token, got %v", sl.postedTokens)
+	}
+	if !pub.has(TopicSlackMessage) {
+		t.Error("expected sync.slack.message.posted")
 	}
 	if len(st.recorded) != 1 || st.recorded[0].SlackTS != "1700000000.000010" {
 		t.Errorf("mirror link not recorded: %+v", st.recorded)
@@ -661,12 +679,7 @@ func TestOnSlackEvent_DropsAlreadyMirroredUserTokenPost(t *testing.T) {
 	st.linearPayloads["d_echo"] = linearCommentPayload("create", "c_echo", "from linear", "issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_USER", botUserID: "U_BOT"}
-	ig := &fakeIntg{
-		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
-		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
-		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
-		nextCommentID:   "should_not_create",
-	}
+	ig := linkedAdaIntg(&fakeIntg{nextCommentID: "should_not_create"})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d_echo", "org1"))
@@ -696,7 +709,7 @@ func TestOnLinearEvent_ReplyGoesToThread(t *testing.T) {
 
 	sl := &fakeSlack{nextTS: "REPLYTS"}
 	pub := &spyPub{}
-	e := newEngine(st, sl, &fakeIntg{}, pub)
+	e := newEngine(st, sl, linkedAdaIntg(nil), pub)
 
 	e.OnLinearEvent(context.Background(), linearRef("d3", "org1"))
 
@@ -797,7 +810,12 @@ func TestOnLinearEvent_NotifBuddySkipsNLPWhenBotIdentityFails(t *testing.T) {
 
 	sl := &fakeSlack{authTestErr: fmt.Errorf("auth.test down")}
 	clf := &countClassifier{intent: intent.CreateChannel}
-	e := newEngineWithClassifier(st, sl, &fakeIntg{}, &spyPub{}, clf)
+	ig := &fakeIntg{
+		linearUserToNB:  map[string]string{"nik@x.io": "nb_nik"},
+		slackUserTokens: map[string]string{"nb_nik": "xoxp-nik"},
+		slackUserIDs:    map[string]string{"nb_nik": "U_NIK"},
+	}
+	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, clf)
 
 	e.OnLinearEvent(context.Background(), linearRef("d_fail", "org1"))
 
@@ -807,7 +825,6 @@ func TestOnLinearEvent_NotifBuddySkipsNLPWhenBotIdentityFails(t *testing.T) {
 	if sl.createdName != "" {
 		t.Errorf("must not create channel; got %q", sl.createdName)
 	}
-	// Ordinary mirroring still proceeds (command path skipped).
 	if len(sl.posted) != 1 {
 		t.Fatalf("want comment mirrored to Slack, got %d posts", len(sl.posted))
 	}
@@ -908,7 +925,7 @@ func TestOnSlackEvent_WrongBotIDMirrors(t *testing.T) {
 	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "notifbuddy")
 	sl.usersByID["U_OTHER"] = slackapi.User{ID: "U_OTHER", Name: "parrot", IsBot: true}
 	clf := &countClassifier{intent: intent.CloseChannel}
-	ig := &fakeIntg{nextCommentID: "cmt_wrong"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_wrong"}, "U_HUMAN", "nb_user1")
 	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, clf)
 
 	e.OnSlackEvent(context.Background(), slackRef("e_wrong", "org1"))
@@ -936,7 +953,7 @@ func TestOnSlackEvent_RewritesBotMentionWhenMirroring(t *testing.T) {
 		"U_HUMAN", "", "", "<@U_BOT> thanks for the help", "C1", "TS_RW", "")
 
 	sl := withBotIdentity(&fakeSlack{}, "U_BOT", "my-bot")
-	ig := &fakeIntg{nextCommentID: "cmt_rw"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_rw"}, "U_HUMAN", "nb_user1")
 	e := newEngineWithClassifier(st, sl, ig, &spyPub{}, fixedClassifier(intent.NoAction))
 
 	e.OnSlackEvent(context.Background(), slackRef("e_rw", "org1"))
@@ -958,7 +975,7 @@ func TestOnLinearEvent_StatusTriggerCreatesChannel(t *testing.T) {
 		"linear": map[string]any{
 			"action": "update", "type": "issue",
 			"actor": map[string]any{"name": "Ada"},
-			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+			"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 		},
 	}
 	b, _ := json.Marshal(env)
@@ -1012,7 +1029,7 @@ func TestOnLinearEvent_ChannelCreateInvitesIssuePeople(t *testing.T) {
 		"linear": map[string]any{
 			"action": "update", "type": "issue",
 			"actor": map[string]any{"name": "Ada"},
-			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+			"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 		},
 	}
 	b, _ := json.Marshal(env)
@@ -1058,7 +1075,7 @@ func TestOnLinearEvent_ChannelCreateContinuesWhenInviteesFetchFails(t *testing.T
 		"linear": map[string]any{
 			"action": "update", "type": "issue",
 			"actor": map[string]any{"name": "Ada"},
-			"issue":  map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
+			"issue": map[string]any{"id": "issue9", "identifier": "SKO-9", "teamId": "team1", "state": map[string]any{"name": "In Progress"}},
 		},
 	}
 	b, _ := json.Marshal(env)
@@ -1390,10 +1407,6 @@ func TestOnLinearEvent_WorkflowStatePatchesSnapshot(t *testing.T) {
 	}
 }
 
-// Slack side: a human message in a synced channel mirrors to a Linear comment;
-// the author's Slack id rides along so the service picks the right credential
-// (the author's own linked token, or app-level — never someone else's), and
-// the created comment link is recorded.
 func TestOnSlackEvent_MirrorsHumanMessage(t *testing.T) {
 	st := newFakeStore()
 	st.channelToIssue["org1|C1"] = "issue1"
@@ -1401,7 +1414,7 @@ func TestOnSlackEvent_MirrorsHumanMessage(t *testing.T) {
 	st.slackPayloads["e1"] = slackMessagePayload("U_HUMAN", "", "", "hello from slack", "C1", "TS1", "")
 
 	sl := &fakeSlack{botUserID: "U_BOT"}
-	ig := &fakeIntg{nextCommentID: "cmt_1"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_1"}, "U_HUMAN", "nb_user1")
 	pub := &spyPub{}
 	e := newEngine(st, sl, ig, pub)
 
@@ -1422,6 +1435,30 @@ func TestOnSlackEvent_MirrorsHumanMessage(t *testing.T) {
 	}
 	if len(st.recorded) != 1 || st.recorded[0].LinearCommentID != "cmt_1" || st.recorded[0].SlackTS != "TS1" {
 		t.Errorf("mirror link not recorded: %+v", st.recorded)
+	}
+}
+
+func TestOnSlackEvent_MessageUnlinkedDropped(t *testing.T) {
+	st := newFakeStore()
+	st.channelToIssue["org1|C1"] = "issue1"
+	st.issueToChannel["org1|issue1"] = "C1"
+	st.slackPayloads["e1u"] = slackMessagePayload("U_HUMAN", "", "", "hello from slack", "C1", "TS1", "")
+
+	ig := &fakeIntg{nextCommentID: "cmt_1"}
+	pub := &spyPub{}
+	e := newEngine(st, &fakeSlack{botUserID: "U_BOT"}, ig, pub)
+
+	if err := e.OnSlackEvent(context.Background(), slackRef("e1u", "org1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ig.createdComments) != 0 {
+		t.Fatalf("unlinked slack user must not create linear comment: %+v", ig.createdComments)
+	}
+	if pub.has(TopicLinearComment) {
+		t.Error("no sync.linear.comment.posted should fire for a dropped message")
+	}
+	if len(st.recorded) != 0 {
+		t.Errorf("mirror link must not be recorded: %+v", st.recorded)
 	}
 }
 
@@ -1451,7 +1488,7 @@ func TestOnSlackEvent_ReplyThreadsUnderParentComment(t *testing.T) {
 	st.slackPayloads["e3"] = slackMessagePayload("U_HUMAN", "", "", "reply text", "C1", "TS3", "ROOT")
 
 	sl := &fakeSlack{botUserID: "U_BOT"}
-	ig := &fakeIntg{nextCommentID: "cmt_reply"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_reply"}, "U_HUMAN", "nb_user1")
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnSlackEvent(context.Background(), slackRef("e3", "org1"))
@@ -1486,7 +1523,7 @@ func TestOnLinearEvent_RedeliveredCommentMirrorsOnce(t *testing.T) {
 	st.issueToChannel["org1|issue1"] = "C1"
 	st.channelToIssue["org1|C1"] = "issue1"
 	sl := &fakeSlack{nextTS: "1700000000.000009"}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+	e := newEngine(st, sl, linkedAdaIntg(nil), &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d2", "org1"))
 	e.OnLinearEvent(context.Background(), linearRef("d2", "org1")) // redelivery
@@ -1508,7 +1545,7 @@ func TestOnSlackEvent_RedeliveredMessageMirrorsOnce(t *testing.T) {
 	st.issueToChannel["org1|issue1"] = "C1"
 	st.slackPayloads["e1"] = slackMessagePayload("U_HUMAN", "", "", "hello from slack", "C1", "TS1", "")
 	sl := &fakeSlack{botUserID: "U_BOT"}
-	ig := &fakeIntg{nextCommentID: "cmt_1"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_1"}, "U_HUMAN", "nb_user1")
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnSlackEvent(context.Background(), slackRef("e1", "org1"))
@@ -1551,7 +1588,7 @@ func TestOnSlackEvent_FileShareMirrorsAttachment(t *testing.T) {
 	}})
 
 	sl := &fakeSlack{botUserID: "U_BOT", files: map[string][]byte{"https://files.slack.com/f1": []byte("hello")}}
-	ig := &fakeIntg{nextCommentID: "cmt_f"}
+	ig := linkedSlackAuthor(&fakeIntg{nextCommentID: "cmt_f"}, "U_HUMAN", "nb_user1")
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnSlackEvent(context.Background(), slackRef("e10", "org1"))
@@ -1581,7 +1618,7 @@ func TestOnSlackEvent_FileSharePrefersDownloadURL(t *testing.T) {
 		"url_private": "https://files.slack.com/view", "url_private_download": "https://files.slack.com/dl",
 	}})
 	sl := &fakeSlack{botUserID: "U_BOT", files: map[string][]byte{"https://files.slack.com/dl": []byte("png")}}
-	ig := &fakeIntg{}
+	ig := linkedSlackAuthor(nil, "U_HUMAN", "nb_user1")
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnSlackEvent(context.Background(), slackRef("e11", "org1"))
@@ -1601,7 +1638,7 @@ func TestOnSlackEvent_FileDownloadFailureDegradesToNote(t *testing.T) {
 		"url_private": "https://files.slack.com/gone",
 	}})
 	sl := &fakeSlack{botUserID: "U_BOT"} // no files served → download errors
-	ig := &fakeIntg{}
+	ig := linkedSlackAuthor(nil, "U_HUMAN", "nb_user1")
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	if err := e.OnSlackEvent(context.Background(), slackRef("e12", "org1")); err != nil {
@@ -1661,7 +1698,7 @@ func TestOnLinearEvent_CommentAttachmentUploadsToSlack(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_MSG"}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/crash.log": []byte("logbytes")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/crash.log": []byte("logbytes")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d10", "org1"))
@@ -1691,7 +1728,7 @@ func TestOnLinearEvent_AttachmentOnlyCommentGetsPlaceholder(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_ONLY"}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/spec.pdf": []byte("pdf")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/spec.pdf": []byte("pdf")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d11", "org1"))
@@ -1718,7 +1755,7 @@ func TestOnLinearEvent_ReplyAttachmentStaysInThread(t *testing.T) {
 		"[r.dat](https://uploads.linear.app/abc/r.dat)", "issue1", "c_root", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_REPLY"}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("x")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("x")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d12", "org1"))
@@ -1737,7 +1774,7 @@ func TestOnLinearEvent_AttachmentDownloadFailureLeavesLink(t *testing.T) {
 	st.linearPayloads["d13"] = linearCommentPayload("create", "c13", body, "issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_FAIL"}
-	ig := &fakeIntg{} // no files served → download errors
+	ig := linkedAdaIntg(nil) // no files served → download errors
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	if err := e.OnLinearEvent(context.Background(), linearRef("d13", "org1")); err != nil {
@@ -1764,7 +1801,7 @@ func TestOnLinearEvent_UpdateAppendsAttachmentToThread(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_C20"}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/late.zip": []byte("late")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/late.zip": []byte("late")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d20", "org1"))
@@ -1793,7 +1830,7 @@ func TestOnLinearEvent_RedeliveredUpdateSharesAssetOnce(t *testing.T) {
 		"[x.zip](https://uploads.linear.app/abc/x.zip)", "issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/x.zip": []byte("x")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/x.zip": []byte("x")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d22", "org1"))
@@ -1817,7 +1854,7 @@ func TestOnLinearEvent_UpdateSkipsAssetsSharedAtCreate(t *testing.T) {
 	st.linearPayloads["d24"] = linearCommentPayload("update", "c23", body, "issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_C23"}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/a.zip": []byte("a")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/a.zip": []byte("a")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d23", "org1"))
@@ -1854,7 +1891,7 @@ func TestOnLinearEvent_UpdateReplyAttachmentUsesRootThread(t *testing.T) {
 		"[r.dat](https://uploads.linear.app/abc/r.dat)", "issue1", "c_root", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{}
-	ig := &fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("r")}}
+	ig := linkedAdaIntg(&fakeIntg{linearFiles: map[string][]byte{"https://uploads.linear.app/abc/r.dat": []byte("r")}})
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d26", "org1"))
@@ -1874,7 +1911,7 @@ func TestOnLinearEvent_ImageRendersInsideMessageBlocks(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_C30"}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+	e := newEngine(st, sl, linkedAdaIntg(nil), &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d30", "org1"))
 
@@ -1909,7 +1946,7 @@ func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_C31"}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+	e := newEngine(st, sl, linkedAdaIntg(nil), &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d31", "org1"))
 	e.OnLinearEvent(context.Background(), linearRef("d32", "org1"))
@@ -1927,8 +1964,8 @@ func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
 	if up.ChannelID != "C1" || up.TS != "TS_C31" {
 		t.Errorf("must update the original mirrored message: %+v", up)
 	}
-	if len(sl.updateTokens) != 1 || sl.updateTokens[0] != "xoxb-test" {
-		t.Errorf("unlinked update should use bot token, got %v", sl.updateTokens)
+	if len(sl.updateTokens) != 1 || sl.updateTokens[0] != "xoxp-user" {
+		t.Errorf("update should use user token, got %v", sl.updateTokens)
 	}
 	if up.Text != "text first" {
 		t.Errorf("updated text wrong: %q", up.Text)
@@ -1937,37 +1974,9 @@ func TestOnLinearEvent_LateImageGraftsOntoMessage(t *testing.T) {
 		t.Fatalf("want section+image blocks on the update, got %+v", up.Blocks)
 	}
 
-	// Redelivery of the same update must be a no-op.
 	e.OnLinearEvent(context.Background(), linearRef("d32", "org1"))
 	if len(sl.updates) != 1 {
 		t.Fatalf("redelivered update must not re-sync: %d updates", len(sl.updates))
-	}
-}
-
-func TestOnLinearEvent_LateImageUpdateUsesUserToken(t *testing.T) {
-	st := newFakeStore()
-	st.issueToChannel["org1|issue1"] = "C1"
-	st.linearPayloads["d31u"] = linearCommentPayload("create", "c31u", "text first", "issue1", "", "Ada", "ada@x.io", false)
-	st.linearPayloads["d32u"] = linearCommentPayload("update", "c31u",
-		"text first\n\n![late.png](https://uploads.linear.app/abc/late.png)",
-		"issue1", "", "Ada", "ada@x.io", false)
-
-	sl := &fakeSlack{nextTS: "TS_C31U"}
-	ig := &fakeIntg{
-		linearUserToNB:  map[string]string{"ada@x.io": "nb_user1"},
-		slackUserTokens: map[string]string{"nb_user1": "xoxp-user"},
-		slackUserIDs:    map[string]string{"nb_user1": "U_ADA"},
-	}
-	e := newEngine(st, sl, ig, &spyPub{})
-
-	e.OnLinearEvent(context.Background(), linearRef("d31u", "org1"))
-	e.OnLinearEvent(context.Background(), linearRef("d32u", "org1"))
-
-	if len(sl.postedTokens) != 1 || sl.postedTokens[0] != "xoxp-user" {
-		t.Errorf("create should use user token, got %v", sl.postedTokens)
-	}
-	if len(sl.updateTokens) != 1 || sl.updateTokens[0] != "xoxp-user" {
-		t.Errorf("update should use user token, got %v", sl.updateTokens)
 	}
 }
 
@@ -1984,7 +1993,7 @@ func TestOnLinearEvent_SecondImageKeepsFirstInBlocks(t *testing.T) {
 		"issue1", "", "Ada", "ada@x.io", false)
 
 	sl := &fakeSlack{nextTS: "TS_C33"}
-	e := newEngine(st, sl, &fakeIntg{}, &spyPub{})
+	e := newEngine(st, sl, linkedAdaIntg(nil), &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("d33", "org1"))
 	e.OnLinearEvent(context.Background(), linearRef("d34", "org1"))

@@ -3,11 +3,11 @@
 // integrations.slack.webhook_event), decides what to mirror, performs the
 // Slack/Linear actions, and fires a processing topic per action.
 //
-// Loop prevention: Linear→Slack prefers a linked Slack user token (else bot +
-// name/avatar override). Bot-authored Slack echoes drop on bot_id; user-token
-// echoes drop via mirrored_messages (LinkBySlackTS). Linear comments we create
-// arrive as actor=app and drop on botActor. Routing tables place messages and
-// resolve thread parents.
+// Loop prevention: Linear→Slack and Slack→Linear require a linked user token;
+// unlinked human authors are dropped. Bot-authored Slack echoes drop on bot_id;
+// user-token echoes drop via mirrored_messages (LinkBySlackTS). Linear comments
+// we create arrive as actor=app and drop on botActor. Routing tables place
+// messages and resolve thread parents.
 package sync
 
 import (
