@@ -311,75 +311,27 @@ type LinearComment struct {
 	ID string
 }
 
-// LinearCreateCommentInput describes a comment to create on a Linear issue.
-// SlackAuthorID, when set, is the Slack user id of the message author: the
-// comment is posted with that person's own linked Linear token when their
-// identity is connected, and app-level (the org's actor=app token, authored by
-// the app itself) when it is not. We never post as anyone who didn't authorize
-// it. ParentID, when set, makes this a threaded reply under that comment.
 type LinearCreateCommentInput struct {
 	IssueID       string
 	Body          string
 	ParentID      string
 	SlackAuthorID string
-	// AuthorDisplayName is the author's Slack display name, used only for the
-	// plain-text provenance byline on app-level posts (unlinked identity).
-	AuthorDisplayName string
-	// Attachments are files mirrored with the comment. Each is uploaded to
-	// Linear's file storage (with the same token that posts the comment) and
-	// embedded in the body as markdown.
-	Attachments []LinearCommentAttachment
+	Attachments   []LinearCommentAttachment
 }
 
-// LinearCommentAttachment is one file to upload alongside a mirrored comment.
 type LinearCommentAttachment struct {
 	Filename    string
 	ContentType string
 	Data        []byte
 }
 
-// LinearCreateComment posts a comment via the commentCreate GraphQL mutation.
-// Token selection: the author's own user-level Linear token when
-// SlackAuthorID resolves to a connected identity, otherwise the org's
-// actor=app workspace token (the comment is then authored by the app —
-// explicitly app-level, never another user's credentials).
 func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in LinearCreateCommentInput) (LinearComment, error) {
-	level := store.LevelWorkspace
-	connUserID := ""
-	byline := ""
-	if in.SlackAuthorID != "" {
-		uid, err := s.store.UserIDBySlackUserID(ctx, orgID, in.SlackAuthorID)
-		switch {
-		case err == nil:
-			_, terr := s.store.GetIntegration(ctx, orgID, store.ProviderLinear, store.LevelUser, uid)
-			switch {
-			case terr == nil:
-				level = store.LevelUser
-				connUserID = uid
-			case !errors.Is(terr, store.ErrNotFound):
-				return LinearComment{}, terr // transient; caller retries
-			}
-		case !errors.Is(err, store.ErrNotFound):
-			return LinearComment{}, err // transient; caller retries
-		}
-		if level == store.LevelWorkspace {
-			slog.InfoContext(ctx, "integrations: slack author has no linked linear identity; posting app-level",
-				"org_id", orgID, "slack_user_id", in.SlackAuthorID)
-			// Plain-text provenance so readers still know who spoke — this is
-			// a byline on an app-authored comment, not impersonation. Appended
-			// after the attachment embeds so it stays the comment's last line.
-			if in.AuthorDisplayName != "" {
-				byline = "\n\n— " + in.AuthorDisplayName + " on Slack"
-			} else {
-				byline = "\n\n— posted from Slack"
-			}
-		}
+	connUserID, err := s.linearReactionUserID(ctx, orgID, "", in.SlackAuthorID)
+	if err != nil {
+		return LinearComment{}, err
 	}
+	level := store.LevelUser
 
-	// Upload attachments with the same token that authors the comment, and
-	// embed each as markdown (images render inline in Linear). A failed upload
-	// degrades to a note instead of failing the comment: an unuploadable file
-	// would otherwise nack and redeliver forever, and the text still matters.
 	for _, att := range in.Attachments {
 		assetURL, err := s.linearUploadFile(ctx, orgID, level, connUserID, att)
 		if err != nil {
@@ -395,7 +347,7 @@ func (s *Service) LinearCreateComment(ctx context.Context, orgID string, in Line
 			in.Body += fmt.Sprintf("\n\n[%s](%s)", name, assetURL)
 		}
 	}
-	in.Body = strings.TrimSpace(in.Body + byline)
+	in.Body = strings.TrimSpace(in.Body)
 	const mutation = `mutation($input: CommentCreateInput!) {
 		commentCreate(input: $input) { success comment { id } }
 	}`
