@@ -39,7 +39,7 @@ RUN npm run build
 # --- runtime ---------------------------------------------------------------
 # The unprivileged variant runs as uid 101 and listens on 8080, so the chart
 # needs no securityContext gymnastics to satisfy a restricted PodSecurity level.
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 COPY frontend/docker/nginx.conf /etc/nginx/conf.d/default.conf
 # nginx's entrypoint runs this before starting; a non-zero exit aborts startup.
