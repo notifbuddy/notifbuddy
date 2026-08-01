@@ -16,16 +16,16 @@ export const metadata: Metadata = {
   },
   description:
     'Documentation and changelog for notifbuddy — two-way sync between Linear and Slack.',
-  // Stable public/ URLs (not imported) so crawlers get real files, not data:
-  // URIs — same approach as landing/. SVG for tabs; 96px PNG for SERPs;
-  // favicon.ico is the legacy fallback browsers still request.
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
       { url: '/favicon-96.png', type: 'image/png', sizes: '96x96' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '48x48' },
     ],
-    shortcut: '/favicon.ico',
     apple: '/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    title: appName,
   },
 };
 

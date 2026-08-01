@@ -6,10 +6,10 @@
 	     the browser theme. -->
 	<style>
 		.disc { fill: #2a2925; }
-		.dot { fill: oklch(0.64 0.058 45); }
+		.dot { fill: #ab8170; }
 		@media (prefers-color-scheme: dark) {
 			.disc { fill: #f3f0e9; }
-			.dot { fill: oklch(0.7 0.06 48); }
+			.dot { fill: #c49a86; }
 		}
 	</style>
 	<mask id="gap">
