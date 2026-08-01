@@ -17,7 +17,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kenshaw/emoji v0.5.0
 	github.com/ogen-go/ogen v1.22.0
-	github.com/stripe/stripe-go/v86 v86.1.0
+	github.com/stripe/stripe-go/v86 v86.1.1
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
