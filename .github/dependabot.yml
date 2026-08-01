@@ -7,6 +7,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
     groups:
       backend-go:
         patterns:
@@ -17,6 +19,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
@@ -30,6 +34,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
     groups:
       authd-npm:
         patterns:
@@ -40,6 +46,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
@@ -53,6 +61,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
     groups:
       userdocs-npm:
         patterns:
