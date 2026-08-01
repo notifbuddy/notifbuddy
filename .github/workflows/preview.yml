@@ -92,7 +92,7 @@ jobs:
       backend_image: ${{ steps.tags.outputs.backend_image }}
       authd_image: ${{ steps.tags.outputs.authd_image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
