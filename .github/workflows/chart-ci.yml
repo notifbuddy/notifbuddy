@@ -30,7 +30,7 @@ jobs:
     name: lint + render
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/setup-helm@v4
 
       - name: helm lint
@@ -104,7 +104,7 @@ jobs:
     name: install on kind
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/setup-helm@v4
 
       - name: Build images from this branch
