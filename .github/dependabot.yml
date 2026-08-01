@@ -7,47 +7,83 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      backend-go:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      frontend-npm:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/authd"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      authd-npm:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/landing"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      landing-npm:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/userdocs"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      userdocs-npm:
+        patterns:
+          - "*"
 
   - package-ecosystem: "docker"
     directory: "/backend"
     schedule:
       interval: "weekly"
+    groups:
+      backend-docker:
+        patterns:
+          - "*"
 
   - package-ecosystem: "docker"
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    groups:
+      frontend-docker:
+        patterns:
+          - "*"
 
   - package-ecosystem: "docker"
     directory: "/authd"
     schedule:
       interval: "weekly"
+    groups:
+      authd-docker:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
