@@ -2,7 +2,7 @@
 #   docker build -f backend/Dockerfile .
 #
 # --- build -----------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.25.8-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS build
 WORKDIR /src
 
 COPY backend/go.mod backend/go.sum ./
