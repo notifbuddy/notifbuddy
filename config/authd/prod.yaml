@@ -40,3 +40,5 @@ email:
   # DMARC on the zone uses strict alignment: mail MUST come from the Resend
   # sending domain notifications.notifbuddy.com, not the bare zone.
   from: "notifbuddy <auth@notifications.notifbuddy.com>"
+  dashboard_url: "https://dashboard.notifbuddy.com" # welcome email CTA target
+  community_slack_url: "https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw"
