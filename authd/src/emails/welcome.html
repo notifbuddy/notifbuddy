@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Welcome to notifbuddy</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; }
+    a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
+    .nb-logo-dark { display: none; }
+    @media only screen and (max-width: 620px) {
+      .nb-container { width: 100% !important; }
+      .nb-card-pad { padding-left: 24px !important; padding-right: 24px !important; }
+      .nb-hero-title { font-size: 26px !important; line-height: 32px !important; }
+    }
+    /* Dark overrides; clients without prefers-color-scheme keep the light base. */
+    @media (prefers-color-scheme: dark) {
+      .nb-body { background-color: #121113 !important; }
+      .nb-card { background-color: #1b1a1c !important; border-color: #2b2a2d !important; }
+      .nb-fg { color: #f3f0e9 !important; }
+      .nb-muted { color: #918d85 !important; }
+      .nb-faint { color: #6d6a64 !important; }
+      .nb-faint a { color: #6d6a64 !important; }
+      .nb-clay { color: #be947e !important; }
+      .nb-btn-td { background-color: #e78a53 !important; }
+      .nb-btn { color: #121113 !important; }
+      .nb-link { color: #e78a53 !important; }
+      .nb-divider { border-top-color: #2b2a2d !important; }
+      .nb-step { background-color: #2b2a2d !important; color: #f3f0e9 !important; }
+      .nb-banner { background-color: #242326 !important; }
+      .nb-logo-light { display: none !important; }
+      .nb-logo-dark { display: block !important; }
+    }
+  </style>
+</head>
+<body class="nb-body" style="margin:0;padding:0;background-color:#f3f0e9;">
+  <!-- Preheader -->
+  <div style="display:none;font-size:1px;color:#f3f0e9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+    Welcome to notifbuddy, {{FirstName}} &mdash; let&rsquo;s get Linear and Slack talking to each other.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="nb-body" style="background-color:#f3f0e9;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+
+        <table role="presentation" class="nb-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:8px 8px 24px 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td valign="middle" style="padding-right:10px;">
+                    <img class="nb-logo-light" src="https://notifbuddy.com/email-logo-light.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;">
+                    <img class="nb-logo-dark" src="https://notifbuddy.com/email-logo-dark.png" alt="" width="28" height="28" style="width:28px;height:28px;">
+                  </td>
+                  <td valign="middle" class="nb-fg" style="font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#2a2925;">
+                    notifbuddy
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="nb-card" style="background-color:#ffffff;border:1px solid #e6e2d8;border-radius:12px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                <!-- Hero -->
+                <tr>
+                  <td class="nb-card-pad" style="padding:44px 44px 8px 44px;">
+                    <h1 class="nb-hero-title nb-fg" style="margin:0 0 14px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-0.02em;color:#2a2925;">
+                      Welcome, {{FirstName}}
+                    </h1>
+                    <p class="nb-muted" style="margin:0 0 28px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:25px;color:#77726a;">
+                      notifbuddy keeps Linear and Slack in sync &mdash; both ways. Comments, status changes, and threads flow between the two, so your team stops copy-pasting updates.
+                    </p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td class="nb-btn-td" style="border-radius:9px;background-color:#d87943;">
+                          <a href="{{DashboardURL}}" target="_blank" class="nb-btn" style="display:inline-block;padding:13px 26px;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:9px;">
+                            Open your dashboard
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="nb-card-pad" style="padding:36px 44px 0 44px;">
+                    <div class="nb-divider" style="border-top:1px solid #eeeae1;line-height:1px;font-size:1px;">&nbsp;</div>
+                  </td>
+                </tr>
+
+                <!-- Quick setup -->
+                <tr>
+                  <td class="nb-card-pad" style="padding:28px 44px 12px 44px;">
+                    <p class="nb-clay" style="margin:0 0 20px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:16px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#ab816f;">
+                      Quick setup
+                    </p>
+
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="top" width="36" style="padding:0 0 18px 0;">
+                          <span class="nb-step" style="display:inline-block;width:24px;height:24px;border-radius:50%;background-color:#f3f0e9;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;line-height:24px;color:#2a2925;text-align:center;">1</span>
+                        </td>
+                        <td valign="top" style="padding:0 0 18px 0;">
+                          <p class="nb-fg" style="margin:0 0 2px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;font-weight:600;color:#2a2925;">Connect Slack</p>
+                          <p class="nb-muted" style="margin:0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#77726a;">Install the notifbuddy app in your workspace &mdash; one click, no config files.</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td valign="top" width="36" style="padding:0 0 18px 0;">
+                          <span class="nb-step" style="display:inline-block;width:24px;height:24px;border-radius:50%;background-color:#f3f0e9;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;line-height:24px;color:#2a2925;text-align:center;">2</span>
+                        </td>
+                        <td valign="top" style="padding:0 0 18px 0;">
+                          <p class="nb-fg" style="margin:0 0 2px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;font-weight:600;color:#2a2925;">Connect Linear</p>
+                          <p class="nb-muted" style="margin:0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#77726a;">Authorize your Linear workspace so issues and comments can sync.</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td valign="top" width="36" style="padding:0;">
+                          <span class="nb-step" style="display:inline-block;width:24px;height:24px;border-radius:50%;background-color:#f3f0e9;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;line-height:24px;color:#2a2925;text-align:center;">3</span>
+                        </td>
+                        <td valign="top" style="padding:0;">
+                          <p class="nb-fg" style="margin:0 0 2px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;font-weight:600;color:#2a2925;">Pick your sync rules</p>
+                          <p class="nb-muted" style="margin:0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#77726a;">Choose which channels and teams stay in sync. Change it anytime.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Help banner -->
+                <tr>
+                  <td class="nb-card-pad" style="padding:20px 44px 40px 44px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="nb-banner" style="background-color:#f3f0e9;border-radius:10px;">
+                      <tr>
+                        <td style="padding:20px 24px;">
+                          <p class="nb-fg" style="margin:0 0 4px 0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;font-weight:600;color:#2a2925;">Stuck or curious?</p>
+                          <p class="nb-muted" style="margin:0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#77726a;">
+                            Read the <a href="https://docs.notifbuddy.com" target="_blank" class="nb-link" style="color:#d87943;text-decoration:none;font-weight:500;">docs</a> or ask us anything in the <a href="{{CommunitySlackURL}}" target="_blank" class="nb-link" style="color:#d87943;text-decoration:none;font-weight:500;">community Slack</a> &mdash; we answer fast.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:28px 8px 8px 8px;" align="center">
+              <p class="nb-faint" style="margin:0;font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:20px;color:#a49e93;">
+                Sent by the notifbuddy team &middot; <a href="https://docs.notifbuddy.com" target="_blank" style="color:#a49e93;text-decoration:underline;">Docs</a> &middot; <a href="https://dashboard.notifbuddy.com" target="_blank" style="color:#a49e93;text-decoration:underline;">Dashboard</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

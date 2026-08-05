@@ -28,3 +28,5 @@ github:
 email:
   resend_api_key: "" # empty = invitation emails go to the console (dev sink)
   from: ""
+  dashboard_url: "http://localhost:5173" # welcome email CTA target
+  community_slack_url: "https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw"

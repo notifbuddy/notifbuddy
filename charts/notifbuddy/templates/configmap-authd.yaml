@@ -39,3 +39,7 @@ data:
       resend_api_key: ""
       from: ""
     {{- end }}
+      # Welcome email links: CTA opens this install's dashboard; support goes
+      # to the notifbuddy community Slack.
+      dashboard_url: "https://{{ include "notifbuddy.host.dashboard" . }}"
+      community_slack_url: "https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw"

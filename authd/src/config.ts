@@ -20,7 +20,13 @@ export interface Config {
 	database: { url: string };
 	cors: { trusted_origins: string[] };
 	github: { client_id: string; client_secret: string };
-	email: { resend_api_key: string; from: string };
+	email: {
+		resend_api_key: string;
+		from: string;
+		// Links baked into the welcome email.
+		dashboard_url: string;
+		community_slack_url: string;
+	};
 	// When set, Better Auth oAuthProxy routes non-prod OAuth through production.
 	oauth_proxy?: {
 		production_url: string;
@@ -84,4 +90,7 @@ if (config.oauth_proxy?.secret && !config.oauth_proxy?.production_url) {
 }
 if (config.email?.resend_api_key && !config.email?.from) {
 	throw new Error('authd: email.from is required when email.resend_api_key is set');
+}
+if (config.email?.resend_api_key && !config.email?.dashboard_url) {
+	throw new Error('authd: email.dashboard_url is required when email.resend_api_key is set');
 }

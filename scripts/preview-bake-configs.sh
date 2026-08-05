@@ -41,7 +41,8 @@ yq -i "
   .auth.base_url = \"${auth}\" |
   .auth.cookie_domain = \".${zone}\" |
   .auth.cookie_prefix = \"${prefix}\" |
-  .cors.trusted_origins = [\"${dash}\"]
+  .cors.trusted_origins = [\"${dash}\"] |
+  .email.dashboard_url = \"${dash}\"
 " "$authd"
 
 yq -i "

@@ -10,6 +10,7 @@ import { oAuthProxy, organization } from 'better-auth/plugins';
 import pg from 'pg';
 import { config, featureFlags } from './config.ts';
 import { sendEmail } from './email.ts';
+import { inviteEmail, welcomeEmail } from './email-templates.ts';
 
 const pool = new pg.Pool({ connectionString: config.database.url });
 
@@ -21,10 +22,18 @@ const plugins: Parameters<typeof betterAuth>[0]['plugins'] = [
 	organization({
 		sendInvitationEmail: async ({ email, inviter, organization: org, invitation }) => {
 			const url = `${config.auth.base_url}/accept-invitation/${invitation.id}`;
+			const expiresInHours = Math.max(
+				1,
+				Math.round((new Date(invitation.expiresAt).getTime() - Date.now()) / 3_600_000),
+			);
 			await sendEmail({
 				to: email,
-				subject: `${inviter.user.name || inviter.user.email} invited you to ${org.name} on notifbuddy`,
-				text: `Join ${org.name} on notifbuddy: ${url}`,
+				...inviteEmail({
+					inviterName: inviter.user.name || inviter.user.email,
+					teamName: org.name,
+					inviteUrl: url,
+					expiresInHours,
+				}),
 			});
 		},
 	}),
@@ -51,6 +60,27 @@ export const auth = betterAuth({
 	// returning single-org user would face the org picker on every sign-in.
 	// Default new sessions to the user's most recent membership.
 	databaseHooks: {
+		// First sign-in creates the user row — greet them. Errors only log; a
+		// mail outage must never fail signup.
+		user: {
+			create: {
+				after: async (user) => {
+					try {
+						const firstName = user.name?.trim().split(/\s+/)[0] || user.email.split('@')[0];
+						await sendEmail({
+							to: user.email,
+							...welcomeEmail({
+								firstName,
+								dashboardUrl: config.email.dashboard_url,
+								communitySlackUrl: config.email.community_slack_url,
+							}),
+						});
+					} catch (err) {
+						console.error(`authd: welcome email failed for ${user.email}:`, err);
+					}
+				},
+			},
+		},
 		session: {
 			create: {
 				before: async (session) => {
