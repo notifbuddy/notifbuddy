@@ -30,6 +30,7 @@ const plugins: Parameters<typeof betterAuth>[0]['plugins'] = [
 				to: email,
 				...inviteEmail({
 					inviterName: inviter.user.name || inviter.user.email,
+					inviterAvatarUrl: inviter.user.image,
 					teamName: org.name,
 					inviteUrl: url,
 					expiresInHours,

@@ -19,11 +19,20 @@ export function welcomeEmail(vars: { firstName: string; dashboardUrl: string; co
 	};
 }
 
-export function inviteEmail(vars: { inviterName: string; teamName: string; inviteUrl: string; expiresInHours: number }) {
+export function inviteEmail(vars: {
+	inviterName: string;
+	inviterAvatarUrl?: string | null;
+	teamName: string;
+	inviteUrl: string;
+	expiresInHours: number;
+}) {
 	return {
 		subject: `${vars.inviterName} invited you to ${vars.teamName} on notifbuddy`,
 		html: Mustache.render(inviteTemplate, {
 			InviterName: vars.inviterName,
+			// Falsy → Mustache renders the {{^InviterAvatarURL}} initial chip.
+			InviterAvatarURL: vars.inviterAvatarUrl || '',
+			InviterInitial: (vars.inviterName.trim()[0] || 'n').toUpperCase(),
 			TeamName: vars.teamName,
 			InviteURL: vars.inviteUrl,
 			ExpiresInHours: String(vars.expiresInHours),
