@@ -1,13 +1,15 @@
-name: Release → GHCR + iac deploy
+name: Release → GHCR + iac release PR
 
-# Publishes self-host images + Helm chart to GHCR, then dispatches
-# notifbuddy/iac helm-deploy.yml with chart_version (iac pins config.yaml and
-# runs helm). This repo BUILDS; iac DEPLOYS — same split as docs/landing.
+# Publishes self-host images + Helm chart to GHCR, then opens a PR in
+# notifbuddy/iac bumping helmfile.chart_version in config.yaml. Merging that PR
+# is what deploys (NOT-60): iac's config.yaml is the deployed state, and
+# helm-deploy there runs on pushes to main that touch it. This repo BUILDS and
+# PROPOSES; iac DEPLOYS — same split as docs/landing.
 #
 # Images: ghcr.io/notifbuddy/{backend,authd,dashboard} (dashboard for self-host
 # chart; prod SPA stays on Cloudflare via dashboard-deploy.yml)
 # Chart:  oci://ghcr.io/notifbuddy/charts/notifbuddy
-# Main continuous deploys: publish-images.yml → iac helm-deploy (api/auth only).
+# Main pushes only build images (publish-images.yml) — they never deploy.
 
 on:
   push:
@@ -286,11 +288,49 @@ jobs:
           owner: notifbuddy
           repositories: iac
 
-      - name: Dispatch iac helm-deploy
+      # The release does not deploy — it proposes one (NOT-60). iac's
+      # config.yaml is the deployed state, so the release opens a PR bumping
+      # helmfile.chart_version there and merging it is what rolls prod. Nothing
+      # reaches the cluster on a workflow argument that main cannot show.
+      - name: Open iac PR bumping the deployed chart version
         env:
           GH_TOKEN: ${{ steps.apptoken.outputs.token }}
           CHART_VERSION: ${{ env.CHART_VERSION }}
+          APP_VERSION: ${{ env.APP_VERSION }}
         run: |
-          gh workflow run helm-deploy.yml \
-            --repo notifbuddy/iac \
-            --field chart_version="${CHART_VERSION}"
+          git clone --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/notifbuddy/iac.git" /tmp/iac
+          cd /tmp/iac
+          git config user.name  'notifbuddy-ci[bot]'
+          git config user.email 'notifbuddy-ci[bot]@users.noreply.github.com'
+
+          current=$(awk '/^helmfile:/{s=1;next} s&&/^[^ ]/{s=0} s&&/chart_version:/{gsub(/[" ]/,""); sub(/^[^:]+:/,""); print; exit}' config.yaml)
+          if [ "$current" = "$CHART_VERSION" ]; then
+            echo "::notice::iac already pins $CHART_VERSION — nothing to open"
+            exit 0
+          fi
+
+          branch="release/${APP_VERSION}"
+          git switch -c "$branch"
+          # Anchored to the helmfile block's own key so no other chart_version
+          # elsewhere in the file can be hit.
+          awk -v v="$CHART_VERSION" '
+            /^helmfile:/      {s=1}
+            s && /^[^ ]/ && !/^helmfile:/ {s=0}
+            s && /chart_version:/ {sub(/"[^"]*"/, "\"" v "\"")}
+            {print}
+          ' config.yaml >config.yaml.new && mv config.yaml.new config.yaml
+
+          git diff --quiet && { echo "::error::chart_version was not rewritten"; exit 1; }
+          git commit -am "chore: deploy notifbuddy ${APP_VERSION}"
+          git push -u origin "$branch"
+
+          cat >/tmp/pr-body.md <<EOF
+          Bumps \`helmfile.chart_version\` ${current} → ${CHART_VERSION}, published by [notifbuddy ${APP_VERSION}](https://github.com/notifbuddy/notifbuddy/releases/tag/${APP_VERSION}).
+
+          Merging this PR is the deploy: helm-deploy runs on pushes to \`main\` that touch \`config.yaml\`.
+          EOF
+
+          gh pr create --repo notifbuddy/iac --head "$branch" \
+            --title "chore: deploy notifbuddy ${APP_VERSION}" \
+            --body-file /tmp/pr-body.md

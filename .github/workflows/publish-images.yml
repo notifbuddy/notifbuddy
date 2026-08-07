@@ -1,13 +1,16 @@
-name: Publish images → iac deploy
+name: Publish images
 
-# Builds backend + authd, pushes to GHCR, then dispatches notifbuddy/iac
-# helm-deploy.yml with image_tag=src-<sha>. Dashboard stays on Cloudflare
-# (dashboard-deploy.yml) — same Worker arch as landing/docs.
+# Builds backend + authd and pushes them to GHCR as src-<sha> and main.
+# Dashboard stays on Cloudflare (dashboard-deploy.yml) — same Worker arch as
+# landing/docs.
+#
+# This does NOT deploy (NOT-60). Prod runs the chart version pinned in iac's
+# config.yaml, and that line only moves through a release PR — so main builds
+# are available to pull but never roll the cluster on their own. Cut a tag to
+# ship them: release.yml publishes the chart and opens the iac PR.
 #
 # Prereqs:
-#   - Infisical notifbuddy-app-ci (OIDC): /ci (GitHub App for cross-repo dispatch)
 #   - GHCR packages public (or cluster pull creds)
-#   - iac helm-deploy.yml + /ovh/KUBECONFIG in Infisical (notifbuddy-ci)
 
 on:
   push:
@@ -22,7 +25,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # Infisical OIDC → GitHub App for dispatch
   packages: write # GHCR
 
 concurrency: publish-images
@@ -82,37 +84,3 @@ jobs:
             ${{ env.REGISTRY }}/${{ matrix.image }}:main
           cache-from: type=gha,scope=${{ matrix.image }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-amd64
-
-  dispatch:
-    needs: [changes, build]
-    if: >-
-      !cancelled() && !contains(needs.*.result, 'failure') &&
-      (needs.build.result == 'success')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fetch GitHub App creds from Infisical (OIDC)
-        uses: Infisical/secrets-action@v1.0.16
-        with:
-          method: oidc
-          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
-          project-slug: notifbuddy-58-th
-          env-slug: prod
-          secret-path: /ci
-          export-type: env
-
-      - name: Mint cross-repo App token for notifbuddy/iac
-        id: apptoken
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
-          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
-          owner: notifbuddy
-          repositories: iac
-
-      - name: Dispatch iac helm-deploy
-        env:
-          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
-        run: |
-          gh workflow run helm-deploy.yml \
-            --repo notifbuddy/iac \
-            --field image_tag="src-${GITHUB_SHA}"
