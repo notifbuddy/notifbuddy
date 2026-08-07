@@ -17,7 +17,6 @@
 		ctaLabel = 'Back to the signal',
 		privacyHref = 'https://notifbuddy.com/privacy',
 		supportLabel = 'reach out to support',
-		// Opt-in: a 404 isn't an outage, so callers pass null there.
 		statusHref = null
 	}: {
 		status: number;
@@ -83,10 +82,6 @@
 					</Button>
 				</div>
 
-				<!-- "Is it me or them" is the question this screen has to answer, so
-				     the live pill gets its own row under the CTAs instead of queueing
-				     behind them. It loads from the status host, which is independent
-				     of whatever just failed. -->
 				{#if statusHref}
 					<div class="mt-4 flex justify-center">
 						<StatusBadge

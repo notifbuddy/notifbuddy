@@ -205,9 +205,6 @@
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
-		<!-- The live status pill is the only moving thing down here, so it leads
-		     the group; the rest of the row stays quiet mono. It wraps to its own
-		     line below sm, where 250px + three links won't share a row. -->
 		<span class="flex flex-wrap items-center gap-x-4 gap-y-3">
 			<StatusBadge
 				theme={mode.current === 'dark' ? 'dark' : 'light'}
