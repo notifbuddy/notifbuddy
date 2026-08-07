@@ -1,10 +1,11 @@
 <script lang="ts">
 	import Logo from '$shared/components/logo.svelte';
+	import StatusBadge from '$shared/components/status-badge.svelte';
 	import LinearIcon from '$lib/icons/linear.svelte';
 	import GithubIcon from '$lib/icons/github.svelte';
 	import SlackIcon from '$lib/icons/slack.svelte';
 	import PlainIcon from '$lib/icons/plain.svelte';
-	import { userPrefersMode, setMode } from 'mode-watcher';
+	import { userPrefersMode, setMode, mode } from 'mode-watcher';
 
 	// Theme switcher: one quiet icon button cycling system → light → dark.
 	// System is the default; the icon shows the current preference and the
@@ -204,7 +205,15 @@
 		<p class="text-muted-foreground/70 font-mono text-[11px] tracking-[0.12em]">
 			© 2026 notifbuddy — all the noise, one signal
 		</p>
-		<span class="flex items-center gap-4">
+		<!-- The live status pill is the only moving thing down here, so it leads
+		     the group; the rest of the row stays quiet mono. It wraps to its own
+		     line below sm, where 250px + three links won't share a row. -->
+		<span class="flex flex-wrap items-center gap-x-4 gap-y-3">
+			<StatusBadge
+				theme={mode.current === 'dark' ? 'dark' : 'light'}
+				label="status"
+				linkClass="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
+			/>
 			<a
 				class="text-muted-foreground/70 hover:text-muted-foreground font-mono text-[11px] tracking-[0.12em] underline-offset-2 hover:underline"
 				href="https://docs.notifbuddy.com/changelog">changelog</a

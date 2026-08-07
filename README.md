@@ -11,3 +11,5 @@ for feature requests, support, etc.
 You can check out our deployed version which is in beta at https://dashboard.notifbuddy.com
 
 Docs and changelog live at https://docs.notifbuddy.com
+
+Service status and incident history at https://status.notifbuddy.com

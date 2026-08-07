@@ -1,7 +1,7 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { gitConfig } from './shared';
 import { Logo } from '@/components/logo';
-import { LayoutDashboard } from 'lucide-react';
+import { Activity, LayoutDashboard } from 'lucide-react';
 
 // lucide dropped brand icons; the GitHub mark is inlined (a11y comes from the
 // icon link's own label).
@@ -36,6 +36,14 @@ export function baseOptions(): BaseLayoutProps {
         text: 'GitHub',
         label: 'notifbuddy on GitHub',
         url: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+        external: true,
+      },
+      {
+        type: 'icon',
+        icon: <Activity />,
+        text: 'Status',
+        label: 'notifbuddy service status',
+        url: 'https://status.notifbuddy.com',
         external: true,
       },
     ],

@@ -33,4 +33,5 @@
 	{detail}
 	{homeHref}
 	{ctaLabel}
+	statusHref="https://status.notifbuddy.com"
 />

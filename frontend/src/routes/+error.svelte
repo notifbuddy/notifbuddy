@@ -23,4 +23,5 @@
 	{title}
 	{detail}
 	privacyHref="https://notifbuddy.com/privacy"
+	statusHref={notFound ? null : 'https://status.notifbuddy.com'}
 />
