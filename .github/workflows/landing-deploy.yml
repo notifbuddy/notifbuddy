@@ -7,7 +7,7 @@ name: Landing deploy trigger
 # what was merged.
 #
 # Cross-repo dispatch needs a token with Actions:write on iac — the default
-# GITHUB_TOKEN can't do it. Reuses the publish-images pattern: Infisical OIDC
+# GITHUB_TOKEN can't do it. Same pattern as release.yml: Infisical OIDC
 # → notifbuddy-ci GitHub App token minted for notifbuddy/iac.
 
 on:
