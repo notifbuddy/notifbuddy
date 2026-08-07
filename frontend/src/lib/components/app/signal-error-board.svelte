@@ -2,9 +2,11 @@
 	// Quiet signal-interrupted board for the dashboard — Empty + Button + Badge
 	// (shadcn-svelte). Used by /interrupted (API OAuth failures) and +error.svelte.
 	import Logo from '$shared/components/logo.svelte';
+	import StatusBadge from '$shared/components/status-badge.svelte';
 	import * as Empty from '$lib/components/ui/empty/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { mode } from 'mode-watcher';
 
 	let {
 		status,
@@ -14,7 +16,8 @@
 		homeHref = '/',
 		ctaLabel = 'Back to the signal',
 		privacyHref = 'https://notifbuddy.com/privacy',
-		supportLabel = 'reach out to support'
+		supportLabel = 'reach out to support',
+		statusHref = null
 	}: {
 		status: number;
 		code?: string | null;
@@ -24,6 +27,7 @@
 		ctaLabel?: string;
 		privacyHref?: string;
 		supportLabel?: string;
+		statusHref?: string | null;
 	} = $props();
 </script>
 
@@ -77,6 +81,17 @@
 						{supportLabel}
 					</Button>
 				</div>
+
+				{#if statusHref}
+					<div class="mt-4 flex justify-center">
+						<StatusBadge
+							href={statusHref}
+							theme={mode.current === 'dark' ? 'dark' : 'light'}
+							width={182}
+							linkClass="text-primary text-center text-sm underline-offset-4 hover:underline"
+						/>
+					</div>
+				{/if}
 			</Empty.Content>
 		</Empty.Root>
 	</main>
