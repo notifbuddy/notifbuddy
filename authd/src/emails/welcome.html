@@ -18,7 +18,6 @@
     img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
     body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; }
     a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
-    .nb-logo-dark { display: none; }
     @media only screen and (max-width: 620px) {
       .nb-container { width: 100% !important; }
       .nb-card-pad { padding-left: 24px !important; padding-right: 24px !important; }
@@ -42,9 +41,15 @@
       .nb-logo-light { display: none !important; }
       .nb-logo-dark { display: block !important; }
     }
+    /* Gmail only (its <u> + body.body DOM): can't detect Gmail's dark mode via
+       CSS, so both modes get the self-contained chip lockup. Blends invisibly
+       into the light body; is the only readable option when Gmail inverts. */
+    u + .body .nb-logo-light { display: none !important; }
+    u + .body .nb-logo-dark { display: none !important; }
+    u + .body .nb-logo-chip { display: block !important; }
   </style>
 </head>
-<body class="nb-body" style="margin:0;padding:0;background-color:#f3f0e9;">
+<body class="nb-body body" style="margin:0;padding:0;background-color:#f3f0e9;">
   <!-- Preheader -->
   <div style="display:none;font-size:1px;color:#f3f0e9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
     Welcome to notifbuddy, {{FirstName}} &mdash; let&rsquo;s get Linear and Slack talking to each other.
@@ -59,17 +64,20 @@
           <!-- Header -->
           <tr>
             <td style="padding:8px 8px 24px 8px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td valign="middle" style="padding-right:10px;">
-                    <img class="nb-logo-light" src="https://notifbuddy.com/email-logo-light.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;">
-                    <img class="nb-logo-dark" src="https://notifbuddy.com/email-logo-dark.png" alt="" width="28" height="28" style="width:28px;height:28px;">
-                  </td>
-                  <td valign="middle" class="nb-fg" style="font-family:'Outfit',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#2a2925;">
-                    notifbuddy
-                  </td>
-                </tr>
-              </table>
+              <!-- Three lockup variants, one per client capability:
+                   light (default) — transparent, ink wordmark;
+                   dark — swapped in by prefers-color-scheme (Apple Mail & co);
+                   chip — opaque paper pill for Gmail only (u + .body below),
+                   because Gmail strips prefers-color-scheme and force-inverts
+                   page colors but never images: no transparent logo can
+                   survive both Gmail modes, the chip survives either.
+                   Outlook (Word) ignores display:none, so the mso conditional
+                   drops the hidden copies from its DOM entirely. -->
+              <img class="nb-logo-light" src="https://notifbuddy.com/email-lockup-light.png" alt="notifbuddy" width="180" height="52" style="display:block;width:180px;height:52px;">
+              <!--[if !mso]><!-->
+              <img class="nb-logo-dark" src="https://notifbuddy.com/email-lockup-dark.png" alt="" width="180" height="52" style="display:none;mso-hide:all;width:180px;height:52px;">
+              <img class="nb-logo-chip" src="https://notifbuddy.com/email-lockup.png" alt="" width="180" height="52" style="display:none;mso-hide:all;width:180px;height:52px;border-radius:12px;">
+              <!--<![endif]-->
             </td>
           </tr>
 

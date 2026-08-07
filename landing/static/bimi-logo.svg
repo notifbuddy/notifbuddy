@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 64 64">
+	<title>notifbuddy</title>
+	<!-- BIMI variant of the notifbuddy mark. SVG Tiny PS forbids <style>, media
+	     queries, and <mask>, and wants a solid background — so the theme swap and
+	     the transparent ring cutout from favicon.svg are flattened: paper square,
+	     ink disc, and the dot's gap painted as a paper circle underneath it. -->
+	<rect width="64" height="64" fill="#f3f0e9"/>
+	<circle cx="31" cy="34" r="22" fill="#2a2925"/>
+	<circle cx="45" cy="20" r="10.6" fill="#f3f0e9"/>
+	<circle cx="45" cy="20" r="7.6" fill="#ab8170"/>
+</svg>
