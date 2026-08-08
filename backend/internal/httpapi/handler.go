@@ -669,7 +669,7 @@ func (h Handler) toUserResponse(ctx context.Context, user *auth.SessionUser) *ap
 
 // toInvitationResponse maps our internal invitation to the generated type.
 func toInvitationResponse(inv auth.Invitation) api.InvitationResponse {
-	r := api.InvitationResponse{ID: inv.ID, Email: inv.Email, State: inv.State}
+	r := api.InvitationResponse{ID: inv.ID, Email: inv.Email, State: api.InvitationState(inv.State)}
 	if inv.ExpiresAt != "" {
 		r.ExpiresAt = api.NewOptString(inv.ExpiresAt)
 	}

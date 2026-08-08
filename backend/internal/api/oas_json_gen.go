@@ -2401,7 +2401,7 @@ func (s *InvitationResponse) encodeFields(e *jx.Encoder) {
 	}
 	{
 		e.FieldStart("state")
-		e.Str(s.State)
+		s.State.Encode(e)
 	}
 	{
 		if s.ExpiresAt.Set {
@@ -2461,9 +2461,7 @@ func (s *InvitationResponse) Decode(d *jx.Decoder) error {
 		case "state":
 			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
-				v, err := d.Str()
-				s.State = string(v)
-				if err != nil {
+				if err := s.State.Decode(d); err != nil {
 					return err
 				}
 				return nil
@@ -2542,6 +2540,50 @@ func (s *InvitationResponse) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *InvitationResponse) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes InvitationState as json.
+func (s InvitationState) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes InvitationState from json.
+func (s *InvitationState) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode InvitationState to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch InvitationState(v) {
+	case InvitationStatePending:
+		*s = InvitationStatePending
+	case InvitationStateAccepted:
+		*s = InvitationStateAccepted
+	case InvitationStateRejected:
+		*s = InvitationStateRejected
+	case InvitationStateCanceled:
+		*s = InvitationStateCanceled
+	default:
+		*s = InvitationState(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s InvitationState) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *InvitationState) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

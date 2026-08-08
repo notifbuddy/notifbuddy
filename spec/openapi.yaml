@@ -138,7 +138,7 @@ paths:
             type: string
       responses:
         "200":
-          description: The invitation, now revoked.
+          description: The invitation, now canceled.
           content:
             application/json:
               schema:
@@ -1249,6 +1249,17 @@ components:
           description: The role slug to assign to the member.
       required:
         - role
+    InvitationState:
+      type: string
+      description: |
+        The lifecycle state of an invitation. `canceled` covers an invitation
+        revoked by the organization; `rejected` is the invitee declining.
+      enum:
+        - pending
+        - accepted
+        - rejected
+        - canceled
+      example: pending
     InvitationResponse:
       type: object
       description: An organization invitation.
@@ -1260,9 +1271,7 @@ components:
           type: string
           example: newteammate@example.com
         state:
-          type: string
-          description: The invitation state (pending, accepted, expired, revoked).
-          example: pending
+          $ref: "#/components/schemas/InvitationState"
         expiresAt:
           type: string
           description: ISO 8601 expiry timestamp.
