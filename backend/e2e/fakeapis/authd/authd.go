@@ -10,16 +10,89 @@
 package authd
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
+	"time"
 
 	"xolo/backend/e2e/fakeapis/respond"
 	"xolo/backend/e2e/fakeapis/session"
 )
 
+type invitation struct {
+	ID             string `json:"id"`
+	Email          string `json:"email"`
+	Status         string `json:"status"`
+	ExpiresAt      string `json:"expiresAt"`
+	Role           string `json:"role"`
+	OrganizationID string `json:"organizationId"`
+}
+
+// invitationStore holds the invitations an e2e run creates, keyed by org. Better
+// Auth's own store is a database; this is the in-memory stand-in.
+type invitationStore struct {
+	mu   sync.Mutex
+	seq  int
+	byID map[string]*invitation
+}
+
+func newInvitationStore() *invitationStore {
+	return &invitationStore{byID: map[string]*invitation{}}
+}
+
+func (s *invitationStore) create(orgID, email, role string) invitation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, inv := range s.byID {
+		if inv.OrganizationID == orgID && strings.EqualFold(inv.Email, email) && inv.Status == "pending" {
+			inv.Status = "canceled"
+		}
+	}
+	s.seq++
+	inv := &invitation{
+		ID:             fmt.Sprintf("invitation_%03d", s.seq),
+		Email:          email,
+		Status:         "pending",
+		ExpiresAt:      time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339),
+		Role:           role,
+		OrganizationID: orgID,
+	}
+	s.byID[inv.ID] = inv
+	return *inv
+}
+
+func (s *invitationStore) list(orgID string) []invitation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []invitation{}
+	for i := 1; i <= s.seq; i++ {
+		inv, ok := s.byID[fmt.Sprintf("invitation_%03d", i)]
+		if ok && inv.OrganizationID == orgID {
+			out = append(out, *inv)
+		}
+	}
+	return out
+}
+
+// cancel marks an invitation canceled, the state a revoke lands it in.
+func (s *invitationStore) cancel(orgID, id string) (invitation, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	inv, ok := s.byID[id]
+	if !ok || inv.OrganizationID != orgID {
+		return invitation{}, false
+	}
+	inv.Status = "canceled"
+	return *inv, true
+}
+
 // Handler returns the authd fake. secret verifies session-token HMACs.
 func Handler(secret string) http.Handler {
 	mux := http.NewServeMux()
+	invites := newInvitationStore()
 
 	// identity resolves the request's session cookie, or nil.
 	identity := func(r *http.Request) *session.Identity {
@@ -114,6 +187,65 @@ func Handler(secret string) http.Handler {
 				},
 			},
 		})
+	})
+
+	// GET /api/auth/organization/list-invitations — every invitation the org has,
+	// in whatever state, exactly as Better Auth returns them.
+	mux.HandleFunc("GET /api/auth/organization/list-invitations", func(w http.ResponseWriter, r *http.Request) {
+		id := identity(r)
+		orgID := r.URL.Query().Get("organizationId")
+		if id == nil || orgID == "" || orgID != id.OrgID {
+			respond.JSON(w, http.StatusForbidden, map[string]string{"message": "not a member of this organization"})
+			return
+		}
+		respond.JSON(w, http.StatusOK, invites.list(orgID))
+	})
+
+	// POST /api/auth/organization/invite-member — creates a pending invitation
+	// and returns it unwrapped.
+	mux.HandleFunc("POST /api/auth/organization/invite-member", func(w http.ResponseWriter, r *http.Request) {
+		id := identity(r)
+		var body struct {
+			OrganizationID string `json:"organizationId"`
+			Email          string `json:"email"`
+			Role           string `json:"role"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.JSON(w, http.StatusBadRequest, map[string]string{"message": "invalid body"})
+			return
+		}
+		if id == nil || body.OrganizationID == "" || body.OrganizationID != id.OrgID {
+			respond.JSON(w, http.StatusForbidden, map[string]string{"message": "not a member of this organization"})
+			return
+		}
+		if body.Email == "" {
+			respond.JSON(w, http.StatusBadRequest, map[string]string{"message": "email is required"})
+			return
+		}
+		respond.JSON(w, http.StatusOK, invites.create(body.OrganizationID, body.Email, body.Role))
+	})
+
+	// POST /api/auth/organization/cancel-invitation — wraps the canceled
+	// invitation under "invitation", the shape Better Auth answers with.
+	mux.HandleFunc("POST /api/auth/organization/cancel-invitation", func(w http.ResponseWriter, r *http.Request) {
+		id := identity(r)
+		var body struct {
+			InvitationID string `json:"invitationId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.JSON(w, http.StatusBadRequest, map[string]string{"message": "invalid body"})
+			return
+		}
+		if id == nil {
+			respond.JSON(w, http.StatusUnauthorized, map[string]string{"message": "unauthenticated"})
+			return
+		}
+		inv, ok := invites.cancel(id.OrgID, body.InvitationID)
+		if !ok {
+			respond.JSON(w, http.StatusBadRequest, map[string]string{"message": "invitation not found"})
+			return
+		}
+		respond.JSON(w, http.StatusOK, map[string]any{"invitation": inv})
 	})
 
 	// Anything else authd-shaped that a flow hits is a gap in the fake — make it

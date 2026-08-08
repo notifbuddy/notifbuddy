@@ -803,17 +803,20 @@ export interface components {
             /** @description The role slug to assign to the member. */
             role: components["schemas"]["RoleSlug"];
         };
+        /**
+         * @description The lifecycle state of an invitation. `canceled` covers an invitation
+         *     revoked by the organization; `rejected` is the invitee declining.
+         * @example pending
+         * @enum {string}
+         */
+        InvitationState: "pending" | "accepted" | "rejected" | "canceled";
         /** @description An organization invitation. */
         InvitationResponse: {
             /** @example invitation_01H... */
             id: string;
             /** @example newteammate@example.com */
             email: string;
-            /**
-             * @description The invitation state (pending, accepted, expired, revoked).
-             * @example pending
-             */
-            state: string;
+            state: components["schemas"]["InvitationState"];
             /**
              * @description ISO 8601 expiry timestamp.
              * @example 2026-07-03T00:00:00Z
@@ -1304,7 +1307,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The invitation, now revoked. */
+            /** @description The invitation, now canceled. */
             200: {
                 headers: {
                     [name: string]: unknown;

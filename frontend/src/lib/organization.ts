@@ -47,7 +47,7 @@ export async function sendInvitation(
 }
 
 // Revoke a pending invitation so its link can no longer be accepted. Returns
-// the invitation in its revoked state, or null on failure.
+// the invitation in its canceled state, or null on failure.
 export async function revokeInvitation(invitationId: string): Promise<Invitation | null> {
 	const { data, error } = await api.DELETE('/invitations/{invitationId}', {
 		params: { path: { invitationId } }

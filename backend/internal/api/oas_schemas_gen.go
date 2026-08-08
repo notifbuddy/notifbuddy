@@ -798,10 +798,9 @@ func (*InvitationListResponse) listInvitationsRes() {}
 // An organization invitation.
 // Ref: #/components/schemas/InvitationResponse
 type InvitationResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	// The invitation state (pending, accepted, expired, revoked).
-	State string `json:"state"`
+	ID    string          `json:"id"`
+	Email string          `json:"email"`
+	State InvitationState `json:"state"`
 	// ISO 8601 expiry timestamp.
 	ExpiresAt OptString `json:"expiresAt"`
 	// The role slug the invitee will be granted on acceptance, if any.
@@ -819,7 +818,7 @@ func (s *InvitationResponse) GetEmail() string {
 }
 
 // GetState returns the value of State.
-func (s *InvitationResponse) GetState() string {
+func (s *InvitationResponse) GetState() InvitationState {
 	return s.State
 }
 
@@ -844,7 +843,7 @@ func (s *InvitationResponse) SetEmail(val string) {
 }
 
 // SetState sets the value of State.
-func (s *InvitationResponse) SetState(val string) {
+func (s *InvitationResponse) SetState(val InvitationState) {
 	s.State = val
 }
 
@@ -860,6 +859,64 @@ func (s *InvitationResponse) SetRole(val OptString) {
 
 func (*InvitationResponse) createInvitationRes() {}
 func (*InvitationResponse) revokeInvitationRes() {}
+
+// The lifecycle state of an invitation. `canceled` covers an invitation revoked by the organization;
+// `rejected` is the invitee declining.
+// Ref: #/components/schemas/InvitationState
+type InvitationState string
+
+const (
+	InvitationStatePending  InvitationState = "pending"
+	InvitationStateAccepted InvitationState = "accepted"
+	InvitationStateRejected InvitationState = "rejected"
+	InvitationStateCanceled InvitationState = "canceled"
+)
+
+// AllValues returns all InvitationState values.
+func (InvitationState) AllValues() []InvitationState {
+	return []InvitationState{
+		InvitationStatePending,
+		InvitationStateAccepted,
+		InvitationStateRejected,
+		InvitationStateCanceled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s InvitationState) MarshalText() ([]byte, error) {
+	switch s {
+	case InvitationStatePending:
+		return []byte(s), nil
+	case InvitationStateAccepted:
+		return []byte(s), nil
+	case InvitationStateRejected:
+		return []byte(s), nil
+	case InvitationStateCanceled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *InvitationState) UnmarshalText(data []byte) error {
+	switch InvitationState(data) {
+	case InvitationStatePending:
+		*s = InvitationStatePending
+		return nil
+	case InvitationStateAccepted:
+		*s = InvitationStateAccepted
+		return nil
+	case InvitationStateRejected:
+		*s = InvitationStateRejected
+		return nil
+	case InvitationStateCanceled:
+		*s = InvitationStateCanceled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // A Linear → Slack channel-creation config scoped to a single Linear team (teamId). The team is the
 // config's identity; a team has at most one config.

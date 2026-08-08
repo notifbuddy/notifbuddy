@@ -81,6 +81,14 @@ const (
 	roleOwner = "owner"
 )
 
+// Invitation states, spelled the way Better Auth writes them.
+const (
+	InvitationPending  = "pending"
+	InvitationAccepted = "accepted"
+	InvitationRejected = "rejected"
+	InvitationCanceled = "canceled"
+)
+
 // Errors mirrored from the previous implementation; handlers map them to
 // status codes.
 var (
@@ -453,7 +461,13 @@ type invitationEntry struct {
 }
 
 func (i invitationEntry) toInvitation() Invitation {
-	return Invitation{ID: i.ID, Email: i.Email, State: i.Status, ExpiresAt: i.ExpiresAt, Role: normalizeRole(i.Role)}
+	return Invitation{
+		ID:        i.ID,
+		Email:     i.Email,
+		State:     normalizeInvitationState(i.Status),
+		ExpiresAt: i.ExpiresAt,
+		Role:      normalizeRole(i.Role),
+	}
 }
 
 // SendInvitation invites an email to the organization.
@@ -508,14 +522,14 @@ func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID stri
 	if err != nil {
 		return nil, err
 	}
-	found := false
+	var existing *Invitation
 	for _, inv := range invs {
 		if inv.ID == invitationID {
-			found = true
+			existing = &inv
 			break
 		}
 	}
-	if !found {
+	if existing == nil {
 		return nil, ErrInvitationNotFound
 	}
 	var cancelled struct {
@@ -528,7 +542,8 @@ func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID stri
 	}
 	out := cancelled.Invitation.toInvitation()
 	if out.ID == "" {
-		out = Invitation{ID: invitationID, State: "canceled"}
+		out = *existing
+		out.State = InvitationCanceled
 	}
 	return &out, nil
 }
@@ -627,6 +642,22 @@ func normalizeRole(role string) string {
 		return RoleAdmin
 	}
 	return role
+}
+
+// normalizeInvitationState clamps an authd invitation status to the set the API
+// declares, so an unrecognized value cannot fail response encoding. Anything
+// unknown is treated as still outstanding.
+func normalizeInvitationState(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case InvitationCanceled:
+		return InvitationCanceled
+	case InvitationAccepted:
+		return InvitationAccepted
+	case InvitationRejected:
+		return InvitationRejected
+	default:
+		return InvitationPending
+	}
 }
 
 // splitName splits a display name into first/last on the first space.

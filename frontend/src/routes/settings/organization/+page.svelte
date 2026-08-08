@@ -7,6 +7,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Field from '$lib/components/ui/field';
 	import MarbleAvatar from '$lib/components/app/marble-avatar.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
@@ -161,9 +162,9 @@
 		orgProfileStore.set(updated);
 	}
 
-	// Revoked invitations are dead ends — keep them out of the list. Revoking
+	// Canceled invitations are dead ends — keep them out of the list. Revoking
 	// one live therefore removes its row.
-	const visibleInvitations = $derived(invitations?.filter((i) => i.state !== 'revoked'));
+	const visibleInvitations = $derived(invitations?.filter((i) => i.state !== 'canceled'));
 
 	let inviteEmail = $state('');
 	let inviteRole = $state<Role>('member');
@@ -203,6 +204,8 @@
 		e.preventDefault();
 		inviting = true;
 		inviteMsg = null;
+		revokeMsg = null;
+		revokeError = null;
 		const inv = await sendInvitation(inviteEmail.trim(), inviteRole);
 		inviting = false;
 		if (!inv) {
@@ -216,17 +219,20 @@
 	}
 
 	// Badge variant per invitation state.
-	const inviteBadge = (state: string): 'secondary' | 'outline' | 'destructive' =>
-		state === 'accepted' ? 'secondary' : state === 'revoked' || state === 'expired' ? 'destructive' : 'outline';
+	const inviteBadge = (state: Invitation['state']): 'secondary' | 'outline' | 'destructive' =>
+		state === 'accepted' ? 'secondary' : state === 'rejected' ? 'destructive' : 'outline';
 
-	// The invitation id whose revocation is in flight, and the last failure.
+	// The invitation id whose revocation is in flight, the last failure, and the
+	// note left behind once a revoked row drops out of the list.
 	let revoking = $state<string | null>(null);
 	let revokeError = $state<string | null>(null);
+	let revokeMsg = $state<string | null>(null);
 
 	async function revoke(inv: Invitation) {
 		if (revoking) return;
 		revoking = inv.id;
 		revokeError = null;
+		revokeMsg = null;
 		const updated = await revokeInvitation(inv.id);
 		revoking = null;
 		if (!updated) {
@@ -234,6 +240,7 @@
 			return;
 		}
 		invitations = invitations?.map((x) => (x.id === inv.id ? updated : x));
+		revokeMsg = `Revoked the invitation for ${inv.email}.`;
 	}
 </script>
 
@@ -612,35 +619,58 @@
 							<Badge variant={inviteBadge(inv.state)} class="capitalize">{inv.state}</Badge>
 							{#if inv.state === 'pending'}
 								<Tooltip.Provider delayDuration={200}>
-									<Tooltip.Root>
-										<Tooltip.Trigger>
-											{#snippet child({ props })}
-												<Button
-													{...props}
-													variant="ghost"
-													size="icon-sm"
-													onclick={() => revoke(inv)}
-													disabled={revoking === inv.id}
-													aria-label="Revoke invitation for {inv.email}"
-												>
-													{#if revoking === inv.id}
-														<LoaderIcon class="animate-spin" />
-													{:else}
-														<XIcon />
-													{/if}
-												</Button>
-											{/snippet}
-										</Tooltip.Trigger>
-										<Tooltip.Content>Revoke invitation</Tooltip.Content>
-									</Tooltip.Root>
+									<AlertDialog.Root>
+										<Tooltip.Root>
+											<Tooltip.Trigger>
+												{#snippet child({ props: tipProps })}
+													<AlertDialog.Trigger>
+														{#snippet child({ props: dialogProps })}
+															<Button
+																{...tipProps}
+																{...dialogProps}
+																variant="ghost"
+																size="icon-sm"
+																disabled={revoking === inv.id}
+																aria-label="Revoke invitation for {inv.email}"
+															>
+																{#if revoking === inv.id}
+																	<LoaderIcon class="animate-spin" />
+																{:else}
+																	<XIcon />
+																{/if}
+															</Button>
+														{/snippet}
+													</AlertDialog.Trigger>
+												{/snippet}
+											</Tooltip.Trigger>
+											<Tooltip.Content>Revoke invitation</Tooltip.Content>
+										</Tooltip.Root>
+										<AlertDialog.Content>
+											<AlertDialog.Header>
+												<AlertDialog.Title>Revoke this invitation?</AlertDialog.Title>
+												<AlertDialog.Description>
+													{inv.email} will no longer be able to join {org?.name ??
+														'your organization'} with this link, and the invitation drops off this
+													list. You can invite them again at any time.
+												</AlertDialog.Description>
+											</AlertDialog.Header>
+											<AlertDialog.Footer>
+												<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+												<AlertDialog.Action variant="destructive" onclick={() => revoke(inv)}>
+													Revoke
+												</AlertDialog.Action>
+											</AlertDialog.Footer>
+										</AlertDialog.Content>
+									</AlertDialog.Root>
 								</Tooltip.Provider>
 							{/if}
 						</div>
 					</div>
 				{/each}
 			</div>
-			{#if revokeError}<p class="text-destructive text-sm">{revokeError}</p>{/if}
 		{/if}
+		{#if revokeMsg}<p class="text-muted-foreground text-sm">{revokeMsg}</p>{/if}
+		{#if revokeError}<p class="text-destructive text-sm">{revokeError}</p>{/if}
 		</Card.Content>
 	</Card.Root>
 </div>
