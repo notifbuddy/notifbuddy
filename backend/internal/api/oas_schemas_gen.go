@@ -2137,6 +2137,134 @@ type SubmitOssApplicationUnauthorized Error
 
 func (*SubmitOssApplicationUnauthorized) submitOssApplicationRes() {}
 
+// Boot configuration for the Chatwoot support widget, scoped to the caller. An unauthenticated caller
+// gets only `enabled`, `baseUrl` and `websiteToken`.
+// Ref: #/components/schemas/SupportChatResponse
+type SupportChatResponse struct {
+	// Whether support chat is configured.
+	Enabled bool `json:"enabled"`
+	// Origin of the Chatwoot instance serving the widget.
+	BaseUrl OptString `json:"baseUrl"`
+	// The website inbox token identifying which inbox to open in.
+	WebsiteToken OptString `json:"websiteToken"`
+	// Stable id the conversation is filed under, passed to $chatwoot.setUser. The notifbuddy user id
+	// rather than the email, so a user changing their address keeps their history.
+	Identifier OptString `json:"identifier"`
+	// Hex HMAC-SHA256 of `identifier` under the inbox's identity-validation token. Absent when the
+	// deployment configured no token.
+	IdentifierHash OptString `json:"identifierHash"`
+	// The signed-in user's email, shown to the support agent.
+	Email OptString `json:"email"`
+	// Display name shown to the support agent.
+	Name OptString `json:"name"`
+	// Active organization id, set as a custom attribute.
+	OrganizationId OptString `json:"organizationId"`
+	// Active organization name, set as a custom attribute.
+	OrganizationName OptString `json:"organizationName"`
+	// The org's billing plan, set as a custom attribute.
+	Plan OptString `json:"plan"`
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *SupportChatResponse) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetBaseUrl returns the value of BaseUrl.
+func (s *SupportChatResponse) GetBaseUrl() OptString {
+	return s.BaseUrl
+}
+
+// GetWebsiteToken returns the value of WebsiteToken.
+func (s *SupportChatResponse) GetWebsiteToken() OptString {
+	return s.WebsiteToken
+}
+
+// GetIdentifier returns the value of Identifier.
+func (s *SupportChatResponse) GetIdentifier() OptString {
+	return s.Identifier
+}
+
+// GetIdentifierHash returns the value of IdentifierHash.
+func (s *SupportChatResponse) GetIdentifierHash() OptString {
+	return s.IdentifierHash
+}
+
+// GetEmail returns the value of Email.
+func (s *SupportChatResponse) GetEmail() OptString {
+	return s.Email
+}
+
+// GetName returns the value of Name.
+func (s *SupportChatResponse) GetName() OptString {
+	return s.Name
+}
+
+// GetOrganizationId returns the value of OrganizationId.
+func (s *SupportChatResponse) GetOrganizationId() OptString {
+	return s.OrganizationId
+}
+
+// GetOrganizationName returns the value of OrganizationName.
+func (s *SupportChatResponse) GetOrganizationName() OptString {
+	return s.OrganizationName
+}
+
+// GetPlan returns the value of Plan.
+func (s *SupportChatResponse) GetPlan() OptString {
+	return s.Plan
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *SupportChatResponse) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetBaseUrl sets the value of BaseUrl.
+func (s *SupportChatResponse) SetBaseUrl(val OptString) {
+	s.BaseUrl = val
+}
+
+// SetWebsiteToken sets the value of WebsiteToken.
+func (s *SupportChatResponse) SetWebsiteToken(val OptString) {
+	s.WebsiteToken = val
+}
+
+// SetIdentifier sets the value of Identifier.
+func (s *SupportChatResponse) SetIdentifier(val OptString) {
+	s.Identifier = val
+}
+
+// SetIdentifierHash sets the value of IdentifierHash.
+func (s *SupportChatResponse) SetIdentifierHash(val OptString) {
+	s.IdentifierHash = val
+}
+
+// SetEmail sets the value of Email.
+func (s *SupportChatResponse) SetEmail(val OptString) {
+	s.Email = val
+}
+
+// SetName sets the value of Name.
+func (s *SupportChatResponse) SetName(val OptString) {
+	s.Name = val
+}
+
+// SetOrganizationId sets the value of OrganizationId.
+func (s *SupportChatResponse) SetOrganizationId(val OptString) {
+	s.OrganizationId = val
+}
+
+// SetOrganizationName sets the value of OrganizationName.
+func (s *SupportChatResponse) SetOrganizationName(val OptString) {
+	s.OrganizationName = val
+}
+
+// SetPlan sets the value of Plan.
+func (s *SupportChatResponse) SetPlan(val OptString) {
+	s.Plan = val
+}
+
 type SyncSettingsPaymentRequired Error
 
 func (*SyncSettingsPaymentRequired) syncSettingsRes() {}

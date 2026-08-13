@@ -113,6 +113,15 @@ data:
       model: {{ .Values.integrations.cloudflare.model | quote }}
     {{- end }}
 
+    {{- if .Values.support.chatwoot.enabled }}
+    chatwoot:
+      base_url: {{ .Values.support.chatwoot.baseUrl | quote }}
+      website_token: {{ required "notifbuddy: set `support.chatwoot.websiteToken` when the support widget is enabled" .Values.support.chatwoot.websiteToken | quote }}
+      {{- if .Values.support.chatwoot.hmacToken }}
+      hmac_token: "${CHATWOOT_HMAC_TOKEN}"
+      {{- end }}
+    {{- end }}
+
     billing:
       # Billing is ours; self-hosted installs get every feature with no plan
       # gating and no Stripe.

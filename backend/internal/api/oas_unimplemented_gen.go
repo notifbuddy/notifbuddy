@@ -155,6 +155,22 @@ func (UnimplementedHandler) GetOrganizationProfile(ctx context.Context) (r GetOr
 	return r, ht.ErrNotImplemented
 }
 
+// GetSupportChat implements getSupportChat operation.
+//
+// Returns what the Chatwoot support widget needs to boot. Deliberately open to unauthenticated callers
+// — someone who cannot sign in is exactly who needs support — who get the base URL and website
+// token and chat anonymously.
+//
+// A session also gets its identity. `identifierHash` is the HMAC-SHA256 of `identifier`, computed here
+// because the signing token must never reach the browser; it is what stops a visitor rewriting the
+// page to read somebody else's conversation. `enabled` is false, and every other field absent, when
+// support chat is not configured.
+//
+// GET /support/chat
+func (UnimplementedHandler) GetSupportChat(ctx context.Context) (r *SupportChatResponse, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListInvitations implements listInvitations operation.
 //
 // Returns the invitations for the caller's active organization. Requires a session scoped to an

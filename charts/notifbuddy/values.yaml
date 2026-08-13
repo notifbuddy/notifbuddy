@@ -57,7 +57,8 @@ image:
 # Keys read from it, when set: BETTER_AUTH_SECRET, INTEGRATION_ENC_KEY,
 # GITHUB_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, AXIOM_TOKEN and
 # BETTER_STACK_OTLP_ENDPOINT/BETTER_STACK_SOURCE_TOKEN when the observability
-# sinks below are on, and any integration secrets you enable below.
+# sinks below are on, CHATWOOT_HMAC_TOKEN when support identity validation is
+# on, and any integration secrets you enable below.
 existingSecret: ""
 
 # Bundled Postgres.
@@ -189,6 +190,22 @@ integrations:
     enabled: false
     resendApiKey: ""
     from: ""
+
+# In-app support widget. Off by default: it points customers at *our* support
+# inbox, which is not what you want on your own install — enable it only with
+# your own Chatwoot inbox.
+support:
+  chatwoot:
+    # -- Enable the Chatwoot support widget on the dashboard.
+    enabled: false
+    # -- Chatwoot origin. Leave as Cloud, or point at your own instance.
+    baseUrl: "https://app.chatwoot.com"
+    # -- Website inbox token. Public: it ships to the browser.
+    websiteToken: ""
+    # -- Identity validation token from Inboxes → Settings → Configuration.
+    # Without it the reported identity is unverified. Ignored when
+    # `existingSecret` is set, which must then carry CHATWOOT_HMAC_TOKEN.
+    hmacToken: ""
 
 # -- Extra pod annotations, applied to all three workloads.
 podAnnotations: {}

@@ -85,5 +85,10 @@ stripe:
   webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
   price_id: ""
 
+chatwoot:
+  base_url: "https://app.chatwoot.com"
+  website_token: "${CHATWOOT_WEBSITE_TOKEN}"
+  hmac_token: "${CHATWOOT_HMAC_TOKEN}"
+
 featureflags:
   developer_settings: true

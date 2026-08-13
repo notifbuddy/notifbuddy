@@ -33,11 +33,12 @@ type Handler struct {
 	billing      *billing.Service
 	store        *store.Store
 	flags        config.FeatureFlags
+	chatwoot     config.ChatwootConfig
 }
 
 // New builds the API handler with its service dependencies.
-func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store, flags config.FeatureFlags) *Handler {
-	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st, flags: flags}
+func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store, flags config.FeatureFlags, chatwoot config.ChatwootConfig) *Handler {
+	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st, flags: flags, chatwoot: chatwoot}
 }
 
 // invitationListLimit caps how many invitations GET /invitations returns.
