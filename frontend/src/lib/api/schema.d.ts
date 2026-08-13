@@ -556,6 +556,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuration for the in-app support widget
+         * @description Returns what the Chatwoot support widget needs to boot. Deliberately open
+         *     to unauthenticated callers: someone who cannot sign in is exactly who
+         *     needs support, so the signed-out dashboard gets the widget too. They
+         *     receive only the base URL and website token, both public — they ship to
+         *     every browser that loads the widget — and chat anonymously.
+         *
+         *     A session additionally gets the identity fields. When the deployment has
+         *     an identity-validation token, `identifierHash` accompanies them: the
+         *     HMAC-SHA256 of `identifier` under that token, computed here because the
+         *     token must never reach the browser. It is what stops a visitor rewriting
+         *     the page to read somebody else's conversation. Without the token the
+         *     identity is still sent, but Chatwoot has nothing to verify it against.
+         *
+         *     `enabled` is false — and every other field absent — when the deployment
+         *     has no Chatwoot inbox configured, the default for self-hosted installs.
+         */
+        get: operations["getSupportChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1139,6 +1173,58 @@ export interface components {
             wouldArchive: boolean;
             /** @description A template/condition error, if any (shown inline by the UI). */
             error?: string;
+        };
+        /**
+         * @description Boot configuration for the Chatwoot support widget, scoped to the caller.
+         *     Only `enabled`, `baseUrl` and `websiteToken` are present for an
+         *     unauthenticated caller; every field but `enabled` is absent when support
+         *     is not configured.
+         */
+        SupportChatResponse: {
+            /** @description Whether this deployment has a Chatwoot inbox configured. */
+            enabled: boolean;
+            /**
+             * @description Origin of the Chatwoot instance serving the widget — Chatwoot Cloud
+             *     unless the deployment points at a self-hosted one.
+             * @example https://app.chatwoot.com
+             */
+            baseUrl?: string;
+            /** @description The website inbox token identifying which inbox to open in. */
+            websiteToken?: string;
+            /**
+             * @description Stable id the conversation is filed under, passed to $chatwoot.setUser.
+             *     The notifbuddy user id rather than the email, so a user changing their
+             *     address keeps their history.
+             * @example user_01H...
+             */
+            identifier?: string;
+            /**
+             * @description Hex HMAC-SHA256 of `identifier` under the inbox's identity-validation
+             *     token. Absent when the deployment configured no token.
+             */
+            identifierHash?: string;
+            /**
+             * @description The signed-in user's email, shown to the support agent.
+             * @example jane@example.com
+             */
+            email?: string;
+            /**
+             * @description Display name shown to the support agent.
+             * @example Jane Doe
+             */
+            name?: string;
+            /**
+             * @description Active organization id, set as a custom attribute.
+             * @example org_01H...
+             */
+            organizationId?: string;
+            /** @description Active organization name, set as a custom attribute. */
+            organizationName?: string;
+            /**
+             * @description The org's billing plan, set as a custom attribute.
+             * @example trial
+             */
+            plan?: string;
         };
     };
     responses: never;
@@ -2337,6 +2423,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSupportChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Widget configuration, or disabled when support chat is off. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportChatResponse"];
                 };
             };
         };

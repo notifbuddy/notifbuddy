@@ -84,5 +84,10 @@ stripe:
   webhook_secret: ""
   price_id: ""
 
+chatwoot:
+  base_url: ""
+  website_token: "" # support off => GET /support/chat reports disabled
+  hmac_token: ""
+
 featureflags:
   developer_settings: true

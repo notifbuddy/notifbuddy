@@ -142,3 +142,49 @@
 		color-scheme: dark;
 	}
 }
+
+/* Chatwoot's SDK appends its stylesheet to <body>, so it wins ties on document
+   order and marks several of these !important. The doubled class raises our
+   specificity above it without resorting to inline styles. */
+.woot-widget-bubble.woot-widget-bubble {
+	background: var(--primary);
+	width: 52px;
+	height: 52px;
+	border-radius: var(--radius-xl);
+	box-shadow: 0 6px 20px oklch(0 0 0 / 0.18) !important;
+}
+
+.woot-widget-bubble.woot-widget-bubble:hover {
+	background: var(--primary);
+	box-shadow: 0 8px 26px oklch(0 0 0 / 0.28) !important;
+}
+
+.woot-widget-bubble.woot-widget-bubble svg {
+	width: 20px !important;
+	height: 20px !important;
+	margin: 16px !important;
+}
+
+.woot-widget-bubble.woot-widget-bubble.woot--close::before,
+.woot-widget-bubble.woot-widget-bubble.woot--close::after {
+	left: 25px;
+	top: 14px;
+	height: 24px;
+}
+
+.woot-widget-holder.woot-widget-holder {
+	border-radius: var(--radius-2xl);
+	box-shadow: 0 12px 40px oklch(0 0 0 / 0.18) !important;
+}
+
+/* Only above the SDK's own 667px breakpoint — below it the panel goes
+   fullscreen, which is the right call on a phone. */
+@media only screen and (min-width: 667px) {
+	.woot-widget-holder.woot-widget-holder {
+		width: 360px !important;
+		max-height: 520px !important;
+		min-height: 220px !important;
+		height: calc(100% - 160px) !important;
+		bottom: 84px !important;
+	}
+}

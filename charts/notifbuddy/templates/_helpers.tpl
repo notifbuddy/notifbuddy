@@ -222,6 +222,9 @@ rendered without cluster access — which is why GitOps users must set
 {{- if .Values.integrations.email.enabled -}}
   {{- $_ := set $out "RESEND_API_KEY" (required "notifbuddy: integrations.email.resendApiKey is required when email is enabled" .Values.integrations.email.resendApiKey) -}}
 {{- end -}}
+{{- if and .Values.support.chatwoot.enabled .Values.support.chatwoot.hmacToken -}}
+  {{- $_ := set $out "CHATWOOT_HMAC_TOKEN" .Values.support.chatwoot.hmacToken -}}
+{{- end -}}
 {{- if .Values.logging.axiom.enabled -}}
   {{- $_ := set $out "AXIOM_TOKEN" (required "notifbuddy: logging.axiom.token is required when Axiom log shipping is enabled" .Values.logging.axiom.token) -}}
 {{- end -}}

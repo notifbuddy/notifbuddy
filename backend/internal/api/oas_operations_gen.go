@@ -19,6 +19,7 @@ const (
 	GetLinearSettingsOperation            OperationName = "GetLinearSettings"
 	GetMeOperation                        OperationName = "GetMe"
 	GetOrganizationProfileOperation       OperationName = "GetOrganizationProfile"
+	GetSupportChatOperation               OperationName = "GetSupportChat"
 	ListInvitationsOperation              OperationName = "ListInvitations"
 	ListLinearWebhooksOperation           OperationName = "ListLinearWebhooks"
 	ListMembersOperation                  OperationName = "ListMembers"

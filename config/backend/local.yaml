@@ -122,5 +122,10 @@ stripe:
   # created once in the Stripe dashboard (test mode).
   price_id: "price_1TqWa7E2Q2xv6Jme2jStvy93" # NB: the price_... id, not the prod_... product id
 
+chatwoot:
+  base_url: "https://app.chatwoot.com"
+  website_token: "${CHATWOOT_WEBSITE_TOKEN}" # empty turns support off
+  hmac_token: "${CHATWOOT_HMAC_TOKEN}" # SECRET; empty just means unverified identity
+
 featureflags:
   developer_settings: true

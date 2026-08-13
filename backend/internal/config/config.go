@@ -34,6 +34,7 @@ type Config struct {
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 	Stripe     StripeConfig     `yaml:"stripe"`
 	Billing    BillingConfig    `yaml:"billing"`
+	Chatwoot   ChatwootConfig   `yaml:"chatwoot"`
 
 	FeatureFlags FeatureFlags `yaml:"featureflags"`
 }
@@ -62,6 +63,17 @@ type OTelConfig struct {
 	// ServiceName is the resource attribute service.name (defaults to
 	// "notifbuddy-backend" when empty).
 	ServiceName string `yaml:"service_name"`
+}
+
+// ChatwootConfig configures the in-app support widget. An empty WebsiteToken
+// turns support off, which is what self-hosted installs get. BaseURL points at
+// Chatwoot Cloud unless overridden for a self-hosted instance. HMACToken is
+// optional: without it the widget still runs, but the identity it reports is
+// unverified and therefore only as trustworthy as the browser.
+type ChatwootConfig struct {
+	BaseURL      string `yaml:"base_url"`
+	WebsiteToken string `yaml:"website_token"`
+	HMACToken    string `yaml:"hmac_token"`
 }
 
 // BillingConfig controls plan enforcement.

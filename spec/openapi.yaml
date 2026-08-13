@@ -962,6 +962,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /support/chat:
+    get:
+      operationId: getSupportChat
+      summary: Configuration for the in-app support widget
+      description: |
+        Returns what the Chatwoot support widget needs to boot. Deliberately open
+        to unauthenticated callers: someone who cannot sign in is exactly who
+        needs support, so the signed-out dashboard gets the widget too. They
+        receive only the base URL and website token, both public — they ship to
+        every browser that loads the widget — and chat anonymously.
+
+        A session additionally gets the identity fields. When the deployment has
+        an identity-validation token, `identifierHash` accompanies them: the
+        HMAC-SHA256 of `identifier` under that token, computed here because the
+        token must never reach the browser. It is what stops a visitor rewriting
+        the page to read somebody else's conversation. Without the token the
+        identity is still sent, but Chatwoot has nothing to verify it against.
+
+        `enabled` is false — and every other field absent — when the deployment
+        has no Chatwoot inbox configured, the default for self-hosted installs.
+      responses:
+        "200":
+          description: "Widget configuration, or disabled when support chat is off."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatResponse"
 components:
   schemas:
     PongResponse:
@@ -1678,3 +1705,56 @@ components:
         - name
         - wouldCreate
         - wouldArchive
+    SupportChatResponse:
+      type: object
+      description: |
+        Boot configuration for the Chatwoot support widget, scoped to the caller.
+        Only `enabled`, `baseUrl` and `websiteToken` are present for an
+        unauthenticated caller; every field but `enabled` is absent when support
+        is not configured.
+      properties:
+        enabled:
+          type: boolean
+          description: Whether this deployment has a Chatwoot inbox configured.
+        baseUrl:
+          type: string
+          description: |
+            Origin of the Chatwoot instance serving the widget — Chatwoot Cloud
+            unless the deployment points at a self-hosted one.
+          example: https://app.chatwoot.com
+        websiteToken:
+          type: string
+          description: The website inbox token identifying which inbox to open in.
+        identifier:
+          type: string
+          description: |
+            Stable id the conversation is filed under, passed to $chatwoot.setUser.
+            The notifbuddy user id rather than the email, so a user changing their
+            address keeps their history.
+          example: user_01H...
+        identifierHash:
+          type: string
+          description: |
+            Hex HMAC-SHA256 of `identifier` under the inbox's identity-validation
+            token. Absent when the deployment configured no token.
+        email:
+          type: string
+          description: The signed-in user's email, shown to the support agent.
+          example: jane@example.com
+        name:
+          type: string
+          description: Display name shown to the support agent.
+          example: Jane Doe
+        organizationId:
+          type: string
+          description: Active organization id, set as a custom attribute.
+          example: org_01H...
+        organizationName:
+          type: string
+          description: Active organization name, set as a custom attribute.
+        plan:
+          type: string
+          description: The org's billing plan, set as a custom attribute.
+          example: trial
+      required:
+        - enabled

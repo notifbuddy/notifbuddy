@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import { ModeWatcher } from 'mode-watcher';
+	import { ModeWatcher, mode } from 'mode-watcher';
 	import AppShell from '$lib/components/app/app-shell.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { displayName, userStore } from '$lib/user.svelte';
@@ -11,6 +11,7 @@
 		identifyBetterStackUser,
 		initBetterStack
 	} from '$lib/betterstack';
+	import { initSupportWidget, setSupportWidgetTheme } from '$lib/chatwoot';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 
@@ -46,6 +47,17 @@
 			username: displayName(user),
 			...(org ? { group_id: org.id, group_name: org.name } : {})
 		});
+	});
+
+	// Lives here, not in AppShell, so the surfaces that never reach the shell
+	// still get support: the login card, /interrupted, and the billing lock.
+	$effect(() => {
+		if (user === undefined) return;
+		initSupportWidget(mode.current === 'dark' ? 'dark' : 'light');
+	});
+
+	$effect(() => {
+		setSupportWidgetTheme(mode.current === 'dark' ? 'dark' : 'light');
 	});
 
 	// Org-scoped routes need an active organization: bounce org-less sessions
