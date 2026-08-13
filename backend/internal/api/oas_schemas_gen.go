@@ -2137,15 +2137,13 @@ type SubmitOssApplicationUnauthorized Error
 
 func (*SubmitOssApplicationUnauthorized) submitOssApplicationRes() {}
 
-// Boot configuration for the Chatwoot support widget, scoped to the caller. Only `enabled`, `baseUrl`
-// and `websiteToken` are present for an unauthenticated caller; every field but `enabled` is absent
-// when support is not configured.
+// Boot configuration for the Chatwoot support widget, scoped to the caller. An unauthenticated caller
+// gets only `enabled`, `baseUrl` and `websiteToken`.
 // Ref: #/components/schemas/SupportChatResponse
 type SupportChatResponse struct {
-	// Whether this deployment has a Chatwoot inbox configured.
+	// Whether support chat is configured.
 	Enabled bool `json:"enabled"`
-	// Origin of the Chatwoot instance serving the widget — Chatwoot Cloud unless the deployment points
-	// at a self-hosted one.
+	// Origin of the Chatwoot instance serving the widget.
 	BaseUrl OptString `json:"baseUrl"`
 	// The website inbox token identifying which inbox to open in.
 	WebsiteToken OptString `json:"websiteToken"`

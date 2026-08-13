@@ -565,21 +565,16 @@ export interface paths {
         };
         /**
          * Configuration for the in-app support widget
-         * @description Returns what the Chatwoot support widget needs to boot. Deliberately open
-         *     to unauthenticated callers: someone who cannot sign in is exactly who
-         *     needs support, so the signed-out dashboard gets the widget too. They
-         *     receive only the base URL and website token, both public — they ship to
-         *     every browser that loads the widget — and chat anonymously.
+         * @description Returns what the Chatwoot support widget needs to boot. Deliberately
+         *     open to unauthenticated callers — someone who cannot sign in is exactly
+         *     who needs support — who get the base URL and website token and chat
+         *     anonymously.
          *
-         *     A session additionally gets the identity fields. When the deployment has
-         *     an identity-validation token, `identifierHash` accompanies them: the
-         *     HMAC-SHA256 of `identifier` under that token, computed here because the
-         *     token must never reach the browser. It is what stops a visitor rewriting
-         *     the page to read somebody else's conversation. Without the token the
-         *     identity is still sent, but Chatwoot has nothing to verify it against.
-         *
-         *     `enabled` is false — and every other field absent — when the deployment
-         *     has no Chatwoot inbox configured, the default for self-hosted installs.
+         *     A session also gets its identity. `identifierHash` is the HMAC-SHA256 of
+         *     `identifier`, computed here because the signing token must never reach
+         *     the browser; it is what stops a visitor rewriting the page to read
+         *     somebody else's conversation. `enabled` is false, and every other field
+         *     absent, when support chat is not configured.
          */
         get: operations["getSupportChat"];
         put?: never;
@@ -1176,16 +1171,14 @@ export interface components {
         };
         /**
          * @description Boot configuration for the Chatwoot support widget, scoped to the caller.
-         *     Only `enabled`, `baseUrl` and `websiteToken` are present for an
-         *     unauthenticated caller; every field but `enabled` is absent when support
-         *     is not configured.
+         *     An unauthenticated caller gets only `enabled`, `baseUrl` and
+         *     `websiteToken`.
          */
         SupportChatResponse: {
-            /** @description Whether this deployment has a Chatwoot inbox configured. */
+            /** @description Whether support chat is configured. */
             enabled: boolean;
             /**
-             * @description Origin of the Chatwoot instance serving the widget — Chatwoot Cloud
-             *     unless the deployment points at a self-hosted one.
+             * @description Origin of the Chatwoot instance serving the widget.
              * @example https://app.chatwoot.com
              */
             baseUrl?: string;
