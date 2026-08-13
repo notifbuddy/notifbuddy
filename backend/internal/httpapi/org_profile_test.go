@@ -6,14 +6,14 @@ import (
 
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
-	"xolo/backend/internal/featureflags"
+	"xolo/backend/internal/config"
 	"xolo/backend/internal/store"
 )
 
 func TestUpdateOrganizationProfile_RejectsDevSettingsWhenFeatureOff(t *testing.T) {
 	h := Handler{
 		store: &store.Store{},
-		flags: featureflags.Flags{DeveloperSettings: false},
+		flags: config.FeatureFlags{DeveloperSettings: false},
 	}
 	ctx := auth.ContextWithUser(context.Background(), &auth.SessionUser{
 		OrgID: "org1",
@@ -40,7 +40,7 @@ func TestUpdateOrganizationProfile_RejectsDevSettingsWhenFeatureOff(t *testing.T
 func TestUpdateOrganizationProfile_RejectsEmptyBody(t *testing.T) {
 	h := Handler{
 		store: &store.Store{},
-		flags: featureflags.Flags{DeveloperSettings: true},
+		flags: config.FeatureFlags{DeveloperSettings: true},
 	}
 	ctx := auth.ContextWithUser(context.Background(), &auth.SessionUser{
 		OrgID: "org1",

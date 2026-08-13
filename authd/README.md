@@ -26,10 +26,9 @@ browser's cookie.
 
 Non-sensitive settings live under the repo-root config tree:
 
-- `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`)
-- `config/featureflags/${NB_ENV}.yaml` — `github_oauth_login` (must be true); `developer_settings` gates the Organization Developer card (backend/authd both read this file)
+- `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`), including the `featureflags` block: `github_oauth_login` must be true, since GitHub is the only sign-in method
 
-Override paths with `CONFIG_FILE` / `FEATUREFLAGS_FILE`. Sensitive values use
+Override the path with `CONFIG_FILE`. Sensitive values use
 `${VAR}` — resolved at startup; referenced-but-unset is a hard error. `.env`
 holds only those secrets (see `.env.example`).
 

@@ -1,8 +1,7 @@
 // authd configuration — shared tree at repo-root config/.
 //
-// App config:   config/authd/${NB_ENV}.yaml   (default NB_ENV=local)
-// Feature flags: config/featureflags/${NB_ENV}.yaml
-// Override paths with CONFIG_FILE / FEATUREFLAGS_FILE.
+// App config: config/authd/${NB_ENV}.yaml (default NB_ENV=local).
+// Override the path with CONFIG_FILE.
 //
 // Sensitive values use `${VAR}` env refs; unset refs are a hard error.
 import { existsSync, readFileSync } from 'node:fs';
@@ -32,11 +31,11 @@ export interface Config {
 		production_url: string;
 		secret: string;
 	};
+	featureflags: FeatureFlags;
 }
 
 export interface FeatureFlags {
 	github_oauth_login: boolean;
-	developer_settings: boolean;
 }
 
 function resolveEnvRefs(value: unknown): unknown {
@@ -64,15 +63,14 @@ function resolvePath(area: string, explicit?: string): string {
 		if (existsSync(candidate)) return candidate;
 	}
 	throw new Error(
-		`authd: ${rel} not found (set CONFIG_FILE / FEATUREFLAGS_FILE or NB_ENV; tried ./${rel} and ../${rel})`,
+		`authd: ${rel} not found (set CONFIG_FILE or NB_ENV; tried ./${rel} and ../${rel})`,
 	);
 }
 
 const configFile = resolvePath('authd', process.env.CONFIG_FILE);
-const flagsFile = resolvePath('featureflags', process.env.FEATUREFLAGS_FILE);
 
 export const config = resolveEnvRefs(parse(readFileSync(configFile, 'utf8'))) as Config;
-export const featureFlags = parse(readFileSync(flagsFile, 'utf8')) as FeatureFlags;
+export const featureFlags = (config.featureflags ?? {}) as FeatureFlags;
 
 // Required settings fail at boot, never silently at first use.
 if (!config.database?.url) throw new Error('authd: database.url is required');

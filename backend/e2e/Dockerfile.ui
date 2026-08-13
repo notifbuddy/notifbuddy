@@ -31,7 +31,7 @@ COPY config /app/config
 COPY frontend ./
 
 # Build the static SPA (adapter-static → frontend/build).
-# PUBLIC_API_* are set above; feature flags come from config/featureflags.
+# PUBLIC_API_* are set above.
 ENV NB_ENV=local
 RUN npm run build
 

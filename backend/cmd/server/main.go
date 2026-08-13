@@ -19,7 +19,6 @@ import (
 	"xolo/backend/internal/billing"
 	"xolo/backend/internal/config"
 	"xolo/backend/internal/crypto"
-	"xolo/backend/internal/featureflags"
 	"xolo/backend/internal/httpapi"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/intent"
@@ -43,11 +42,6 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		fatal("config", err)
-	}
-
-	flags, err := featureflags.Load()
-	if err != nil {
-		fatal("featureflags", err)
 	}
 
 	// Structured logging (log/slog): JSON in prod (Datadog-parseable), text in
@@ -161,7 +155,7 @@ func main() {
 			return status.Locked
 		}
 		orgSyncEnabled := func(ctx context.Context, orgID string) bool {
-			if !flags.DeveloperSettings {
+			if !cfg.FeatureFlags.DeveloperSettings {
 				return true
 			}
 			p, err := st.GetOrgProfile(ctx, orgID)
@@ -193,7 +187,7 @@ func main() {
 	}
 
 	// API handler (implements the ogen interface) + the generated server.
-	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc, st, flags)
+	apiHandler := httpapi.New(authSvc, intgSvc, billingSvc, st, cfg.FeatureFlags)
 	srv, err := api.NewServer(apiHandler)
 	if err != nil {
 		fatal("create api server", err)

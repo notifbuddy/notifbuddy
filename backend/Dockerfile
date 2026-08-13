@@ -20,10 +20,12 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=build /out/server /app/server
-COPY config /app/config
-ENV NB_ENV=prod
-ENV CONFIG_FILE=config/backend/prod.yaml
-ENV FEATUREFLAGS_FILE=config/featureflags/prod.yaml
+# No default CONFIG_FILE or NB_ENV: every deployment supplies its own backend
+# config — the chart mounts a ConfigMap, e2e mounts config/backend/e2e.yaml,
+# and the Cloud Run preview sets CONFIG_FILE to the baked preview.yaml below.
+# Starting the image without one fails naming the file it looked for, which
+# beats silently booting somebody else's environment.
+COPY config/backend/preview.yaml /app/config/backend/preview.yaml
 
 USER 65532:65532
 EXPOSE 8080

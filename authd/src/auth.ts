@@ -3,7 +3,7 @@
 // in dev, Neon in prod). The service is fully request-driven: no daemons, no
 // cron — safe to scale to zero (NOT-20).
 //
-// Sign-in is GitHub OAuth only (config/featureflags). Preview uses oAuthProxy
+// Sign-in is GitHub OAuth only (featureflags in config/authd). Preview uses oAuthProxy
 // so GitHub only ever callbacks to production auth.notifbuddy.com.
 import { betterAuth } from 'better-auth';
 import { oAuthProxy, organization } from 'better-auth/plugins';

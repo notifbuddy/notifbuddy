@@ -14,7 +14,6 @@ COPY authd/src ./src
 COPY config /app/config
 ENV NB_ENV=prod
 ENV CONFIG_FILE=config/authd/prod.yaml
-ENV FEATUREFLAGS_FILE=config/featureflags/prod.yaml
 ENV npm_config_cache=/tmp/.npm
 ENV HOME=/tmp
 USER 1000:1000

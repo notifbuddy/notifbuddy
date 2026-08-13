@@ -28,8 +28,11 @@ tier** (manual approval), and a contact-us **enterprise** plan.
 ## One-time Stripe setup (per environment)
 
 1. **Product + Price**: "NotifBuddy Pro", recurring $9.99/month, per-unit
-   (licensed) quantity. Put the `price_...` id in `config/backend/local.yaml`
-   / `config/backend/prod.yaml` under `stripe.price_id`.
+   (licensed) quantity. Put the `price_...` id under `stripe.price_id` in
+   `config/backend/local.yaml`, and — for the deployed environments — in the
+   chart's backend ConfigMap
+   (`charts/notifbuddy/templates/configmap-backend.yaml`), which has no
+   `stripe` block today because billing runs in `beta` mode.
 2. **Restricted API key** (`rk_...`): write on Customers, Checkout Sessions,
    Subscriptions, Billing Portal; read on Invoices → `STRIPE_API_KEY`.
 3. **Webhook endpoint** (prod): `<backend-url>/billing/stripe/webhook`,

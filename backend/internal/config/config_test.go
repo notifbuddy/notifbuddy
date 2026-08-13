@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -126,6 +128,34 @@ func TestValidate_WebhookSecretsRequiredWhenConfigured(t *testing.T) {
 			}
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("validate() = %v, want error containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestFeatureFlags_FromConfigFile(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		yaml string
+		want bool
+	}{
+		{"set true", "featureflags:\n  developer_settings: true\n", true},
+		{"set false", "featureflags:\n  developer_settings: false\n", false},
+		{"block omitted defaults false", "server:\n  addr: \":8080\"\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("CONFIG_FILE", path)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.FeatureFlags.DeveloperSettings; got != tc.want {
+				t.Fatalf("developer_settings = %v, want %v", got, tc.want)
 			}
 		})
 	}

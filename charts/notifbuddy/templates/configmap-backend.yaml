@@ -18,13 +18,20 @@ data:
     logging:
       format: {{ .Values.logging.format | quote }}
       level: {{ .Values.logging.level | quote }}
-      # Log shipping to Axiom is ours, not something a self-host install
-      # should be pointed at. Everything goes to stdout.
-      axiom_enabled: false
+      # Stdout is the source of truth either way; Axiom is an additional sink.
+      axiom_enabled: {{ .Values.logging.axiom.enabled }}
+      {{- if .Values.logging.axiom.enabled }}
+      axiom_token: "${AXIOM_TOKEN}"
+      axiom_dataset: {{ required "notifbuddy: set `logging.axiom.dataset` when Axiom log shipping is enabled" .Values.logging.axiom.dataset | quote }}
+      {{- end }}
 
-    # Better Stack OTLP is cloud-only.
     otel:
-      enabled: false
+      enabled: {{ .Values.otel.enabled }}
+      {{- if .Values.otel.enabled }}
+      endpoint: "${BETTER_STACK_OTLP_ENDPOINT}"
+      token: "${BETTER_STACK_SOURCE_TOKEN}"
+      service_name: {{ .Values.otel.serviceName | quote }}
+      {{- end }}
 
     cors:
       allow_origin: "https://{{ $dashboard }}"
@@ -110,3 +117,6 @@ data:
       # Billing is ours; self-hosted installs get every feature with no plan
       # gating and no Stripe.
       mode: "beta"
+
+    featureflags:
+      developer_settings: true

@@ -55,8 +55,9 @@ image:
 # decrypting.
 #
 # Keys read from it, when set: BETTER_AUTH_SECRET, INTEGRATION_ENC_KEY,
-# GITHUB_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, and any integration
-# secrets you enable below.
+# GITHUB_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, AXIOM_TOKEN and
+# BETTER_STACK_OTLP_ENDPOINT/BETTER_STACK_SOURCE_TOKEN when the observability
+# sinks below are on, and any integration secrets you enable below.
 existingSecret: ""
 
 # Bundled Postgres.
@@ -130,6 +131,34 @@ logging:
   format: json
   # -- debug, info, warn or error.
   level: info
+  # Ship every backend log record to Axiom in addition to stdout. Off by
+  # default: stdout is the source of truth, and a self-hosted install has no
+  # reason to point at somebody else's Axiom account. The notifbuddy cloud
+  # deployment turns it on from iac/helmfile/values.yaml.
+  axiom:
+    # -- Enable Axiom log shipping. Requires `token` and `dataset`.
+    enabled: false
+    # -- Axiom ingest token. Ignored when `existingSecret` is set, which must
+    # then carry AXIOM_TOKEN.
+    token: ""
+    # -- Axiom dataset records are ingested into.
+    dataset: "backend"
+
+# OpenTelemetry trace export over OTLP/HTTP. Same posture as Axiom: off by
+# default, on for the notifbuddy cloud deployment.
+otel:
+  # -- Enable trace export. Requires `endpoint` and `token`.
+  enabled: false
+  # -- OTLP HTTP ingest base URL with no signal path, e.g.
+  # https://in.example.betterstackdata.com — the exporter appends /v1/traces.
+  # Ignored when `existingSecret` is set, which must then carry
+  # BETTER_STACK_OTLP_ENDPOINT.
+  endpoint: ""
+  # -- Ingest source token, sent as `Authorization: Bearer`. Ignored when
+  # `existingSecret` is set, which must then carry BETTER_STACK_SOURCE_TOKEN.
+  token: ""
+  # -- The service.name resource attribute on exported spans.
+  serviceName: "notifbuddy-backend"
 
 # Optional integrations. Each is off until its credentials are set, and the
 # app reports it as "not configured" rather than failing.
