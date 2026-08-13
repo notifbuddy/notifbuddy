@@ -10,7 +10,7 @@ import (
 	"xolo/backend/internal/api"
 	"xolo/backend/internal/auth"
 	"xolo/backend/internal/billing"
-	"xolo/backend/internal/featureflags"
+	"xolo/backend/internal/config"
 	"xolo/backend/internal/integrations"
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
@@ -32,11 +32,11 @@ type Handler struct {
 	integrations *integrations.Service
 	billing      *billing.Service
 	store        *store.Store
-	flags        featureflags.Flags
+	flags        config.FeatureFlags
 }
 
 // New builds the API handler with its service dependencies.
-func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store, flags featureflags.Flags) *Handler {
+func New(authService *auth.Service, intgService *integrations.Service, billingService *billing.Service, st *store.Store, flags config.FeatureFlags) *Handler {
 	return &Handler{auth: authService, integrations: intgService, billing: billingService, store: st, flags: flags}
 }
 

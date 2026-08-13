@@ -42,7 +42,7 @@ function unset(...vals: Array<string | undefined>): boolean {
 
 export default defineConfig(({ mode }) => {
 	// Prefer explicit PUBLIC_* from the environment (CI / Helm bake). Otherwise
-	// load config/dashboard + featureflags for NB_ENV (default local).
+	// load config/dashboard for NB_ENV (default local).
 	// Empty string counts as set (Helm leaves URLs empty for runtime inject).
 	const fileEnv = loadEnv(mode, process.cwd(), '');
 	const nbEnv = process.env.NB_ENV || fileEnv.NB_ENV || 'local';

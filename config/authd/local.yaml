@@ -20,8 +20,8 @@ cors:
     - "http://localhost:5173"
 
 github:
-  # Required when config/featureflags/${NB_ENV}.yaml has github_oauth_login: true
-  # (local/prod). Callback: <auth.base_url>/api/auth/callback/github
+  # Required when featureflags.github_oauth_login below is true.
+  # Callback: <auth.base_url>/api/auth/callback/github
   client_id: "${GITHUB_CLIENT_ID}"
   client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
 
@@ -30,3 +30,6 @@ email:
   from: "notifbuddy <auth@notifications.notifbuddy.com>"
   dashboard_url: "http://localhost:5173" # welcome email CTA target
   community_slack_url: "https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw"
+
+featureflags:
+  github_oauth_login: true

@@ -34,6 +34,16 @@ type Config struct {
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 	Stripe     StripeConfig     `yaml:"stripe"`
 	Billing    BillingConfig    `yaml:"billing"`
+
+	FeatureFlags FeatureFlags `yaml:"featureflags"`
+}
+
+// FeatureFlags gates optional product surfaces. Each flag defaults to false, so
+// a config that omits the block ships nothing extra.
+type FeatureFlags struct {
+	// DeveloperSettings gates the Organization Developer card and the routes
+	// behind it.
+	DeveloperSettings bool `yaml:"developer_settings"`
 }
 
 // OTelConfig controls optional OpenTelemetry trace export (Better Stack OTLP).

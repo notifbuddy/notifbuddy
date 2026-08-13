@@ -121,3 +121,6 @@ stripe:
   # The per-seat monthly Price (price_...) for "NotifBuddy Pro" ($9.99/mo),
   # created once in the Stripe dashboard (test mode).
   price_id: "price_1TqWa7E2Q2xv6Jme2jStvy93" # NB: the price_... id, not the prod_... product id
+
+featureflags:
+  developer_settings: true

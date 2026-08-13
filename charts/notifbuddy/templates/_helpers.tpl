@@ -222,5 +222,12 @@ rendered without cluster access — which is why GitOps users must set
 {{- if .Values.integrations.email.enabled -}}
   {{- $_ := set $out "RESEND_API_KEY" (required "notifbuddy: integrations.email.resendApiKey is required when email is enabled" .Values.integrations.email.resendApiKey) -}}
 {{- end -}}
+{{- if .Values.logging.axiom.enabled -}}
+  {{- $_ := set $out "AXIOM_TOKEN" (required "notifbuddy: logging.axiom.token is required when Axiom log shipping is enabled" .Values.logging.axiom.token) -}}
+{{- end -}}
+{{- if .Values.otel.enabled -}}
+  {{- $_ := set $out "BETTER_STACK_OTLP_ENDPOINT" (required "notifbuddy: otel.endpoint is required when trace export is enabled" .Values.otel.endpoint) -}}
+  {{- $_ := set $out "BETTER_STACK_SOURCE_TOKEN" (required "notifbuddy: otel.token is required when trace export is enabled" .Values.otel.token) -}}
+{{- end -}}
 {{- toYaml $out -}}
 {{- end -}}

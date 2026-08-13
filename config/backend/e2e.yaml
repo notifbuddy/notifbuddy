@@ -83,3 +83,6 @@ stripe:
   api_key: ""
   webhook_secret: ""
   price_id: ""
+
+featureflags:
+  developer_settings: true
