@@ -1,11 +1,11 @@
 # Dockerfile for authd. Build from the **repo root**:
 #   docker build -f authd/Dockerfile .
-FROM node:25-slim AS deps
+FROM node:26-slim AS deps
 WORKDIR /app
 COPY authd/package.json authd/package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:25-slim
+FROM node:26-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
