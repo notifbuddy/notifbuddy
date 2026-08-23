@@ -55,6 +55,54 @@ jobs:
           esac
           echo "releasing $tag"
 
+  # CLI binaries + Homebrew formula (goreleaser, from cli/). Rides the same
+  # product tag as the images; publishes archives onto the tag's GitHub
+  # release and pushes the formula to notifbuddy/homebrew-tap. The tap push
+  # uses the same notifbuddy-ci GitHub App as the iac PR below — no PAT.
+  cli:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # goreleaser uploads release assets
+      id-token: write # Infisical OIDC (App creds)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Fetch GitHub App creds from Infisical (OIDC)
+        uses: Infisical/secrets-action@v1.0.16
+        with:
+          method: oidc
+          identity-id: cfd37faa-b0db-46d6-8a16-a3fc85ff9ebf # notifbuddy-app-ci
+          project-slug: notifbuddy-58-th
+          env-slug: prod
+          secret-path: /ci
+          export-type: env
+
+      - name: Mint cross-repo App token for notifbuddy/homebrew-tap
+        id: taptoken
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.NOTIFBUDDY_CI_APP_ID }}
+          private-key: ${{ env.NOTIFBUDDY_CI_PRIVATE_KEY }}
+          owner: notifbuddy
+          repositories: homebrew-tap
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          workdir: cli
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.taptoken.outputs.token }}
+
   build:
     needs: validate
     runs-on: ${{ matrix.runner }}

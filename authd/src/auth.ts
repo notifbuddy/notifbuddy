@@ -6,7 +6,7 @@
 // Sign-in is GitHub OAuth only (featureflags in config/authd). Preview uses oAuthProxy
 // so GitHub only ever callbacks to production auth.notifbuddy.com.
 import { betterAuth } from 'better-auth';
-import { oAuthProxy, organization } from 'better-auth/plugins';
+import { bearer, deviceAuthorization, oAuthProxy, organization } from 'better-auth/plugins';
 import pg from 'pg';
 import { config, featureFlags } from './config.ts';
 import { sendEmail } from './email.ts';
@@ -19,6 +19,13 @@ if (!featureFlags.github_oauth_login) {
 }
 
 const plugins: Parameters<typeof betterAuth>[0]['plugins'] = [
+	bearer(),
+	deviceAuthorization({
+		verificationUri: config.device_auth?.verification_url || '/device',
+		expiresIn: '15m',
+		interval: '5s',
+		validateClient: async (clientId) => clientId === 'notifbuddy-cli',
+	}),
 	organization({
 		sendInvitationEmail: async ({ email, inviter, organization: org, invitation }) => {
 			const url = `${config.auth.base_url}/accept-invitation/${invitation.id}`;

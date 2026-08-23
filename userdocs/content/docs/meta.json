@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "getting-started",
+    "cli",
     "integrations",
     "templates",
     "self-host",

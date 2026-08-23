@@ -1,0 +1,7 @@
+# ogen generator config for the CLI client. Mirrors backend/ogen.yml: only the
+# JSON operations are generated; browser-redirect flows stay out.
+generator:
+  ignore_not_implemented:
+    - all
+  filters:
+    path_regex: '^/(ping|me|invitations|members|organizations|organization|integrations/status|integrations/\{provider\}/disconnect|integrations/linear|integrations/settings|billing|support)(/.*)?$'

@@ -1,0 +1,74 @@
+---
+title: CLI
+description: Install the notifbuddy CLI and let your coding agent run onboarding.
+---
+
+The `notifbuddy` CLI lets you sign in, connect Slack and Linear, and manage
+channel-creation configs from your terminal. It also bundles a skill that
+teaches coding agents such as Claude Code to run the whole onboarding for you.
+
+## Install
+
+```bash
+brew install notifbuddy/tap/notifbuddy
+```
+
+## Sign in
+
+The CLI uses a browser-based device flow, so it never sees your password:
+
+```bash
+notifbuddy login
+```
+
+Your browser opens the dashboard's approval page with a one-time code. Sign in
+with GitHub if you aren't already, approve the request, and return to your
+terminal.
+
+## Agent-driven onboarding
+
+Install the bundled skill once, then ask your agent to set notifbuddy up:
+
+```bash
+notifbuddy skill install                # Claude Code (~/.claude/skills)
+notifbuddy skill install --agent codex  # Codex (~/.codex/skills)
+```
+
+Then tell your agent "set up notifbuddy." The agent signs you in, connects
+Slack and Linear (each step opens your browser for consent), asks how you want
+channels created, and builds and dry-runs the config with you.
+
+For any other agent, `notifbuddy skill show` prints the skill to stdout.
+
+## Manual use
+
+Every command accepts `--json` for machine-readable output.
+
+```bash
+notifbuddy whoami                 # signed-in user and active organization
+notifbuddy org create "Acme"      # create an organization
+notifbuddy connect slack          # install the Slack app (opens browser)
+notifbuddy connect linear         # authorize Linear (opens browser)
+notifbuddy connect slack --user   # personal connection, actions appear as you
+notifbuddy sync                   # re-sync teams, states, and Slack members
+notifbuddy settings list          # configs + teams + members + sample events
+notifbuddy settings test --sample issue.status_changed --creation-mode status \
+  --trigger-status "In Progress" --name-template 'tkt-${{ linear.issue.identifier }}'
+notifbuddy status                 # connection status for both providers
+```
+
+See [Templates](/templates) for the channel-name template syntax.
+
+## Self-hosted deployments
+
+Point the CLI at your own deployment with flags, environment variables, or a
+config file at `~/.config/notifbuddy/config.yaml`:
+
+```yaml
+api_url: https://api.example.com
+auth_url: https://auth.example.com
+dashboard_url: https://dashboard.example.com
+```
+
+The equivalent environment variables are `NOTIFBUDDY_API_URL`,
+`NOTIFBUDDY_AUTH_URL`, and `NOTIFBUDDY_DASHBOARD_URL`.

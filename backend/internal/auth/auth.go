@@ -1,9 +1,10 @@
 // Package auth validates sessions and manages organizations against authd,
 // the Better Auth service (authd/ in this repo). The browser talks to authd
 // directly for sign-in/sign-up/logout; this package's job is (a) resolving
-// the request's session user from the forwarded cookie and (b) proxying
-// org/member/invitation operations, always on behalf of the caller — every
-// authd call carries the caller's own cookie, never a service credential.
+// the request's session user from the forwarded credentials (browser session
+// cookie, or the CLI's bearer token) and (b) proxying org/member/invitation
+// operations, always on behalf of the caller — every authd call carries the
+// caller's own credentials, never a service credential.
 package auth
 
 import (
@@ -35,7 +36,7 @@ type Service struct {
 
 	// Session cache: get-session (+ active-member) per request would double
 	// every API call's latency, so resolved users are cached briefly, keyed by
-	// a hash of the Cookie header. 60s keeps revocation lag negligible.
+	// a hash of the credential headers. 60s keeps revocation lag negligible.
 	mu    sync.Mutex
 	cache map[string]cachedUser
 }
@@ -152,14 +153,28 @@ func OrgUserFromRequest(r *http.Request) (orgID, userID string) {
 	return "", ""
 }
 
-// resolveUser turns the request's cookies into a SessionUser via authd,
+type credentials struct {
+	cookie string
+	bearer string
+}
+
+func (c credentials) empty() bool { return c.cookie == "" && c.bearer == "" }
+
+func credentialsFromRequest(r *http.Request) credentials {
+	return credentials{
+		cookie: r.Header.Get("Cookie"),
+		bearer: r.Header.Get("Authorization"),
+	}
+}
+
+// resolveUser turns the request's credentials into a SessionUser via authd,
 // consulting the short-lived cache first.
 func (a *Service) resolveUser(r *http.Request) *SessionUser {
-	cookie := r.Header.Get("Cookie")
-	if cookie == "" {
+	creds := credentialsFromRequest(r)
+	if creds.empty() {
 		return nil
 	}
-	key := cacheKey(cookie)
+	key := cacheKey(creds)
 
 	// The SPA sends Cache-Control: no-cache right after changing the active
 	// organization in authd (a change this backend can't observe) — honor it
@@ -173,7 +188,7 @@ func (a *Service) resolveUser(r *http.Request) *SessionUser {
 		a.mu.Unlock()
 	}
 
-	user := a.fetchUser(r.Context(), cookie)
+	user := a.fetchUser(r.Context(), creds)
 
 	a.mu.Lock()
 	// Opportunistic eviction keeps the map from growing without a janitor —
@@ -186,8 +201,8 @@ func (a *Service) resolveUser(r *http.Request) *SessionUser {
 	return user
 }
 
-func cacheKey(cookie string) string {
-	sum := sha256.Sum256([]byte(cookie))
+func cacheKey(creds credentials) string {
+	sum := sha256.Sum256([]byte(creds.cookie + "\x00" + creds.bearer))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -204,9 +219,9 @@ type getSessionResponse struct {
 	} `json:"user"`
 }
 
-func (a *Service) fetchUser(ctx context.Context, cookie string) *SessionUser {
+func (a *Service) fetchUser(ctx context.Context, creds credentials) *SessionUser {
 	var sess getSessionResponse
-	if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/get-session", nil, &sess); err != nil {
+	if err := a.call(ctx, creds, http.MethodGet, "/api/auth/get-session", nil, &sess); err != nil {
 		return nil // unauthenticated or authd unreachable — request proceeds anonymous
 	}
 	if sess.User.ID == "" {
@@ -225,7 +240,7 @@ func (a *Service) fetchUser(ctx context.Context, cookie string) *SessionUser {
 		var member struct {
 			Role string `json:"role"`
 		}
-		if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/organization/get-active-member", nil, &member); err == nil {
+		if err := a.call(ctx, creds, http.MethodGet, "/api/auth/organization/get-active-member", nil, &member); err == nil {
 			su.Role = normalizeRole(member.Role)
 		}
 	}
@@ -251,12 +266,12 @@ type orgListEntry struct {
 // authd scopes the list by the forwarded cookie. Best-effort: nil on error so
 // /me still works without the org list.
 func (a *Service) ListUserOrganizations(ctx context.Context, _ string, limit int) []OrgMembership {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return nil
 	}
 	var orgs []orgListEntry
-	if err := a.call(ctx, cookie, http.MethodGet, "/api/auth/organization/list", nil, &orgs); err != nil {
+	if err := a.call(ctx, creds, http.MethodGet, "/api/auth/organization/list", nil, &orgs); err != nil {
 		slog.ErrorContext(ctx, "auth: list user organizations failed", "error", err)
 		return nil
 	}
@@ -277,9 +292,9 @@ func (a *Service) CreateOrganizationForUser(_ http.ResponseWriter, r *http.Reque
 	if userID == "" {
 		return nil, errors.New("unauthenticated")
 	}
-	cookie := r.Header.Get("Cookie")
-	if cookie == "" {
-		return nil, errors.New("no session cookie")
+	creds := credentialsFromRequest(r)
+	if creds.empty() {
+		return nil, errors.New("no session credentials")
 	}
 	ctx := r.Context()
 
@@ -288,18 +303,18 @@ func (a *Service) CreateOrganizationForUser(_ http.ResponseWriter, r *http.Reque
 		ID string `json:"id"`
 	}
 	body := map[string]any{"name": name, "slug": slugify(name)}
-	if err := a.callWithOrigin(ctx, cookie, origin, http.MethodPost, "/api/auth/organization/create", body, &created); err != nil {
+	if err := a.callWithOrigin(ctx, creds, origin, http.MethodPost, "/api/auth/organization/create", body, &created); err != nil {
 		slog.ErrorContext(ctx, "auth: create organization failed", "error", err)
 		return nil, err
 	}
-	if err := a.callWithOrigin(ctx, cookie, origin, http.MethodPost, "/api/auth/organization/set-active",
+	if err := a.callWithOrigin(ctx, creds, origin, http.MethodPost, "/api/auth/organization/set-active",
 		map[string]any{"organizationId": created.ID}, nil); err != nil {
 		slog.ErrorContext(ctx, "auth: set active organization failed", "org_id", created.ID, "error", err)
 		return nil, err
 	}
-	a.invalidate(cookie)
+	a.invalidate(creds)
 
-	su := a.fetchUser(ctx, cookie)
+	su := a.fetchUser(ctx, creds)
 	if su == nil {
 		return nil, errors.New("session lookup failed after organization create")
 	}
@@ -322,10 +337,10 @@ type fullOrganization struct {
 	} `json:"members"`
 }
 
-func (a *Service) fullOrganization(ctx context.Context, cookie, orgID string) (*fullOrganization, error) {
+func (a *Service) fullOrganization(ctx context.Context, creds credentials, orgID string) (*fullOrganization, error) {
 	var org fullOrganization
 	path := "/api/auth/organization/get-full-organization?organizationId=" + url.QueryEscape(orgID)
-	if err := a.call(ctx, cookie, http.MethodGet, path, nil, &org); err != nil {
+	if err := a.call(ctx, creds, http.MethodGet, path, nil, &org); err != nil {
 		return nil, err
 	}
 	return &org, nil
@@ -333,11 +348,11 @@ func (a *Service) fullOrganization(ctx context.Context, cookie, orgID string) (*
 
 // GetOrganizationName returns the organization's display name.
 func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return "", errors.New("unauthenticated")
 	}
-	org, err := a.fullOrganization(ctx, cookie, orgID)
+	org, err := a.fullOrganization(ctx, creds, orgID)
 	if err != nil {
 		slog.ErrorContext(ctx, "auth: get organization failed", "org_id", orgID, "error", err)
 		return "", err
@@ -347,7 +362,7 @@ func (a *Service) GetOrganizationName(ctx context.Context, orgID string) (string
 
 // UpdateOrganizationName renames the organization and returns the stored name.
 func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string) (string, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return "", errors.New("unauthenticated")
 	}
@@ -355,7 +370,7 @@ func (a *Service) UpdateOrganizationName(ctx context.Context, orgID, name string
 		Name string `json:"name"`
 	}
 	body := map[string]any{"organizationId": orgID, "data": map[string]any{"name": name}}
-	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/update", body, &resp); err != nil {
+	if err := a.call(ctx, creds, http.MethodPost, "/api/auth/organization/update", body, &resp); err != nil {
 		slog.ErrorContext(ctx, "auth: update organization name failed", "org_id", orgID, "error", err)
 		return "", err
 	}
@@ -377,11 +392,11 @@ type Member struct {
 
 // ListOrganizationMembers returns the members of an organization (up to limit).
 func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, limit int) ([]Member, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return nil, errors.New("unauthenticated")
 	}
-	org, err := a.fullOrganization(ctx, cookie, orgID)
+	org, err := a.fullOrganization(ctx, creds, orgID)
 	if err != nil {
 		slog.ErrorContext(ctx, "auth: list organization members failed", "org_id", orgID, "error", err)
 		return nil, err
@@ -408,11 +423,11 @@ func (a *Service) ListOrganizationMembers(ctx context.Context, orgID string, lim
 // UpdateOrganizationMemberRole sets one membership's role. The membership must
 // belong to orgID and must not be the caller's own.
 func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, callerUserID, membershipID, roleSlug string) (Member, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return Member{}, errors.New("unauthenticated")
 	}
-	org, err := a.fullOrganization(ctx, cookie, orgID)
+	org, err := a.fullOrganization(ctx, creds, orgID)
 	if err != nil {
 		return Member{}, ErrMembershipNotFound
 	}
@@ -432,7 +447,7 @@ func (a *Service) UpdateOrganizationMemberRole(ctx context.Context, orgID, calle
 		return Member{}, ErrOwnRole
 	}
 	body := map[string]any{"organizationId": orgID, "memberId": membershipID, "role": roleSlug}
-	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/update-member-role", body, nil); err != nil {
+	if err := a.call(ctx, creds, http.MethodPost, "/api/auth/organization/update-member-role", body, nil); err != nil {
 		slog.ErrorContext(ctx, "auth: update membership role failed", "membership_id", membershipID, "error", err)
 		return Member{}, err
 	}
@@ -472,7 +487,7 @@ func (i invitationEntry) toInvitation() Invitation {
 
 // SendInvitation invites an email to the organization.
 func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, _ string) (*Invitation, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return nil, errors.New("unauthenticated")
 	}
@@ -481,7 +496,7 @@ func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, _ stri
 	}
 	var inv invitationEntry
 	body := map[string]any{"organizationId": orgID, "email": email, "role": role}
-	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/invite-member", body, &inv); err != nil {
+	if err := a.call(ctx, creds, http.MethodPost, "/api/auth/organization/invite-member", body, &inv); err != nil {
 		slog.ErrorContext(ctx, "auth: send invitation failed", "error", err)
 		return nil, err
 	}
@@ -491,13 +506,13 @@ func (a *Service) SendInvitation(ctx context.Context, email, orgID, role, _ stri
 
 // ListInvitations returns up to limit invitations for an organization.
 func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) ([]Invitation, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return nil, errors.New("unauthenticated")
 	}
 	var invs []invitationEntry
 	path := "/api/auth/organization/list-invitations?organizationId=" + url.QueryEscape(orgID)
-	if err := a.call(ctx, cookie, http.MethodGet, path, nil, &invs); err != nil {
+	if err := a.call(ctx, creds, http.MethodGet, path, nil, &invs); err != nil {
 		slog.ErrorContext(ctx, "auth: list invitations failed", "error", err)
 		return nil, err
 	}
@@ -513,7 +528,7 @@ func (a *Service) ListInvitations(ctx context.Context, orgID string, limit int) 
 
 // RevokeInvitation cancels one of an organization's invitations.
 func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID string) (*Invitation, error) {
-	cookie, ok := cookieFromContext(ctx)
+	creds, ok := credsFromContext(ctx)
 	if !ok {
 		return nil, errors.New("unauthenticated")
 	}
@@ -536,7 +551,7 @@ func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID stri
 		Invitation invitationEntry `json:"invitation"`
 	}
 	body := map[string]any{"invitationId": invitationID}
-	if err := a.call(ctx, cookie, http.MethodPost, "/api/auth/organization/cancel-invitation", body, &cancelled); err != nil {
+	if err := a.call(ctx, creds, http.MethodPost, "/api/auth/organization/cancel-invitation", body, &cancelled); err != nil {
 		slog.ErrorContext(ctx, "auth: cancel invitation failed", "invitation_id", invitationID, "error", err)
 		return nil, err
 	}
@@ -550,16 +565,16 @@ func (a *Service) RevokeInvitation(ctx context.Context, orgID, invitationID stri
 
 // --- plumbing ----------------------------------------------------------------
 
-// call performs an authd request with the caller's cookie, decoding a JSON
-// response into out (may be nil). authd error bodies ({"message": ...}) become
-// UserMessageError so handlers can surface them.
-func (a *Service) call(ctx context.Context, cookie, method, path string, body any, out any) error {
-	return a.callWithOrigin(ctx, cookie, originFromContext(ctx), method, path, body, out)
+// call performs an authd request with the caller's credentials, decoding a
+// JSON response into out (may be nil). authd error bodies ({"message": ...})
+// become UserMessageError so handlers can surface them.
+func (a *Service) call(ctx context.Context, creds credentials, method, path string, body any, out any) error {
+	return a.callWithOrigin(ctx, creds, originFromContext(ctx), method, path, body, out)
 }
 
 // callWithOrigin is call with an explicit Origin header (used where the
 // origin comes from the raw request rather than the context).
-func (a *Service) callWithOrigin(ctx context.Context, cookie, origin, method, path string, body any, out any) error {
+func (a *Service) callWithOrigin(ctx context.Context, creds credentials, origin, method, path string, body any, out any) error {
 	var reqBody io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -572,7 +587,12 @@ func (a *Service) callWithOrigin(ctx context.Context, cookie, origin, method, pa
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Cookie", cookie)
+	if creds.cookie != "" {
+		req.Header.Set("Cookie", creds.cookie)
+	}
+	if creds.bearer != "" {
+		req.Header.Set("Authorization", creds.bearer)
+	}
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
@@ -605,23 +625,23 @@ func (a *Service) callWithOrigin(ctx context.Context, cookie, origin, method, pa
 	return nil
 }
 
-// invalidate drops the cached session for a cookie (after org changes that
-// alter the active organization).
-func (a *Service) invalidate(cookie string) {
+// invalidate drops the cached session for a credential set (after org changes
+// that alter the active organization).
+func (a *Service) invalidate(creds credentials) {
 	a.mu.Lock()
-	delete(a.cache, cacheKey(cookie))
+	delete(a.cache, cacheKey(creds))
 	a.mu.Unlock()
 }
 
-// cookieFromContext extracts the request's Cookie header via the HTTP pair
+// credsFromContext extracts the request's credential headers via the HTTP pair
 // stashed by WithSession.
-func cookieFromContext(ctx context.Context) (string, bool) {
+func credsFromContext(ctx context.Context) (credentials, bool) {
 	p, ok := HTTPFromContext(ctx)
 	if !ok || p.R == nil {
-		return "", false
+		return credentials{}, false
 	}
-	c := p.R.Header.Get("Cookie")
-	return c, c != ""
+	c := credentialsFromRequest(p.R)
+	return c, !c.empty()
 }
 
 // originFromContext extracts the request's Origin header (the SPA origin).

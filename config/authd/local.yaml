@@ -31,5 +31,8 @@ email:
   dashboard_url: "http://localhost:5173" # welcome email CTA target
   community_slack_url: "https://join.slack.com/t/notifbuddyworkspace/shared_invite/zt-43vft932a-AHlUb6eK5ssnJMBIpkyOWw"
 
+device_auth:
+  verification_url: "http://localhost:5173/device" # dashboard page where the user enters the CLI code
+
 featureflags:
   github_oauth_login: true

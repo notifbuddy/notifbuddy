@@ -4,10 +4,10 @@
 // (http://localhost:8787 in dev, via frontend/.env); an unresolvable value
 // throws there rather than failing later as an opaque fetch error.
 import { createAuthClient } from 'better-auth/client';
-import { organizationClient } from 'better-auth/client/plugins';
+import { deviceAuthorizationClient, organizationClient } from 'better-auth/client/plugins';
 import { authUrl } from '$lib/runtime-config';
 
 export const authClient = createAuthClient({
 	baseURL: authUrl,
-	plugins: [organizationClient()]
+	plugins: [organizationClient(), deviceAuthorizationClient()]
 });

@@ -31,6 +31,9 @@ export interface Config {
 		production_url: string;
 		secret: string;
 	};
+	device_auth?: {
+		verification_url: string;
+	};
 	featureflags: FeatureFlags;
 }
 

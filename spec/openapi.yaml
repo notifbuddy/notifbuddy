@@ -11,6 +11,16 @@ info:
     Integration OAuth connect/callback ARE modelled below as 302 browser redirects
     (documented for the Location contract); they are implemented as plain net/http
     handlers and excluded from ogen codegen. Only JSON operations are spec-generated.
+
+    Authentication (documented, not enforced via `security:` blocks — session
+    resolution happens in middleware, and adding `security:` would force ogen's
+    SecurityHandler onto every generated handler):
+      - Browsers: authd session cookie (`better-auth.session_token`), sent
+        cross-subdomain from `.notifbuddy.com`.
+      - CLI / non-browser: `Authorization: Bearer <token>` where the token is a
+        Better Auth session token obtained via authd's RFC 8628 device flow
+        (`POST /api/auth/device/code` → user approves at the dashboard `/device`
+        page → `POST /api/auth/device/token`). See components.securitySchemes.
   version: 1.0.0
 servers:
   - url: http://localhost:8080
@@ -985,6 +995,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/SupportChatResponse"
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: better-auth.session_token
+      description: Browser session cookie issued by authd (Better Auth).
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Better Auth session token obtained via authd's device-authorization
+        flow; used by the notifbuddy CLI.
   schemas:
     PongResponse:
       type: object
