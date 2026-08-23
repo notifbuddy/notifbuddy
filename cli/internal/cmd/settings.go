@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -82,69 +81,6 @@ func (a *app) linearSettings(cmd *cobra.Command) (*api.LinearSettingsResponse, e
 	}
 	res, err := c.GetLinearSettings(cmd.Context())
 	return apiResult[api.LinearSettingsResponse](res, err)
-}
-
-func printSettings(cmd *cobra.Command, resp *api.LinearSettingsResponse) error {
-	out := cmd.OutOrStdout()
-	if !resp.Connected {
-		fmt.Fprintln(out, "Linear is not connected at the workspace level — run `notifbuddy connect linear` first.")
-	}
-	teamName := map[string]string{}
-	for _, t := range resp.Teams {
-		teamName[t.TeamId] = t.TeamName
-	}
-	if len(resp.Configs) == 0 {
-		fmt.Fprintln(out, "No configs yet. Create one with `notifbuddy settings create`.")
-	} else {
-		w := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "SETTING_ID\tTEAM\tCREATE\tTRIGGER\tNAME_TEMPLATE\tARCHIVE")
-		for _, cfg := range resp.Configs {
-			trigger := cfg.TriggerStatus.Value
-			if cfg.CreationMode == "condition" {
-				trigger = cfg.ConditionExpr.Value
-			}
-			archive := string(cfg.ArchiveMode.Value)
-			if archive == "" {
-				archive = "manual"
-			}
-			name := teamName[cfg.TeamId]
-			if name == "" {
-				name = cfg.TeamId
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				cfg.SettingId.Value, name, cfg.CreationMode, trigger, cfg.NameTemplate.Value, archive)
-		}
-		if err := w.Flush(); err != nil {
-			return err
-		}
-	}
-	if len(resp.Teams) > 0 {
-		fmt.Fprintln(out, "\nLinear teams (teamId — name — workflow states):")
-		for _, t := range resp.Teams {
-			fmt.Fprintf(out, "  %s — %s —", t.TeamId, t.TeamName)
-			for _, s := range t.States {
-				fmt.Fprintf(out, " %q", s.Name)
-			}
-			fmt.Fprintln(out)
-		}
-	}
-	if len(resp.SlackMembers) > 0 {
-		fmt.Fprintln(out, "\nSlack members (id — name):")
-		for _, m := range resp.SlackMembers {
-			kind := ""
-			if m.IsBot {
-				kind = " (bot)"
-			}
-			fmt.Fprintf(out, "  %s — %s%s\n", m.MemberId, m.Name, kind)
-		}
-	}
-	if len(resp.SampleEvents) > 0 {
-		fmt.Fprintln(out, "\nSample events for `settings test --sample`:")
-		for _, s := range resp.SampleEvents {
-			fmt.Fprintf(out, "  %s — %s\n", s.ID, s.Label)
-		}
-	}
-	return nil
 }
 
 type settingsFlags struct {
@@ -226,10 +162,7 @@ func newSettingsListCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, resp)
-			}
-			return printSettings(cmd, resp)
+			return a.printJSON(cmd, resp)
 		},
 	}
 }
@@ -252,11 +185,7 @@ func newSettingsCreateCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, resp)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Config created.")
-			return printSettings(cmd, resp)
+			return a.printJSON(cmd, resp)
 		},
 	}
 	f.register(cmd)
@@ -290,11 +219,7 @@ func newSettingsUpdateCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, updated)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Config updated.")
-			return printSettings(cmd, updated)
+			return a.printJSON(cmd, updated)
 		},
 	}
 	f.register(cmd)
@@ -316,11 +241,7 @@ func newSettingsDeleteCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, resp)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Config deleted.")
-			return nil
+			return a.printJSON(cmd, resp)
 		},
 	}
 }
@@ -364,17 +285,7 @@ func newSettingsTestCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, result)
-			}
-			out := cmd.OutOrStdout()
-			if result.Error.Value != "" {
-				fmt.Fprintf(out, "Template error: %s\n", result.Error.Value)
-				return nil
-			}
-			fmt.Fprintf(out, "Rendered name:  %s\nWould create:   %v\nWould archive:  %v\n",
-				result.Name, result.WouldCreate, result.WouldArchive)
-			return nil
+			return a.printJSON(cmd, result)
 		},
 	}
 	f.register(cmd)
@@ -469,26 +380,8 @@ func newSettingsValidateCmd(a *app) *cobra.Command {
 				results = append(results, r)
 			}
 
-			if a.jsonOut {
-				if err := a.printJSON(cmd, results); err != nil {
-					return err
-				}
-			} else {
-				w := tabwriter.NewWriter(cmd.OutOrStdout(), 2, 4, 2, ' ', 0)
-				fmt.Fprintln(w, "SETTING_ID\tTEAM\tSAMPLE\tNAME\tCREATE\tARCHIVE\tERROR")
-				for _, r := range results {
-					team := r.TeamName
-					if team == "" {
-						team = r.TeamID
-					}
-					for _, s := range r.Samples {
-						fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\t%v\t%s\n",
-							r.SettingID, team, s.SampleID, s.Name, s.WouldCreate, s.WouldArchive, s.Error)
-					}
-				}
-				if err := w.Flush(); err != nil {
-					return err
-				}
+			if err := a.printJSON(cmd, results); err != nil {
+				return err
 			}
 			if failed {
 				return fmt.Errorf("validation found template errors")

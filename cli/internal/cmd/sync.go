@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -48,19 +47,7 @@ func newWebhooksCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, resp)
-			}
-			if len(resp.Events) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No webhook deliveries recorded yet.")
-				return nil
-			}
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 2, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "RECEIVED\tTYPE\tACTION\tDELIVERY")
-			for _, e := range resp.Events {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.ReceivedAt, e.EventType, e.Action.Value, e.DeliveryId)
-			}
-			return w.Flush()
+			return a.printJSON(cmd, resp)
 		},
 	}
 }

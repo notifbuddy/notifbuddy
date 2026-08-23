@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"text/tabwriter"
-
 	"github.com/spf13/cobra"
 
 	"xolo/cli/internal/api"
@@ -19,19 +16,7 @@ func newStatusCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if a.jsonOut {
-				return a.printJSON(cmd, st)
-			}
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 2, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "PROVIDER\tLEVEL\tCONNECTED\tACCOUNT")
-			for _, in := range st.Integrations {
-				connected := "no"
-				if in.Connected {
-					connected = "yes"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", in.Provider, in.Level, connected, in.Account.Value)
-			}
-			return w.Flush()
+			return a.printJSON(cmd, st)
 		},
 	}
 }
