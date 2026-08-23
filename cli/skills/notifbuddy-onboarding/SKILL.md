@@ -121,7 +121,10 @@ Ask the user, in plain language, per Linear team they care about:
      per active issue; expect more channels in Slack.
    If they pick auto-create, then ask which trigger:
    - "when it reaches a status" → `--creation-mode status --trigger-status "<state name>"`
-   - "when a condition matches" → `--creation-mode condition --condition '<expr>'`
+   - anything more specific → `--creation-mode condition --condition '<expr>'`,
+     where YOU write the expression from their plain-language rule (see
+     "Writing condition expressions" below). Never ask the user for an
+     expression.
 3. **What should channels be named?** → `--name-template`. Templates use
    GitHub-Actions expression syntax over the Linear event, e.g.
    `tkt-${{ linear.issue.identifier }}`. Useful fields:
@@ -140,6 +143,48 @@ notifbuddy settings create --team <teamId> --creation-mode status \
   --trigger-status "In Progress" --name-template 'tkt-${{ linear.issue.identifier }}' \
   --archive-mode status --archive-status "Done" --auto-add U123 --json
 ```
+
+### Writing condition expressions
+
+Users describe rules in plain language; you translate them into the expression
+and prove it with `settings test` before saving. The loop:
+
+1. **Elicit.** Take their sentence, e.g. "only non-marketing issues get
+   channels".
+2. **Clarify what encodes the concept.** "Marketing" could be a label, a team,
+   a project, or a word in the title — ask: "How is an issue marked as
+   marketing — a label, the team, something in the title?" User: "it's a
+   label".
+3. **Check the real shape.** `settings list` returns `sampleEvents[].raw`, the
+   full event envelope JSON — read one to see the exact fields before writing
+   the expression. Labels live at `linear.issue.labels` (objects with a
+   `name`), state at `linear.issue.state.name` / `.type`, priority at
+   `linear.issue.priorityLabel`, event kind at `linear.action`
+   (create/update/remove) and `linear.type`.
+4. **Write it.** For "no marketing label":
+   `!contains(join(linear.issue.labels.*.name), 'marketing')`
+5. **Test it.** Run `settings test --condition '<expr>' --sample <id> --json`
+   and check `wouldCreate` flips the way the user expects. If they have a real
+   issue in mind, test that too (`--event-file` with an envelope from
+   `notifbuddy webhooks --json`). Show the user the outcome in their words:
+   "an issue labeled marketing would NOT get a channel; others would."
+6. **Iterate** until the dry-runs match their intent, then save the config.
+
+Expression language (GitHub-Actions syntax, over the event envelope):
+
+- Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `!`, parentheses.
+  String comparisons are case-insensitive.
+- Property access: `linear.issue.state.name`, index `[0]`, and the
+  object-filter `.*` (e.g. `linear.issue.labels.*.name` → array of names).
+- Functions: `contains(search, item)` (string or array), `startsWith(s, p)`,
+  `endsWith(s, p)`, `format('{0}-{1}', a, b)`, `join(array, sep)`,
+  `fromJSON(s)`.
+- Examples:
+  - urgent only: `linear.issue.priorityLabel == 'Urgent'`
+  - specific label: `contains(linear.issue.labels.*.name, 'incident')`
+  - completed states: `linear.issue.state.type == 'completed'` (archive
+    condition)
+  - title keyword: `contains(linear.issue.title, 'customer')`
 
 ## Step 7 — test before trusting
 
