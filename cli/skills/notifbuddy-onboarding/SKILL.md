@@ -54,43 +54,45 @@ Run `notifbuddy whoami --json`.
 - If the user has no orgs: ask what their organization should be called (usually
   the company/team name), then `notifbuddy org create "<name>" --json`.
 
-## Step 3 — connect Slack (workspace)
+## Step 3 — connect Slack (workspace AND user — both required)
 
-Explain: this installs the notifbuddy app into their Slack workspace so it can
-create and sync channels. The browser opens Slack's consent page; they may need
-a Slack workspace admin. Then run:
+`connect` always takes an explicit `--level`; there is no default. Onboarding
+is not complete until BOTH levels are connected for BOTH providers.
+
+First the workspace level — this installs the notifbuddy app into their Slack
+workspace so it can create and sync channels. The browser opens Slack's consent
+page; they may need a Slack workspace admin:
 
 ```
-notifbuddy connect slack --json
+notifbuddy connect slack --level workspace --json
 ```
 
 The command opens the browser and polls until connected (5-minute default).
 The JSON result includes the connected Slack team in `account`.
 
-## Step 4 — connect Linear (workspace)
-
-Explain: this authorizes notifbuddy against their Linear workspace (read/write)
-so issue events flow in and comments flow back. Then run:
-
-```
-notifbuddy connect linear --json
-```
-
-## Step 5 — personal connections (recommended, optional)
-
-Workspace connections act as the notifbuddy bot. A personal (user-level)
-connection makes messages and reactions the user writes appear as *them* on the
-other side. Offer it, and if accepted run:
+Then the user level — the workspace connection acts as the notifbuddy bot; the
+personal connection makes messages and reactions this user writes appear as
+*them* on the other side:
 
 ```
-notifbuddy connect slack --user --json
-notifbuddy connect linear --user --json
+notifbuddy connect slack --level user --json
 ```
 
-Every teammate can do this later from the dashboard (Settings → Integrations →
-User tab) — mention that.
+## Step 4 — connect Linear (workspace AND user — both required)
 
-## Step 6 — sync and inspect
+Workspace level authorizes notifbuddy against their Linear workspace
+(read/write) so issue events flow in and comments flow back; user level
+attributes their actions to them:
+
+```
+notifbuddy connect linear --level workspace --json
+notifbuddy connect linear --level user --json
+```
+
+Teammates connect their own user level later from the dashboard (Settings →
+Integrations → User tab) — mention that at wrap-up.
+
+## Step 5 — sync and inspect
 
 ```
 notifbuddy sync --json
@@ -105,7 +107,7 @@ notifbuddy settings list --json
 - `sampleEvents[]` — sample event ids for dry-runs.
 - `configs[]` — existing configs (a team can have at most ONE config).
 
-## Step 7 — create the first channel-creation config
+## Step 6 — create the first channel-creation config
 
 Ask the user, in plain language, per Linear team they care about:
 
@@ -133,7 +135,7 @@ notifbuddy settings create --team <teamId> --creation-mode status \
   --archive-mode status --archive-status "Done" --auto-add U123 --json
 ```
 
-## Step 8 — test before trusting
+## Step 7 — test before trusting
 
 Dry-run a draft against a sample event BEFORE creating it, and show the user
 the result:
@@ -161,10 +163,10 @@ as the final gate of onboarding, and any time after editing configs. To re-test
 one saved config against one event, `settings test` also accepts
 `--setting-id <id>` (flags you pass override the saved fields).
 
-## Step 9 — wrap up
+## Step 8 — wrap up
 
 Confirm with `notifbuddy status --json` that both providers show
-`connected: true` at the workspace level and that
+`connected: true` at BOTH the workspace and user levels (four entries) and that
 `notifbuddy settings validate --json` passes, then tell the user:
 
 - The dashboard lives at https://dashboard.notifbuddy.com (self-host: their own

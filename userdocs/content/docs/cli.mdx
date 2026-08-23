@@ -47,9 +47,10 @@ Every command accepts `--json` for machine-readable output.
 ```bash
 notifbuddy whoami                 # signed-in user and active organization
 notifbuddy org create "Acme"      # create an organization
-notifbuddy connect slack          # install the Slack app (opens browser)
-notifbuddy connect linear         # authorize Linear (opens browser)
-notifbuddy connect slack --user   # personal connection, actions appear as you
+notifbuddy connect slack --level workspace   # install the Slack app (opens browser)
+notifbuddy connect slack --level user        # personal connection, actions appear as you
+notifbuddy connect linear --level workspace  # authorize Linear (opens browser)
+notifbuddy connect linear --level user       # personal Linear connection
 notifbuddy sync                   # re-sync teams, states, and Slack members
 notifbuddy settings list          # configs + teams + members + sample events
 notifbuddy settings test --sample issue.status_changed --creation-mode status \

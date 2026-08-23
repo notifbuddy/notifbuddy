@@ -11,8 +11,10 @@ brew install notifbuddy/tap/notifbuddy
 ```
 notifbuddy login              # sign in via your browser (device flow)
 notifbuddy org create "Acme"  # first run only
-notifbuddy connect slack      # install the Slack app (opens browser)
-notifbuddy connect linear     # authorize Linear (opens browser)
+notifbuddy connect slack --level workspace   # install the Slack app (opens browser)
+notifbuddy connect slack --level user        # your personal Slack connection
+notifbuddy connect linear --level workspace  # authorize Linear (opens browser)
+notifbuddy connect linear --level user       # your personal Linear connection
 notifbuddy settings create --team <teamId> --creation-mode status \
   --trigger-status "In Progress" --name-template 'tkt-${{ linear.issue.identifier }}'
 ```

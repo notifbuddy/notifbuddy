@@ -10,13 +10,13 @@ import (
 )
 
 func newConnectCmd(a *app) *cobra.Command {
-	var userLevel bool
+	var level string
 	var noWait bool
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		Use:       "connect <slack|linear>",
+		Use:       "connect <slack|linear> --level <workspace|user>",
 		Short:     "Connect an integration (opens your browser)",
-		Long:      "Starts the provider OAuth flow in your browser. Workspace level installs the org-wide connection; --user connects your personal account so actions are attributed to you.",
+		Long:      "Starts the provider OAuth flow in your browser. --level workspace installs the org-wide connection; --level user connects your personal account so actions are attributed to you. Full onboarding needs both levels for both providers.",
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"slack", "linear"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -24,9 +24,8 @@ func newConnectCmd(a *app) *cobra.Command {
 			if provider != "slack" && provider != "linear" {
 				return fmt.Errorf("unknown provider %q (want slack or linear)", provider)
 			}
-			level := "workspace"
-			if userLevel {
-				level = "user"
+			if level != "workspace" && level != "user" {
+				return fmt.Errorf("invalid --level %q (want workspace or user)", level)
 			}
 
 			if st, err := a.integrationStatus(cmd); err == nil {
@@ -78,8 +77,9 @@ func newConnectCmd(a *app) *cobra.Command {
 			return fmt.Errorf("timed out waiting for %s to connect — check the browser flow or run `notifbuddy status`", provider)
 		},
 	}
-	cmd.Flags().BoolVar(&userLevel, "user", false, "connect your personal account instead of the workspace")
+	cmd.Flags().StringVar(&level, "level", "", "connection level: workspace (org-wide) or user (personal)")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "start the browser flow and exit without waiting")
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "how long to wait for the connection")
+	_ = cmd.MarkFlagRequired("level")
 	return cmd
 }
