@@ -112,10 +112,16 @@ notifbuddy settings list --json
 Ask the user, in plain language, per Linear team they care about:
 
 1. **Which team?** (map name → `teamId` from `teams[]`)
-2. **When should a Slack channel be created for an issue?**
+2. **How should channels get created?** Present exactly this choice first:
+   - **Manual — less noisy.** A channel is created only when someone asks:
+     @notifbuddy on the issue, or you (the agent) on their request. Nothing
+     appears in Slack until it's wanted. → `--creation-mode manual`
+   - **Auto-create — more noisy.** A channel is created for every issue that
+     meets a trigger, with no one asking. Good for teams that want a channel
+     per active issue; expect more channels in Slack.
+   If they pick auto-create, then ask which trigger:
    - "when it reaches a status" → `--creation-mode status --trigger-status "<state name>"`
    - "when a condition matches" → `--creation-mode condition --condition '<expr>'`
-   - "only when someone asks (@notifbuddy)" → `--creation-mode manual`
 3. **What should channels be named?** → `--name-template`. Templates use
    GitHub-Actions expression syntax over the Linear event, e.g.
    `tkt-${{ linear.issue.identifier }}`. Useful fields:
