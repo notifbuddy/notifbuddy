@@ -135,7 +135,8 @@ notifbuddy settings create --team <teamId> --creation-mode status \
 
 ## Step 8 — test before trusting
 
-Dry-run the config against a sample event and show the user the result:
+Dry-run a draft against a sample event BEFORE creating it, and show the user
+the result:
 
 ```
 notifbuddy settings test --sample issue.status_changed \
@@ -147,10 +148,24 @@ The JSON reports the rendered `name`, `wouldCreate`, `wouldArchive`, and any
 template `error`. If there is an error, fix the template and re-test before
 saving changes with `settings update`.
 
+After configs are saved, validate them in one shot:
+
+```
+notifbuddy settings validate --json
+```
+
+This runs every saved config against every sample event and exits non-zero if
+any template or condition has an error — the JSON lists per-config, per-sample
+results (`ok`, rendered `name`, `wouldCreate`, `wouldArchive`, `error`). Use it
+as the final gate of onboarding, and any time after editing configs. To re-test
+one saved config against one event, `settings test` also accepts
+`--setting-id <id>` (flags you pass override the saved fields).
+
 ## Step 9 — wrap up
 
 Confirm with `notifbuddy status --json` that both providers show
-`connected: true` at the workspace level, then tell the user:
+`connected: true` at the workspace level and that
+`notifbuddy settings validate --json` passes, then tell the user:
 
 - The dashboard lives at https://dashboard.notifbuddy.com (self-host: their own
   URL) — team members sign in there with GitHub and connect their personal

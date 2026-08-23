@@ -54,6 +54,7 @@ notifbuddy sync                   # re-sync teams, states, and Slack members
 notifbuddy settings list          # configs + teams + members + sample events
 notifbuddy settings test --sample issue.status_changed --creation-mode status \
   --trigger-status "In Progress" --name-template 'tkt-${{ linear.issue.identifier }}'
+notifbuddy settings validate      # dry-run every saved config, non-zero exit on errors
 notifbuddy status                 # connection status for both providers
 ```
 
