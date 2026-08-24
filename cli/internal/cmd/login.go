@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -26,8 +25,8 @@ func newLoginCmd(a *app) *cobra.Command {
 				return err
 			}
 			verifyURL := dc.VerificationURIComplete
-			if verifyURL == "" || strings.HasPrefix(verifyURL, "/") {
-				verifyURL = a.dashboardURL() + "/device?user_code=" + url.QueryEscape(dc.UserCode)
+			if verifyURL == "" {
+				verifyURL = dc.VerificationURI + "?user_code=" + url.QueryEscape(dc.UserCode)
 			}
 
 			errOut := cmd.ErrOrStderr()
