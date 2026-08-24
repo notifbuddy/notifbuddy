@@ -1,0 +1,57 @@
+# goreleaser config for the notifbuddy CLI. Runs from cli/ on the same
+# vMAJOR.MINOR.PATCH tags as the container release (see
+# .github/workflows/release.yml, job `cli`). Publishes archives to the GitHub
+# release and the Homebrew formula to notifbuddy/homebrew-tap.
+version: 2
+
+project_name: notifbuddy
+
+builds:
+  - main: ./cmd/notifbuddy
+    binary: notifbuddy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X xolo/cli/internal/cmd.Version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: README.md
+      - src: skills/**/*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs", "^test", "^ci", "^chore", "^style"]
+
+brews:
+  - name: notifbuddy
+    repository:
+      owner: notifbuddy
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://notifbuddy.com
+    description: Two-way Linear <-> Slack sync, from your terminal
+    license: Apache-2.0
+    test: |
+      system "#{bin}/notifbuddy", "--version"
+    caveats: |
+      Sign in with:
+        notifbuddy login
+
+      Let Claude (or another coding agent) run your onboarding:
+        notifbuddy skill install
+      then ask the agent to "set up notifbuddy".

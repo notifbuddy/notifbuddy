@@ -1,0 +1,40 @@
+name: CLI CI
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["cli/**", "spec/**", ".github/workflows/cli-ci.yml"]
+  pull_request:
+    paths: ["cli/**", "spec/**", ".github/workflows/cli-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: vet + build + tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      - name: generated client is current
+        run: |
+          go generate ./...
+          git diff --exit-code -- internal/api

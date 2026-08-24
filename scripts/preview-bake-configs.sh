@@ -42,7 +42,8 @@ yq -i "
   .auth.cookie_domain = \".${zone}\" |
   .auth.cookie_prefix = \"${prefix}\" |
   .cors.trusted_origins = [\"${dash}\"] |
-  .email.dashboard_url = \"${dash}\"
+  .email.dashboard_url = \"${dash}\" |
+  .device_auth.verification_url = \"${dash}/device\"
 " "$authd"
 
 yq -i "

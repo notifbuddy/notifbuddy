@@ -65,7 +65,8 @@
 	// create-organization step. /interrupted is a bare branded board (API redirects).
 	$effect(() => {
 		const path = page.url.pathname;
-		if (user && !user.organizationId && path !== '/' && path !== '/interrupted') goto('/');
+		if (user && !user.organizationId && path !== '/' && path !== '/interrupted' && path !== '/device')
+			goto('/');
 	});
 </script>
 
@@ -94,9 +95,10 @@
      (the app's original single mode) until the user toggles. -->
 <ModeWatcher defaultMode="dark" />
 
-{#if page.url.pathname === '/interrupted'}
-	<!-- Full-bleed Quiet error board (API OAuth failures). Never wrap in AppShell;
-	     don't wait on session either — this page is safe signed-out.
+{#if page.url.pathname === '/interrupted' || page.url.pathname === '/device'}
+	<!-- Full-bleed standalone boards: the Quiet error board (API OAuth failures)
+	     and the CLI device-approval page. Never wrap in AppShell; don't wait on
+	     session either — both handle signed-out themselves.
 	     Path is /interrupted not /error — SvelteKit reserves /error for +error.svelte. -->
 	{@render children()}
 {:else if user === undefined}
