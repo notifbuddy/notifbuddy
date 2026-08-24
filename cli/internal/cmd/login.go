@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -25,10 +24,7 @@ func newLoginCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			verifyURL := dc.VerificationURIComplete
-			if verifyURL == "" || strings.HasPrefix(verifyURL, "/") {
-				verifyURL = a.dashboardURL() + "/device?user_code=" + url.QueryEscape(dc.UserCode)
-			}
+			verifyURL := a.dashboardURL() + "/device?user_code=" + url.QueryEscape(dc.UserCode)
 
 			errOut := cmd.ErrOrStderr()
 			fmt.Fprintf(errOut, "First, copy your one-time code: %s\n", dc.UserCode)
