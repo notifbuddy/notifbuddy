@@ -24,7 +24,10 @@ func newLoginCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			verifyURL := a.dashboardURL() + "/device?user_code=" + url.QueryEscape(dc.UserCode)
+			verifyURL := dc.VerificationURIComplete
+			if verifyURL == "" {
+				verifyURL = dc.VerificationURI + "?user_code=" + url.QueryEscape(dc.UserCode)
+			}
 
 			errOut := cmd.ErrOrStderr()
 			fmt.Fprintf(errOut, "First, copy your one-time code: %s\n", dc.UserCode)
