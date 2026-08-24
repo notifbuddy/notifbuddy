@@ -7,6 +7,7 @@ tool github.com/ogen-go/ogen/cmd/ogen
 require (
 	github.com/go-faster/errors v0.7.1
 	github.com/go-faster/jx v1.2.0
+	github.com/joho/godotenv v1.5.1
 	github.com/ogen-go/ogen v1.23.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0

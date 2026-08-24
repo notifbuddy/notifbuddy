@@ -52,3 +52,7 @@ dashboard_url: https://dashboard.example.com
 Source lives in the [notifbuddy monorepo](https://github.com/notifbuddy/notifbuddy)
 under `cli/`. The typed API client is generated from `spec/openapi.yaml`
 (`make gen-cli`); build with `make build-cli`.
+
+The CLI reads a `.env` next to the binary. For testing against a local stack,
+drop `NOTIFBUDDY_ENV=local` in `cli/bin/.env` — defaults switch to
+localhost:8080/8787/5173 while the installed prod binary stays untouched.

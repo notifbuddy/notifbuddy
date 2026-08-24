@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -25,10 +26,30 @@ func Dir() string {
 	return filepath.Join(home, ".config", "notifbuddy")
 }
 
+const (
+	LocalAPIURL       = "http://localhost:8080"
+	LocalAuthURL      = "http://localhost:8787"
+	LocalDashboardURL = "http://localhost:5173"
+)
+
+func loadDotenv() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	_ = godotenv.Load(filepath.Join(filepath.Dir(exe), ".env"))
+}
+
 func Init(v *viper.Viper, explicitFile string) error {
-	v.SetDefault("api_url", DefaultAPIURL)
-	v.SetDefault("auth_url", DefaultAuthURL)
-	v.SetDefault("dashboard_url", DefaultDashboardURL)
+	loadDotenv()
+
+	apiURL, authURL, dashURL := DefaultAPIURL, DefaultAuthURL, DefaultDashboardURL
+	if os.Getenv("NOTIFBUDDY_ENV") == "local" {
+		apiURL, authURL, dashURL = LocalAPIURL, LocalAuthURL, LocalDashboardURL
+	}
+	v.SetDefault("api_url", apiURL)
+	v.SetDefault("auth_url", authURL)
+	v.SetDefault("dashboard_url", dashURL)
 
 	v.SetEnvPrefix("NOTIFBUDDY")
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
