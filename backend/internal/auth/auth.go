@@ -236,9 +236,6 @@ func (a *Service) fetchUser(ctx context.Context, creds credentials) *SessionUser
 		ProfilePictureURL: sess.User.Image,
 		OrgID:             sess.Session.ActiveOrganizationID,
 	}
-	if su.OrgID == "" {
-		su.OrgID = a.activateOnlyOrganization(ctx, creds)
-	}
 	if su.OrgID != "" {
 		var member struct {
 			Role string `json:"role"`
@@ -248,25 +245,6 @@ func (a *Service) fetchUser(ctx context.Context, creds credentials) *SessionUser
 		}
 	}
 	return su
-}
-
-// activateOnlyOrganization handles a session whose active organization is
-// unset even though the user has exactly one membership — e.g. a browser
-// session created mid-signup before the org existed, then the org created
-// from another session (the CLI). Auto-activating the sole org keeps such
-// sessions usable without a trip through the dashboard's org picker.
-// Best-effort: returns "" when the user has zero or several orgs, or on error.
-func (a *Service) activateOnlyOrganization(ctx context.Context, creds credentials) string {
-	var orgs []orgListEntry
-	if err := a.call(ctx, creds, http.MethodGet, "/api/auth/organization/list", nil, &orgs); err != nil || len(orgs) != 1 {
-		return ""
-	}
-	if err := a.call(ctx, creds, http.MethodPost, "/api/auth/organization/set-active",
-		map[string]any{"organizationId": orgs[0].ID}, nil); err != nil {
-		slog.WarnContext(ctx, "auth: auto set-active organization failed", "org_id", orgs[0].ID, "error", err)
-		return ""
-	}
-	return orgs[0].ID
 }
 
 // --- organizations -----------------------------------------------------------

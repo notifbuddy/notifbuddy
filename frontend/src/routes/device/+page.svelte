@@ -5,24 +5,61 @@
 	import GithubIcon from '$lib/icons/github.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import TerminalIcon from '@lucide/svelte/icons/terminal';
+	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { page } from '$app/state';
+	import { api } from '$lib/api/client';
 	import { authClient } from '$lib/auth-client';
-	import { userStore } from '$lib/user.svelte';
+	import { userStore, switchOrg, type User } from '$lib/user.svelte';
 
 	const user = $derived(userStore.user);
+
+	// The CLI session is minted only when the code is approved, so approval is
+	// gated on the browser session having an active organization — that way the
+	// CLI never starts life org-less.
+	const needsSelectOrg = $derived(
+		!!user && !user.organizationId && (user.organizations?.length ?? 0) > 0
+	);
+	const needsCreateOrg = $derived(
+		!!user && !user.organizationId && (user.organizations?.length ?? 0) === 0
+	);
 
 	let code = $state(page.url.searchParams.get('user_code') ?? '');
 	let step = $state<'enter' | 'confirm' | 'approved' | 'denied'>('enter');
 	let busy = $state(false);
 	let errorMsg = $state<string | null>(null);
 
+	let selectingOrgId = $state<string | null>(null);
+	let orgName = $state('');
+	let creatingOrg = $state(false);
+
 	userStore.load();
 
 	async function signInHere() {
 		const back = new URL(window.location.href);
 		await authClient.signIn.social({ provider: 'github', callbackURL: back.toString() });
+	}
+
+	async function chooseOrg(orgId: string) {
+		selectingOrgId = orgId;
+		await switchOrg(orgId);
+	}
+
+	async function submitCreateOrg(e: SubmitEvent) {
+		e.preventDefault();
+		creatingOrg = true;
+		errorMsg = null;
+		const { data, error: reqError } = await api.POST('/organizations', {
+			body: { name: orgName.trim() }
+		});
+		creatingOrg = false;
+		if (reqError || !data) {
+			const msg = (reqError as { message?: string })?.message;
+			errorMsg = msg?.trim() ? msg : 'Could not create the organization. Please try again.';
+			return;
+		}
+		userStore.user = data as User;
 	}
 
 	function normalized(): string {
@@ -83,6 +120,10 @@
 					CLI authorized
 				{:else if step === 'denied'}
 					Request denied
+				{:else if needsSelectOrg}
+					Choose an organization
+				{:else if needsCreateOrg}
+					Create your organization
 				{:else}
 					Authorize the notifbuddy CLI
 				{/if}
@@ -92,6 +133,10 @@
 					You're signed in on this device. Return to your terminal to continue.
 				{:else if step === 'denied'}
 					The sign-in request was denied. You can close this tab.
+				{:else if needsSelectOrg}
+					The CLI works within an organization — pick the one to use.
+				{:else if needsCreateOrg}
+					The CLI works within an organization — name yours to continue.
 				{:else if step === 'confirm'}
 					Only approve if you just ran <code class="font-mono">notifbuddy login</code> yourself.
 				{:else}
@@ -108,6 +153,46 @@
 					<GithubIcon data-icon="inline-start" size={18} />
 					Continue with GitHub
 				</Button>
+			{:else if needsSelectOrg}
+				<div class="flex flex-col gap-2">
+					{#each user?.organizations ?? [] as org (org.id)}
+						<Button
+							variant="outline"
+							size="lg"
+							class="justify-start"
+							onclick={() => chooseOrg(org.id)}
+							disabled={selectingOrgId !== null}
+						>
+							{#if selectingOrgId === org.id}
+								<LoaderIcon data-icon="inline-start" class="animate-spin" />
+							{:else}
+								<BuildingIcon data-icon="inline-start" class="text-muted-foreground" />
+							{/if}
+							{org.name}
+						</Button>
+					{/each}
+				</div>
+			{:else if needsCreateOrg}
+				<form class="flex flex-col gap-3" onsubmit={submitCreateOrg}>
+					<input
+						class="border-input bg-background/60 focus-visible:ring-ring rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none"
+						type="text"
+						placeholder="Acme Inc"
+						maxlength="100"
+						bind:value={orgName}
+						disabled={creatingOrg}
+						required
+					/>
+					<Button type="submit" size="lg" disabled={creatingOrg || orgName.trim() === ''}>
+						{#if creatingOrg}
+							<LoaderIcon data-icon="inline-start" class="animate-spin" />
+							Creating…
+						{:else}
+							<BuildingIcon data-icon="inline-start" />
+							Create organization
+						{/if}
+					</Button>
+				</form>
 			{:else if step === 'enter'}
 				<form class="flex flex-col gap-3" onsubmit={verifyCode}>
 					<input

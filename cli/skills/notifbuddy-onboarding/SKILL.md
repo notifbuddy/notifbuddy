@@ -41,18 +41,20 @@ notifbuddy login --json
 ```
 
 The command prints the code and URL on stderr, opens the browser, and blocks
-until approved (15-minute limit). On success the JSON has `status: "logged_in"`,
-`email`, and `organizationId` (empty string if none yet).
+until approved (15-minute limit). The approval page requires an organization:
+a first-time user is asked to name one (or pick one) in the browser BEFORE
+they can approve the code, so a successful login always comes back with
+`status: "logged_in"`, `email`, and a non-empty `organizationId`.
 
-## Step 2 — organization
+## Step 2 — verify the organization
 
-Run `notifbuddy whoami --json`.
+Run `notifbuddy whoami --json` and confirm the active org name with the user.
 
-- If `organizationId` is set: confirm the org name with the user and continue.
-- If empty and `organizations` is non-empty: show the names, ask which to use,
-  then `notifbuddy org switch <name> --json`.
-- If the user has no orgs: ask what their organization should be called (usually
-  the company/team name), then `notifbuddy org create "<name>" --json`.
+- If the user belongs to several organizations and the active one is not the
+  org they want to set up, run `notifbuddy org switch <name> --json`.
+- `organizationId` empty here is unexpected (approval enforces an org) — if it
+  happens, run `notifbuddy org list --json` and use `org switch` or
+  `org create` to fix it before continuing.
 
 ## Step 3 — connect Slack (workspace AND user — both required)
 
