@@ -778,6 +778,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /integrations/slack/members:
+    get:
+      operationId: listSlackMembers
+      summary: List synced Slack workspace members
+      description: |
+        Returns the org's synced Slack member snapshot (bots + humans, with
+        emails where Slack exposes them), whether Slack is connected at the
+        workspace level, and when the snapshot was last synced. Backs the
+        "Import from Slack" invite picker.
+      responses:
+        "200":
+          description: The synced members (empty when nothing synced yet).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackMemberListResponse"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /integrations/linear/settings/test:
     post:
       operationId: testLinearTemplate
@@ -1610,6 +1632,10 @@ components:
           type: string
           description: Display/real name, falling back to the handle.
           example: Claude
+        email:
+          type: string
+          description: The member's email, when Slack exposes it (empty for bots).
+          example: jane@example.com
         iconUrl:
           type: string
           example: https://example.com/avatar.png
@@ -1619,6 +1645,24 @@ components:
         - memberId
         - name
         - isBot
+    SlackMemberListResponse:
+      type: object
+      description: The org's synced Slack member snapshot for the invite picker.
+      properties:
+        connected:
+          type: boolean
+          description: Whether Slack is connected at the workspace level.
+        syncedAt:
+          type: string
+          description: When the snapshot was last synced (RFC 3339); absent when never synced.
+          example: "2026-09-04T10:00:00Z"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlackMember"
+      required:
+        - connected
+        - members
     LinearSettingsResponse:
       type: object
       description: All of an org's Linear configs plus context for the settings UI.

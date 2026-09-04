@@ -146,6 +146,14 @@ type Handler interface {
 	//
 	// GET /members
 	ListMembers(ctx context.Context) (ListMembersRes, error)
+	// ListSlackMembers implements listSlackMembers operation.
+	//
+	// Returns the org's synced Slack member snapshot (bots + humans, with emails where Slack exposes
+	// them), whether Slack is connected at the workspace level, and when the snapshot was last synced.
+	// Backs the "Import from Slack" invite picker.
+	//
+	// GET /integrations/slack/members
+	ListSlackMembers(ctx context.Context) (ListSlackMembersRes, error)
 	// Ping implements ping operation.
 	//
 	// Returns a pong message. Requires an authenticated session — the request must carry a valid authd

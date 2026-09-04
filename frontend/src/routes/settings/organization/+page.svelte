@@ -10,7 +10,9 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Field from '$lib/components/ui/field';
 	import MarbleAvatar from '$lib/components/app/marble-avatar.svelte';
+	import SlackImportDialog from './slack-import-dialog.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+	import ImportIcon from '@lucide/svelte/icons/import';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import MailIcon from '@lucide/svelte/icons/mail';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -215,6 +217,17 @@
 		inviteMsg = `Invited ${inv.email}.`;
 		inviteEmail = '';
 		inviteRole = 'member';
+		loadInvitations();
+	}
+
+	let slackImportOpen = $state(false);
+	const memberEmails = $derived(members?.map((m) => m.email) ?? []);
+	const invitedEmails = $derived(
+		visibleInvitations?.filter((i) => i.state === 'pending').map((i) => i.email) ?? []
+	);
+
+	function onSlackInvited(count: number) {
+		inviteMsg = `Invited ${count} ${count === 1 ? 'person' : 'people'} from Slack.`;
 		loadInvitations();
 	}
 
@@ -583,7 +596,19 @@
 					{/if}
 				</Button>
 			</form>
-			{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<Button type="button" variant="outline" onclick={() => (slackImportOpen = true)}>
+					<ImportIcon data-icon="inline-start" />
+					Import from Slack
+				</Button>
+				{#if inviteMsg}<p class="text-muted-foreground text-sm">{inviteMsg}</p>{/if}
+			</div>
+			<SlackImportDialog
+				bind:open={slackImportOpen}
+				{memberEmails}
+				{invitedEmails}
+				oninvited={onSlackInvited}
+			/>
 
 			<!-- Invitations list -->
 		{#if invitations === undefined}

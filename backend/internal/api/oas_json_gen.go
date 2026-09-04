@@ -4898,6 +4898,12 @@ func (s *SlackMember) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
+		if s.Email.Set {
+			e.FieldStart("email")
+			s.Email.Encode(e)
+		}
+	}
+	{
 		if s.IconUrl.Set {
 			e.FieldStart("iconUrl")
 			s.IconUrl.Encode(e)
@@ -4909,11 +4915,12 @@ func (s *SlackMember) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSlackMember = [4]string{
+var jsonFieldsNameOfSlackMember = [5]string{
 	0: "memberId",
 	1: "name",
-	2: "iconUrl",
-	3: "isBot",
+	2: "email",
+	3: "iconUrl",
+	4: "isBot",
 }
 
 // Decode decodes SlackMember from json.
@@ -4949,6 +4956,16 @@ func (s *SlackMember) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
 			}
+		case "email":
+			if err := func() error {
+				s.Email.Reset()
+				if err := s.Email.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"email\"")
+			}
 		case "iconUrl":
 			if err := func() error {
 				s.IconUrl.Reset()
@@ -4960,7 +4977,7 @@ func (s *SlackMember) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"iconUrl\"")
 			}
 		case "isBot":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				v, err := d.Bool()
 				s.IsBot = bool(v)
@@ -4981,7 +4998,7 @@ func (s *SlackMember) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00001011,
+		0b00010011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -5023,6 +5040,146 @@ func (s *SlackMember) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SlackMember) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SlackMemberListResponse) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SlackMemberListResponse) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("connected")
+		e.Bool(s.Connected)
+	}
+	{
+		if s.SyncedAt.Set {
+			e.FieldStart("syncedAt")
+			s.SyncedAt.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("members")
+		e.ArrStart()
+		for _, elem := range s.Members {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfSlackMemberListResponse = [3]string{
+	0: "connected",
+	1: "syncedAt",
+	2: "members",
+}
+
+// Decode decodes SlackMemberListResponse from json.
+func (s *SlackMemberListResponse) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SlackMemberListResponse to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "connected":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Bool()
+				s.Connected = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"connected\"")
+			}
+		case "syncedAt":
+			if err := func() error {
+				s.SyncedAt.Reset()
+				if err := s.SyncedAt.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"syncedAt\"")
+			}
+		case "members":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				s.Members = make([]SlackMember, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem SlackMember
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Members = append(s.Members, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"members\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SlackMemberListResponse")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000101,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSlackMemberListResponse) {
+					name = jsonFieldsNameOfSlackMemberListResponse[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SlackMemberListResponse) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SlackMemberListResponse) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

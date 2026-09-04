@@ -65,6 +65,10 @@ type ListMembersRes interface {
 	listMembersRes()
 }
 
+type ListSlackMembersRes interface {
+	listSlackMembersRes()
+}
+
 type PingRes interface {
 	pingRes()
 }

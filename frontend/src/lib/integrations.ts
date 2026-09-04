@@ -111,7 +111,25 @@ export type LinearTeamState = {
 };
 
 // A synced Slack workspace member (bot/app or human) for the auto-add pickers.
-export type SlackMember = { memberId: string; name: string; iconUrl?: string; isBot: boolean };
+export type SlackMember = {
+	memberId: string;
+	name: string;
+	email?: string;
+	iconUrl?: string;
+	isBot: boolean;
+};
+
+export type SlackMemberList = {
+	connected: boolean;
+	syncedAt?: string;
+	members: SlackMember[];
+};
+
+export async function fetchSlackMembers(): Promise<SlackMemberList | null> {
+	const { data, error } = await api.GET('/integrations/slack/members');
+	if (error || !data) return null;
+	return data as SlackMemberList;
+}
 
 export type LinearSettingsState = {
 	connected: boolean;

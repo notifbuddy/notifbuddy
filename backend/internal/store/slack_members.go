@@ -12,6 +12,7 @@ type SlackMember struct {
 	MemberID string // Slack U… id (what conversations.invite needs)
 	Name     string // handle / short name
 	RealName string // display / real name
+	Email    string
 	IconURL  string
 	IsBot    bool
 	SyncedAt string // RFC3339
@@ -21,7 +22,7 @@ type SlackMember struct {
 // each alphabetical by display name. Empty slice when nothing synced yet.
 func (s *Store) GetSlackMembers(ctx context.Context, orgID string) ([]SlackMember, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT member_id, name, real_name, icon_url, is_bot, synced_at
+		SELECT member_id, name, real_name, email, icon_url, is_bot, synced_at
 		FROM slack_members
 		WHERE org_id = $1
 		ORDER BY is_bot DESC, COALESCE(NULLIF(real_name, ''), name), member_id
@@ -35,7 +36,7 @@ func (s *Store) GetSlackMembers(ctx context.Context, orgID string) ([]SlackMembe
 	for rows.Next() {
 		var m SlackMember
 		var syncedAt time.Time
-		if err := rows.Scan(&m.MemberID, &m.Name, &m.RealName, &m.IconURL, &m.IsBot, &syncedAt); err != nil {
+		if err := rows.Scan(&m.MemberID, &m.Name, &m.RealName, &m.Email, &m.IconURL, &m.IsBot, &syncedAt); err != nil {
 			return nil, fmt.Errorf("store: scan slack member: %w", err)
 		}
 		m.SyncedAt = syncedAt.UTC().Format(time.RFC3339)
@@ -58,15 +59,16 @@ func (s *Store) ReplaceSlackMembers(ctx context.Context, orgID string, members [
 	keep := make([]string, 0, len(members))
 	for _, m := range members {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO slack_members (org_id, member_id, name, real_name, icon_url, is_bot, synced_at)
-			VALUES ($1, $2, $3, $4, $5, $6, now())
+			INSERT INTO slack_members (org_id, member_id, name, real_name, email, icon_url, is_bot, synced_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 			ON CONFLICT (org_id, member_id) DO UPDATE SET
 				name      = EXCLUDED.name,
 				real_name = EXCLUDED.real_name,
+				email     = EXCLUDED.email,
 				icon_url  = EXCLUDED.icon_url,
 				is_bot    = EXCLUDED.is_bot,
 				synced_at = now()
-		`, orgID, m.MemberID, m.Name, m.RealName, m.IconURL, m.IsBot); err != nil {
+		`, orgID, m.MemberID, m.Name, m.RealName, m.Email, m.IconURL, m.IsBot); err != nil {
 			return fmt.Errorf("store: upsert slack member: %w", err)
 		}
 		keep = append(keep, m.MemberID)

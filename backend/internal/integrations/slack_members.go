@@ -12,8 +12,10 @@ import (
 type SlackMemberView struct {
 	MemberID string `json:"memberId"` // Slack U… id (stored on the config, used to invite)
 	Name     string `json:"name"`     // display / real name, falling back to handle
+	Email    string `json:"email"`
 	IconURL  string `json:"iconUrl"`
 	IsBot    bool   `json:"isBot"`
+	SyncedAt string `json:"syncedAt"`
 }
 
 // SyncSlackMembers fetches the workspace's members via the Slack API and replaces
@@ -39,6 +41,7 @@ func (s *Service) SyncSlackMembers(ctx context.Context, orgID string) error {
 			MemberID: u.ID,
 			Name:     u.Name, // toUser() already prefers real_name over handle
 			RealName: u.Name,
+			Email:    u.Email,
 			IconURL:  u.IconURL,
 			IsBot:    u.IsBot,
 		})
@@ -65,8 +68,10 @@ func (s *Service) GetSlackMembers(ctx context.Context, orgID string) ([]SlackMem
 		out = append(out, SlackMemberView{
 			MemberID: m.MemberID,
 			Name:     name,
+			Email:    m.Email,
 			IconURL:  m.IconURL,
 			IsBot:    m.IsBot,
+			SyncedAt: m.SyncedAt,
 		})
 	}
 	return out, nil
