@@ -202,6 +202,17 @@ func (UnimplementedHandler) ListMembers(ctx context.Context) (r ListMembersRes, 
 	return r, ht.ErrNotImplemented
 }
 
+// ListSlackMembers implements listSlackMembers operation.
+//
+// Returns the org's synced Slack member snapshot (bots + humans, with emails where Slack exposes
+// them), whether Slack is connected at the workspace level, and when the snapshot was last synced.
+// Backs the "Import from Slack" invite picker.
+//
+// GET /integrations/slack/members
+func (UnimplementedHandler) ListSlackMembers(ctx context.Context) (r ListSlackMembersRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // Ping implements ping operation.
 //
 // Returns a pong message. Requires an authenticated session — the request must carry a valid authd

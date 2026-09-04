@@ -437,6 +437,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/slack/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List synced Slack workspace members
+         * @description Returns the org's synced Slack member snapshot (bots + humans, with
+         *     emails where Slack exposes them), whether Slack is connected at the
+         *     workspace level, and when the snapshot was last synced. Backs the
+         *     "Import from Slack" invite picker.
+         */
+        get: operations["listSlackMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/linear/settings/test": {
         parameters: {
             query?: never;
@@ -1082,9 +1105,25 @@ export interface components {
              * @example Claude
              */
             name: string;
+            /**
+             * @description The member's email, when Slack exposes it (empty for bots).
+             * @example jane@example.com
+             */
+            email?: string;
             /** @example https://example.com/avatar.png */
             iconUrl?: string;
             isBot: boolean;
+        };
+        /** @description The org's synced Slack member snapshot for the invite picker. */
+        SlackMemberListResponse: {
+            /** @description Whether Slack is connected at the workspace level. */
+            connected: boolean;
+            /**
+             * @description When the snapshot was last synced (RFC 3339); absent when never synced.
+             * @example 2026-09-04T10:00:00Z
+             */
+            syncedAt?: string;
+            members: components["schemas"]["SlackMember"][];
         };
         /** @description All of an org's Linear configs plus context for the settings UI. */
         LinearSettingsResponse: {
@@ -2156,6 +2195,35 @@ export interface operations {
             };
             /** @description Billing locked — the trial has expired and there is no subscription. */
             402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSlackMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The synced members (empty when nothing synced yet). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackMemberListResponse"];
+                };
+            };
+            /** @description No valid session. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

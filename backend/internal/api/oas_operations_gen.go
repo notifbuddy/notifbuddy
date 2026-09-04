@@ -23,6 +23,7 @@ const (
 	ListInvitationsOperation              OperationName = "ListInvitations"
 	ListLinearWebhooksOperation           OperationName = "ListLinearWebhooks"
 	ListMembersOperation                  OperationName = "ListMembers"
+	ListSlackMembersOperation             OperationName = "ListSlackMembers"
 	PingOperation                         OperationName = "Ping"
 	RegenerateOrganizationAvatarOperation OperationName = "RegenerateOrganizationAvatar"
 	RevokeInvitationOperation             OperationName = "RevokeInvitation"

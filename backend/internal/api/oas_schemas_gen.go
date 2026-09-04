@@ -619,6 +619,7 @@ func (*Error) getMeRes()                 {}
 func (*Error) listInvitationsRes()       {}
 func (*Error) listLinearWebhooksRes()    {}
 func (*Error) listMembersRes()           {}
+func (*Error) listSlackMembersRes()      {}
 func (*Error) pingRes()                  {}
 
 type GetBillingBadRequest Error
@@ -2076,7 +2077,9 @@ type SlackMember struct {
 	// Slack member id (U…); what conversations.invite needs.
 	MemberId string `json:"memberId"`
 	// Display/real name, falling back to the handle.
-	Name    string    `json:"name"`
+	Name string `json:"name"`
+	// The member's email, when Slack exposes it (empty for bots).
+	Email   OptString `json:"email"`
 	IconUrl OptString `json:"iconUrl"`
 	IsBot   bool      `json:"isBot"`
 }
@@ -2089,6 +2092,11 @@ func (s *SlackMember) GetMemberId() string {
 // GetName returns the value of Name.
 func (s *SlackMember) GetName() string {
 	return s.Name
+}
+
+// GetEmail returns the value of Email.
+func (s *SlackMember) GetEmail() OptString {
+	return s.Email
 }
 
 // GetIconUrl returns the value of IconUrl.
@@ -2111,6 +2119,11 @@ func (s *SlackMember) SetName(val string) {
 	s.Name = val
 }
 
+// SetEmail sets the value of Email.
+func (s *SlackMember) SetEmail(val OptString) {
+	s.Email = val
+}
+
 // SetIconUrl sets the value of IconUrl.
 func (s *SlackMember) SetIconUrl(val OptString) {
 	s.IconUrl = val
@@ -2120,6 +2133,48 @@ func (s *SlackMember) SetIconUrl(val OptString) {
 func (s *SlackMember) SetIsBot(val bool) {
 	s.IsBot = val
 }
+
+// The org's synced Slack member snapshot for the invite picker.
+// Ref: #/components/schemas/SlackMemberListResponse
+type SlackMemberListResponse struct {
+	// Whether Slack is connected at the workspace level.
+	Connected bool `json:"connected"`
+	// When the snapshot was last synced (RFC 3339); absent when never synced.
+	SyncedAt OptString     `json:"syncedAt"`
+	Members  []SlackMember `json:"members"`
+}
+
+// GetConnected returns the value of Connected.
+func (s *SlackMemberListResponse) GetConnected() bool {
+	return s.Connected
+}
+
+// GetSyncedAt returns the value of SyncedAt.
+func (s *SlackMemberListResponse) GetSyncedAt() OptString {
+	return s.SyncedAt
+}
+
+// GetMembers returns the value of Members.
+func (s *SlackMemberListResponse) GetMembers() []SlackMember {
+	return s.Members
+}
+
+// SetConnected sets the value of Connected.
+func (s *SlackMemberListResponse) SetConnected(val bool) {
+	s.Connected = val
+}
+
+// SetSyncedAt sets the value of SyncedAt.
+func (s *SlackMemberListResponse) SetSyncedAt(val OptString) {
+	s.SyncedAt = val
+}
+
+// SetMembers sets the value of Members.
+func (s *SlackMemberListResponse) SetMembers(val []SlackMember) {
+	s.Members = val
+}
+
+func (*SlackMemberListResponse) listSlackMembersRes() {}
 
 type SubmitOssApplicationBadRequest Error
 

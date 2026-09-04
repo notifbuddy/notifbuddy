@@ -259,6 +259,38 @@ func (h Handler) GetIntegrationStatus(ctx context.Context) (api.GetIntegrationSt
 	return integrationStatusResponse(h.integrations.Enabled(), statuses), nil
 }
 
+func (h Handler) ListSlackMembers(ctx context.Context) (api.ListSlackMembersRes, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return &api.Error{Message: "unauthorized"}, nil
+	}
+	resp := &api.SlackMemberListResponse{Members: []api.SlackMember{}}
+	if user.OrgID == "" {
+		return resp, nil
+	}
+	statuses, err := h.integrations.Status(ctx, user.OrgID, user.ID)
+	if err != nil {
+		return &api.Error{Message: "failed to read integration status"}, nil
+	}
+	for _, st := range statuses {
+		if st.Provider == "slack" && st.Level == "workspace" {
+			resp.Connected = st.Connected
+		}
+	}
+	members, err := h.integrations.GetSlackMembers(ctx, user.OrgID)
+	if err != nil {
+		slog.ErrorContext(ctx, "httpapi: list slack members failed", "org_id", user.OrgID, "error", err)
+		return &api.Error{Message: "failed to list slack members"}, nil
+	}
+	for _, m := range members {
+		resp.Members = append(resp.Members, toAPISlackMember(m))
+		if m.SyncedAt != "" {
+			resp.SyncedAt = api.NewOptString(m.SyncedAt)
+		}
+	}
+	return resp, nil
+}
+
 // DisconnectIntegration implements `disconnectIntegration`:
 // POST /integrations/{provider}/disconnect. Removes the stored integration at
 // the requested level (default workspace) and returns the refreshed status.
@@ -555,6 +587,9 @@ func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
 // toAPISlackMember maps a synced Slack member to the generated type.
 func toAPISlackMember(m integrations.SlackMemberView) api.SlackMember {
 	out := api.SlackMember{MemberId: m.MemberID, Name: m.Name, IsBot: m.IsBot}
+	if m.Email != "" {
+		out.Email = api.NewOptString(m.Email)
+	}
 	if m.IconURL != "" {
 		out.IconUrl = api.NewOptString(m.IconURL)
 	}

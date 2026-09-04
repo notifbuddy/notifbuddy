@@ -6,4 +6,4 @@ generator:
   ignore_not_implemented:
     - all
   filters:
-    path_regex: '^/(ping|me|invitations|members|organizations|organization|integrations/status|integrations/\{provider\}/disconnect|integrations/linear|integrations/settings|billing|support)(/.*)?$'
+    path_regex: '^/(ping|me|invitations|members|organizations|organization|integrations/status|integrations/slack/members|integrations/\{provider\}/disconnect|integrations/linear|integrations/settings|billing|support)(/.*)?$'

@@ -321,6 +321,9 @@ func (c *httpClient) ListUsers(ctx context.Context, token string) ([]User, error
 			if m.Deleted {
 				continue // deactivated users can't be invited; don't offer them
 			}
+			if m.ID == "USLACKBOT" {
+				continue // reports is_bot=false but conversations.invite rejects it
+			}
 			users = append(users, m.toUser())
 		}
 		cursor = out.Metadata.NextCursor
