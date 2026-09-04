@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import Logo from '$shared/components/logo.svelte';
-	import GithubIcon from '$lib/icons/github.svelte';
+	import SlackIcon from '$lib/icons/slack.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import TerminalIcon from '@lucide/svelte/icons/terminal';
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
@@ -38,7 +38,7 @@
 
 	async function signInHere() {
 		const back = new URL(window.location.href);
-		await authClient.signIn.social({ provider: 'github', callbackURL: back.toString() });
+		await authClient.signIn.social({ provider: 'slack', callbackURL: back.toString() });
 	}
 
 	async function chooseOrg(orgId: string) {
@@ -150,8 +150,8 @@
 				<Skeleton class="h-11 w-full rounded-md" />
 			{:else if !user}
 				<Button onclick={signInHere} size="lg" class="font-medium">
-					<GithubIcon data-icon="inline-start" size={18} />
-					Continue with GitHub
+					<SlackIcon data-icon="inline-start" size={18} />
+					Continue with Slack
 				</Button>
 			{:else if needsSelectOrg}
 				<div class="flex flex-col gap-2">

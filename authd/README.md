@@ -12,7 +12,7 @@ Fully request-driven — no daemons, no cron — so it scales to zero.
 ```sh
 psql -d postgres -c "CREATE DATABASE authd;"
 cp .env.example .env   # fill BETTER_AUTH_SECRET (openssl rand -base64 32)
-                       # and GITHUB_CLIENT_ID/SECRET (GitHub OAuth app)
+                       # and SLACK_CLIENT_SECRET (the shared Slack app)
 npm install
 npm run migrate        # applies the Better Auth schema
 node --env-file=.env src/server.ts
@@ -26,16 +26,18 @@ browser's cookie.
 
 Non-sensitive settings live under the repo-root config tree:
 
-- `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`), including the `featureflags` block: `github_oauth_login` must be true, since GitHub is the only sign-in method
+- `config/authd/${NB_ENV}.yaml` — service settings (`NB_ENV` defaults to `local`)
 
 Override the path with `CONFIG_FILE`. Sensitive values use
 `${VAR}` — resolved at startup; referenced-but-unset is a hard error. `.env`
 holds only those secrets (see `.env.example`).
 
-**Sign-in:** GitHub OAuth only (`github.client_id` / `client_secret` required).
+**Sign-in:** Sign in with Slack (OIDC) only (`slack.client_id` /
+`client_secret` required). The same Slack app as the backend integration — its
+manifest (`backend/manifests/slack.*.yaml`) carries the authd redirect URLs.
 
-**Preview:** Better Auth `oAuthProxy` routes GitHub through production so the
-only registered callback is `https://auth.notifbuddy.com/api/auth/callback/github`.
+**Preview:** Better Auth `oAuthProxy` routes Slack through production so the
+only registered callback is `https://auth.notifbuddy.com/api/auth/callback/slack`.
 Prod + preview share `OAUTH_PROXY_SECRET` (`oauth_proxy` in the YAML). Local
 uses a direct localhost callback (no proxy).
 

@@ -1352,7 +1352,7 @@ type MemberResponse struct {
 	LastName OptString `json:"lastName"`
 	// The member's role slug within the organization, if any.
 	Role OptString `json:"role"`
-	// URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar from
+	// URL of the member's profile picture, if any. For Slack logins this is the user's Slack avatar from
 	// sign-in.
 	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 }
@@ -2587,7 +2587,7 @@ type UserResponse struct {
 	FirstName OptString `json:"firstName"`
 	// The user's last name, if set.
 	LastName OptString `json:"lastName"`
-	// URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar from
+	// URL of the user's profile picture, if any. For Slack logins this is the user's Slack avatar from
 	// sign-in.
 	ProfilePictureUrl OptString `json:"profilePictureUrl"`
 	// The ID of the organization the current session is scoped to, if any.

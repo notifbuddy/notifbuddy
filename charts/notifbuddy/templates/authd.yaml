@@ -71,11 +71,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "notifbuddy.secretName" . }}
                   key: BETTER_AUTH_SECRET
-            - name: GITHUB_CLIENT_SECRET
+            - name: SLACK_LOGIN_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ include "notifbuddy.secretName" . }}
-                  key: GITHUB_CLIENT_SECRET
+                  key: SLACK_LOGIN_CLIENT_SECRET
             {{- if .Values.integrations.email.enabled }}
             - name: RESEND_API_KEY
               valueFrom:
@@ -110,11 +110,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "notifbuddy.secretName" . }}
                   key: BETTER_AUTH_SECRET
-            - name: GITHUB_CLIENT_SECRET
+            - name: SLACK_LOGIN_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ include "notifbuddy.secretName" . }}
-                  key: GITHUB_CLIENT_SECRET
+                  key: SLACK_LOGIN_CLIENT_SECRET
             {{- if .Values.integrations.email.enabled }}
             - name: RESEND_API_KEY
               valueFrom:

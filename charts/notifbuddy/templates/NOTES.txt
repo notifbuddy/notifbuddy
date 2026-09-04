@@ -4,10 +4,10 @@ notifbuddy {{ .Chart.AppVersion }} is installing.
   API        https://{{ include "notifbuddy.host.api" . }}
   Auth       https://{{ include "notifbuddy.host.auth" . }}
 
-Point all three hostnames at your ingress controller, then finish the GitHub
-OAuth app by setting its callback URL to:
+Point all three hostnames at your ingress controller, then finish the Slack
+app by adding this redirect URL to it:
 
-  https://{{ include "notifbuddy.host.auth" . }}/api/auth/callback/github
+  https://{{ include "notifbuddy.host.auth" . }}/api/auth/callback/slack
 
 Watch it come up with:
 

@@ -13,6 +13,7 @@ features:
 oauth_config:
   redirect_urls:
     - http://localhost:8080/integrations/slack/callback
+    - http://localhost:8787/api/auth/callback/slack # authd Sign in with Slack (OIDC)
   scopes:
     user:
       - chat:write

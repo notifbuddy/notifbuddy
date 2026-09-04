@@ -620,8 +620,8 @@ export interface components {
              */
             lastName?: string;
             /**
-             * @description URL of the user's profile picture, if any. For GitHub logins this is the user's GitHub avatar from sign-in.
-             * @example https://avatars.githubusercontent.com/u/12345?v=4
+             * @description URL of the user's profile picture, if any. For Slack logins this is the user's Slack avatar from sign-in.
+             * @example https://avatars.slack-edge.com/2024-01-01/1234567890_abcdef_512.png
              */
             profilePictureUrl?: string;
             /**
@@ -893,7 +893,7 @@ export interface components {
              * @example admin
              */
             role?: string;
-            /** @description URL of the member's profile picture, if any. For GitHub logins this is the user's GitHub avatar from sign-in. */
+            /** @description URL of the member's profile picture, if any. For Slack logins this is the user's Slack avatar from sign-in. */
             profilePictureUrl?: string;
         };
         /** @description A list of members for the active organization. */

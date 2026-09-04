@@ -198,7 +198,7 @@ rendered without cluster access — which is why GitOps users must set
       "BETTER_AUTH_SECRET" ($priorData.BETTER_AUTH_SECRET | default (randAlphaNum 48))
       "INTEGRATION_ENC_KEY" ($priorData.INTEGRATION_ENC_KEY | default (randAlphaNum 32 | b64enc))
       "POSTGRES_PASSWORD" $pgPassword
-      "GITHUB_CLIENT_SECRET" (.Values.github.clientSecret | default $priorData.GITHUB_CLIENT_SECRET | default "")
+      "SLACK_LOGIN_CLIENT_SECRET" (.Values.slack.clientSecret | default $priorData.SLACK_LOGIN_CLIENT_SECRET | default "")
 -}}
 {{- if include "notifbuddy.bundledPostgres" . -}}
   {{- $host := printf "%s:5432" (include "notifbuddy.postgresHost" .) -}}

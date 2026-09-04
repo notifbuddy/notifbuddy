@@ -25,14 +25,14 @@ hosts:
   # -- Auth service hostname. Defaults to auth.<domain>.
   auth: ""
 
-# GitHub OAuth — the only sign-in method, so this is required.
-#
-# Create an OAuth app at https://github.com/settings/developers with the
-# callback URL https://<auth host>/api/auth/callback/github
-github:
-  # -- GitHub OAuth client ID.
+# Slack OAuth (Sign in with Slack / OIDC) — the only sign-in method, so this
+# is required. Typically the same Slack app as `integrations.slack` below;
+# add the redirect URL https://<auth host>/api/auth/callback/slack to the
+# app at https://api.slack.com/apps.
+slack:
+  # -- Slack app client ID.
   clientId: ""
-  # -- GitHub OAuth client secret. Ignored when `existingSecret` is set.
+  # -- Slack app client secret. Ignored when `existingSecret` is set.
   clientSecret: ""
 
 image:
@@ -55,7 +55,7 @@ image:
 # decrypting.
 #
 # Keys read from it, when set: BETTER_AUTH_SECRET, INTEGRATION_ENC_KEY,
-# GITHUB_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, AXIOM_TOKEN and
+# SLACK_LOGIN_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, AXIOM_TOKEN and
 # BETTER_STACK_OTLP_ENDPOINT/BETTER_STACK_SOURCE_TOKEN when the observability
 # sinks below are on, CHATWOOT_HMAC_TOKEN when support identity validation is
 # on, and any integration secrets you enable below.

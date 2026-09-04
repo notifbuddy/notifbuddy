@@ -2,12 +2,12 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import Logo from '$shared/components/logo.svelte';
-	import GithubIcon from '$lib/icons/github.svelte';
+	import SlackIcon from '$lib/icons/slack.svelte';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import BuildingIcon from '@lucide/svelte/icons/building-2';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import { userStore, signInWithGithub, switchOrg, type User } from '$lib/user.svelte';
+	import { userStore, signInWithSlack, switchOrg, type User } from '$lib/user.svelte';
 
 	// Shared auth state: undefined = still checking, null = signed out, else User.
 	const user = $derived(userStore.user);
@@ -195,9 +195,9 @@
 					<Skeleton class="h-11 w-full rounded-md" />
 				{:else}
 					<div class="flex w-full flex-col gap-3">
-						<Button onclick={signInWithGithub} size="lg" class="font-medium">
-							<GithubIcon data-icon="inline-start" size={18} />
-							Continue with GitHub
+						<Button onclick={signInWithSlack} size="lg" class="font-medium">
+							<SlackIcon data-icon="inline-start" size={18} />
+							Continue with Slack
 						</Button>
 					</div>
 				{/if}

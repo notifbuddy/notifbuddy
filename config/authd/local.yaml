@@ -19,11 +19,12 @@ cors:
   trusted_origins: # browser origins allowed to call authd (the dashboard SPA)
     - "http://localhost:5173"
 
-github:
-  # Required when featureflags.github_oauth_login below is true.
-  # Callback: <auth.base_url>/api/auth/callback/github
-  client_id: "${GITHUB_CLIENT_ID}"
-  client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
+slack:
+  # Sign in with Slack (OIDC) — the only sign-in method. Same Slack app as the
+  # backend integration (config/backend/local.yaml); its manifest must list
+  # the callback: <auth.base_url>/api/auth/callback/slack
+  client_id: "11589880917329.11617102178177"
+  client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
 
 email:
   resend_api_key: "${RESEND_API_KEY}" # SECRET — empty = invitation emails go to the console (dev sink)
@@ -33,6 +34,3 @@ email:
 
 device_auth:
   verification_url: "http://localhost:5173/device" # dashboard page where the user enters the CLI code
-
-featureflags:
-  github_oauth_login: true

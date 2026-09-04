@@ -36,7 +36,7 @@ jobs:
       - name: helm lint
         run: |
           helm lint charts/notifbuddy \
-            --set domain=example.com --set github.clientId=a --set github.clientSecret=b
+            --set domain=example.com --set slack.clientId=a --set slack.clientSecret=b
 
       - name: Install kubeconform
         run: |
@@ -48,7 +48,7 @@ jobs:
       - name: Render and validate every supported shape
         run: |
           set -eu
-          base="--set github.clientId=a --set github.clientSecret=b"
+          base="--set slack.clientId=a --set slack.clientSecret=b"
           render() {
             name=$1; shift
             echo "── $name"
@@ -73,7 +73,7 @@ jobs:
             --set integrations.cloudflare.apiToken=y \
             --set integrations.email.enabled=true --set integrations.email.resendApiKey=x \
             --set integrations.email.from=a@b.c
-          render "ingress disabled"   --set github.clientId=a --set github.clientSecret=b \
+          render "ingress disabled"   --set slack.clientId=a --set slack.clientSecret=b \
             --set domain=example.com --set ingress.enabled=false
 
       # Misconfiguration should be rejected at render time with a message that
@@ -89,15 +89,15 @@ jobs:
             fi
             echo "── refused: $name"
           }
-          refuses "no domain and no hosts"        --set github.clientId=a --set github.clientSecret=b
-          refuses "no github clientId"            --set domain=example.com --set github.clientSecret=b
-          refuses "no github clientSecret"        --set domain=example.com --set github.clientId=a
-          refuses "external db without authUrl"   --set domain=example.com --set github.clientId=a \
-            --set github.clientSecret=b --set database.url=postgres://h/app
-          refuses "slack without signingSecret"   --set domain=example.com --set github.clientId=a \
-            --set github.clientSecret=b --set integrations.slack.enabled=true \
+          refuses "no domain and no hosts"        --set slack.clientId=a --set slack.clientSecret=b
+          refuses "no slack clientId"            --set domain=example.com --set slack.clientSecret=b
+          refuses "no slack clientSecret"        --set domain=example.com --set slack.clientId=a
+          refuses "external db without authUrl"   --set domain=example.com --set slack.clientId=a \
+            --set slack.clientSecret=b --set database.url=postgres://h/app
+          refuses "slack without signingSecret"   --set domain=example.com --set slack.clientId=a \
+            --set slack.clientSecret=b --set integrations.slack.enabled=true \
             --set integrations.slack.clientSecret=y
-          refuses "hosts with no common parent"   --set github.clientId=a --set github.clientSecret=b \
+          refuses "hosts with no common parent"   --set slack.clientId=a --set slack.clientSecret=b \
             --set hosts.dashboard=app.a.com --set hosts.api=api.b.com --set hosts.auth=auth.c.com
 
   install:
@@ -127,7 +127,7 @@ jobs:
         run: |
           helm install nb charts/notifbuddy \
             --set domain=example.com \
-            --set github.clientId=abc --set github.clientSecret=def \
+            --set slack.clientId=abc --set slack.clientSecret=def \
             --set image.registry=notifbuddy --set image.tag=ci \
             --set image.pullPolicy=Never \
             --wait --timeout 6m
@@ -192,7 +192,7 @@ jobs:
           beforepg=$(kubectl get secret nb-notifbuddy -o jsonpath='{.data.POSTGRES_PASSWORD}')
           helm upgrade nb charts/notifbuddy \
             --set domain=example.com \
-            --set github.clientId=abc --set github.clientSecret=def \
+            --set slack.clientId=abc --set slack.clientSecret=def \
             --set image.registry=notifbuddy --set image.tag=ci \
             --set image.pullPolicy=Never \
             --wait --timeout 6m
