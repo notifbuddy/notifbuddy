@@ -19,10 +19,10 @@ Each Linear team gets one config: how channels open, the name and topic template
 
 Every channel NotifBuddy opens gets a topic that links back to its Linear issue. The topic re-renders on issue updates, so a status change in Linear shows up in the Slack channel's topic.
 
-The default topic shows the issue identifier, title, status, and URL:
+New configs start with the default topic template, showing the issue identifier, title, status, and URL:
 
 ```
 ${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}
 ```
 
-Set your own template in the config's **Channel topic** field to override it. Leave the field empty to keep the default. See [Templates](/templates) for the expression syntax.
+Edit the config's **Channel topic** field to change it, or clear the field to disable the topic. See [Templates](/templates) for the expression syntax.

@@ -93,15 +93,24 @@ func TestLinearSettingsTriggers(t *testing.T) {
 		}
 	})
 
-	t.Run("topic falls back to the default template", func(t *testing.T) {
+	t.Run("default topic template renders the backlink", func(t *testing.T) {
 		evt := issueEvent("Todo", "unstarted")
 		issue := evt.Linear["issue"].(map[string]any)
 		issue["title"] = "Fix login"
 		issue["url"] = "https://linear.app/x/issue/SKO-9/fix-login"
-		res := s.TestLinearTemplate(evt, statusConfig)
+		cfg := statusConfig
+		cfg.TopicTemplate = DefaultTopicTemplate
+		res := s.TestLinearTemplate(evt, cfg)
 		want := "SKO-9: Fix login • Todo • https://linear.app/x/issue/SKO-9/fix-login"
 		if res.Topic != want {
 			t.Errorf("topic = %q, want %q", res.Topic, want)
+		}
+	})
+
+	t.Run("empty topic template renders no topic", func(t *testing.T) {
+		res := s.TestLinearTemplate(issueEvent("Todo", "unstarted"), statusConfig)
+		if res.Topic != "" {
+			t.Errorf("topic = %q, want empty (topic disabled)", res.Topic)
 		}
 	})
 

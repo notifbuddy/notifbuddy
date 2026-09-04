@@ -103,8 +103,8 @@
 	// so the two never drift. lowercase() is one of our hbs-style helpers.
 	const DEFAULT_NAME_TEMPLATE = 'tkt-${{ lowercase(linear.issue.identifier) }}';
 
-	// Placeholder mirroring the backend's built-in topic template (an empty
-	// field means the server default applies).
+	// Default topic template new configs start with (the backend autofills the
+	// same on create; a cleared field disables the topic).
 	const DEFAULT_TOPIC_TEMPLATE =
 		'${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}';
 
@@ -190,7 +190,7 @@
 				creationMode: 'manual',
 				triggerStatus: '',
 				nameTemplate: DEFAULT_NAME_TEMPLATE,
-				topicTemplate: '',
+				topicTemplate: DEFAULT_TOPIC_TEMPLATE,
 				conditionExpr: '',
 				archiveMode: 'manual',
 				archiveStatus: '',
@@ -722,7 +722,7 @@
 								/>
 								<Field.FieldDescription>
 									Template for the channel's topic — the backlink to the Linear issue. It re-renders on
-									issue updates, so status changes stay in sync. Leave empty for the default.
+									issue updates, so status changes stay in sync. Clear it to disable the topic.
 								</Field.FieldDescription>
 							</Field.Field>
 

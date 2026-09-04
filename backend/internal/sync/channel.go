@@ -196,11 +196,14 @@ func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) error 
 // slackTopicMaxLen is Slack's channel-topic length cap.
 const slackTopicMaxLen = 250
 
-// channelTopic renders the config's topic template (or the built-in default)
-// against the event, trimmed to Slack's topic cap. A render failure returns ""
-// (logged): a broken custom template must not block channel handling.
+// channelTopic renders the config's topic template against the event, trimmed
+// to Slack's topic cap. An empty template (topic disabled) or a render failure
+// returns "" — a broken custom template must not block channel handling.
 func (e *Engine) channelTopic(ctx context.Context, settings integrations.LinearSettings, evt template.Event) string {
-	topic, err := e.tmpl.Render(settings.EffectiveTopicTemplate(), evt)
+	if strings.TrimSpace(settings.TopicTemplate) == "" {
+		return ""
+	}
+	topic, err := e.tmpl.Render(settings.TopicTemplate, evt)
 	if err != nil {
 		slog.WarnContext(ctx, "sync: channel topic render failed", "error", err)
 		return ""

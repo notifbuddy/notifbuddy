@@ -934,8 +934,8 @@ type LinearSettings struct {
 	// GitHub-Actions-expression template for the channel name.
 	NameTemplate OptString `json:"nameTemplate"`
 	// GitHub-Actions-expression template for the channel topic. The topic backlinks the channel to its
-	// Linear issue and is re-rendered on issue updates. Empty means the built-in default (identifier,
-	// title, status and issue URL).
+	// Linear issue and is re-rendered on issue updates. New configs are autofilled with the built-in
+	// default (identifier, title, status and issue URL); empty disables the topic.
 	TopicTemplate OptString `json:"topicTemplate"`
 	// GitHub-Actions-expression that must be true for creation.
 	ConditionExpr OptString `json:"conditionExpr"`
@@ -2348,7 +2348,7 @@ func (*SyncSettingsUnauthorized) syncSettingsRes() {}
 // Ref: #/components/schemas/TemplateTestRequest
 type TemplateTestRequest struct {
 	NameTemplate OptString `json:"nameTemplate"`
-	// The channel-topic template (empty = the built-in default).
+	// The channel-topic template (empty = no topic).
 	TopicTemplate OptString `json:"topicTemplate"`
 	// The creation trigger mode (status | manual | condition).
 	CreationMode OptString `json:"creationMode"`
@@ -2479,7 +2479,7 @@ type TemplateTestResponse struct {
 	WouldCreate bool `json:"wouldCreate"`
 	// Whether the archive trigger fires for this event (same rules).
 	WouldArchive bool `json:"wouldArchive"`
-	// The rendered channel topic (from topicTemplate, or the built-in default when empty).
+	// The rendered channel topic (empty when topicTemplate is empty).
 	Topic string `json:"topic"`
 	// A template/condition error, if any (shown inline by the UI).
 	Error OptString `json:"error"`

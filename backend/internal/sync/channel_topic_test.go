@@ -34,6 +34,7 @@ func TestOnLinearEvent_CreateSetsTopicBacklink(t *testing.T) {
 	ig := &fakeIntg{settings: integrations.LinearSettings{
 		CreationMode:  "status",
 		TriggerStatus: "In Progress",
+		TopicTemplate: integrations.DefaultTopicTemplate,
 	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
@@ -69,6 +70,28 @@ func TestOnLinearEvent_CreateUsesCustomTopicTemplate(t *testing.T) {
 	}
 }
 
+func TestOnLinearEvent_EmptyTopicTemplateSkipsTopic(t *testing.T) {
+	st := newFakeStore()
+	st.linearPayloads["dt7"] = linearIssueEventFull(
+		"issue9", "SKO-9", "team1", "In Progress", "Fix login", "https://linear.app/x/issue/SKO-9/fix-login")
+
+	sl := &fakeSlack{nextChannel: "C_T"}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode:  "status",
+		TriggerStatus: "In Progress",
+	}}
+	e := newEngine(st, sl, ig, &spyPub{})
+
+	e.OnLinearEvent(context.Background(), linearRef("dt7", "org1"))
+
+	if sl.createdName == "" {
+		t.Fatal("channel should still be created")
+	}
+	if len(sl.topics) != 0 {
+		t.Fatalf("empty topic template must not set a topic; got %v", sl.topics)
+	}
+}
+
 func TestOnLinearEvent_CreatePostsTicketBodyIntro(t *testing.T) {
 	st := newFakeStore()
 	st.linearPayloads["dt6"] = linearIssueEventFull(
@@ -76,7 +99,10 @@ func TestOnLinearEvent_CreatePostsTicketBodyIntro(t *testing.T) {
 
 	sl := &fakeSlack{nextChannel: "C_T"}
 	ig := &fakeIntg{
-		settings: integrations.LinearSettings{CreationMode: "status", TriggerStatus: "In Progress"},
+		settings: integrations.LinearSettings{
+			CreationMode: "status", TriggerStatus: "In Progress",
+			TopicTemplate: integrations.DefaultTopicTemplate,
+		},
 		issue: integrations.LinearIssue{
 			ID: "issue9", Identifier: "SKO-9", Title: "Fix login",
 			Description: "Users cannot log in with SSO.",
@@ -110,7 +136,9 @@ func TestOnLinearEvent_IssueUpdateSyncsTopic(t *testing.T) {
 	st.channelTopics["org1|issue9"] = "SKO-9: Fix login • In Progress • https://linear.app/x/issue/SKO-9/fix-login"
 
 	sl := &fakeSlack{}
-	ig := &fakeIntg{settings: integrations.LinearSettings{CreationMode: "manual"}}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode: "manual", TopicTemplate: integrations.DefaultTopicTemplate,
+	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("dt3", "org1"))
@@ -137,7 +165,9 @@ func TestOnLinearEvent_IssueUpdateTopicUnchangedSkipsSlack(t *testing.T) {
 	st.channelTopics["org1|issue9"] = topic
 
 	sl := &fakeSlack{}
-	ig := &fakeIntg{settings: integrations.LinearSettings{CreationMode: "manual"}}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode: "manual", TopicTemplate: integrations.DefaultTopicTemplate,
+	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	e.OnLinearEvent(context.Background(), linearRef("dt4", "org1"))
@@ -156,7 +186,9 @@ func TestOnLinearEvent_TopicSetFailureKeepsStoredTopic(t *testing.T) {
 	st.channelTopics["org1|issue9"] = "old topic"
 
 	sl := &fakeSlack{topicErr: errors.New("ratelimited")}
-	ig := &fakeIntg{settings: integrations.LinearSettings{CreationMode: "manual"}}
+	ig := &fakeIntg{settings: integrations.LinearSettings{
+		CreationMode: "manual", TopicTemplate: integrations.DefaultTopicTemplate,
+	}}
 	e := newEngine(st, sl, ig, &spyPub{})
 
 	if err := e.OnLinearEvent(context.Background(), linearRef("dt5", "org1")); err != nil {
@@ -175,7 +207,7 @@ func TestChannelTopicTruncates(t *testing.T) {
 		t.Fatal(err)
 	}
 	evt := template.Event{EventType: "linear", Linear: envelopeLinear(p)}
-	topic := e.channelTopic(context.Background(), integrations.LinearSettings{}, evt)
+	topic := e.channelTopic(context.Background(), integrations.LinearSettings{TopicTemplate: integrations.DefaultTopicTemplate}, evt)
 	if got := len([]rune(topic)); got != slackTopicMaxLen {
 		t.Errorf("topic length = %d runes, want %d", got, slackTopicMaxLen)
 	}

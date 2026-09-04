@@ -32,19 +32,11 @@ type LinearSettings struct {
 	AutoAddMembers       []string `json:"autoAddMembers"` // Slack member ids (bots + people)
 }
 
-// DefaultTopicTemplate is the channel-topic backlink rendered when a config
-// has no TopicTemplate of its own: the issue reference, title, and current
-// status, plus the Linear URL Slack renders as a clickable backlink.
+// DefaultTopicTemplate is the channel-topic backlink new configs start with
+// (autofilled on create and by the migration for pre-existing rows): the
+// issue reference, title, and current status, plus the Linear URL Slack
+// renders as a clickable backlink. An emptied template disables the topic.
 const DefaultTopicTemplate = "${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}"
-
-// EffectiveTopicTemplate returns the config's topic template, falling back to
-// DefaultTopicTemplate when unset.
-func (s LinearSettings) EffectiveTopicTemplate() string {
-	if strings.TrimSpace(s.TopicTemplate) != "" {
-		return s.TopicTemplate
-	}
-	return DefaultTopicTemplate
-}
 
 // LinearSyncReady reports whether the org can actually run the Linear → Slack
 // channel sync: it needs BOTH Linear and Slack connected at the workspace level
@@ -107,6 +99,11 @@ func (s *Service) SaveLinearSetting(ctx context.Context, orgID string, in Linear
 	}
 	if err := s.validateLinearSettings(in); err != nil {
 		return LinearSettings{}, err
+	}
+	// New configs start on the default topic backlink; an existing config with
+	// an emptied template stays empty (topic deliberately disabled).
+	if in.SettingID == "" && strings.TrimSpace(in.TopicTemplate) == "" {
+		in.TopicTemplate = DefaultTopicTemplate
 	}
 	settingID, err := s.store.SaveLinearSetting(ctx, store.LinearSettings{
 		SettingID:            in.SettingID,
@@ -356,12 +353,14 @@ func (s *Service) TestLinearTemplate(evt template.Event, in LinearSettings) Temp
 		}
 		res.Name = name
 	}
-	topic, err := s.tmpl.Render(in.EffectiveTopicTemplate(), evt)
-	if err != nil {
-		res.Err = "topic template: " + err.Error()
-		return res
+	if in.TopicTemplate != "" {
+		topic, err := s.tmpl.Render(in.TopicTemplate, evt)
+		if err != nil {
+			res.Err = "topic template: " + err.Error()
+			return res
+		}
+		res.Topic = topic
 	}
-	res.Topic = topic
 	stateName := EventStateName(evt)
 	wouldCreate, err := CreateTriggered(s.tmpl, in, stateName, evt)
 	if err != nil {

@@ -1025,8 +1025,8 @@ export interface components {
             /**
              * @description GitHub-Actions-expression template for the channel topic. The topic
              *     backlinks the channel to its Linear issue and is re-rendered on
-             *     issue updates. Empty means the built-in default (identifier, title,
-             *     status and issue URL).
+             *     issue updates. New configs are autofilled with the built-in default
+             *     (identifier, title, status and issue URL); empty disables the topic.
              * @example ${{ linear.issue.identifier }} • ${{ linear.issue.url }}
              */
             topicTemplate?: string;
@@ -1161,7 +1161,7 @@ export interface components {
             /** @example tkt-${{ linear.issue.identifier }} */
             nameTemplate?: string;
             /**
-             * @description The channel-topic template (empty = the built-in default).
+             * @description The channel-topic template (empty = no topic).
              * @example ${{ linear.issue.identifier }} • ${{ linear.issue.url }}
              */
             topicTemplate?: string;
@@ -1218,10 +1218,7 @@ export interface components {
             wouldCreate: boolean;
             /** @description Whether the archive trigger fires for this event (same rules). */
             wouldArchive: boolean;
-            /**
-             * @description The rendered channel topic (from topicTemplate, or the built-in
-             *     default when empty).
-             */
+            /** @description The rendered channel topic (empty when topicTemplate is empty). */
             topic: string;
             /** @description A template/condition error, if any (shown inline by the UI). */
             error?: string;
