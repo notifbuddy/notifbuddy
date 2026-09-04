@@ -1,5 +1,5 @@
 # Preview authd configuration. Hosts/cookie prefix rewritten by
-# scripts/preview-bake-configs.sh. GitHub OAuth is proxied through
+# scripts/preview-bake-configs.sh. Slack OAuth is proxied through
 # production via Better Auth oAuthProxy (see oauth_proxy below).
 
 server:
@@ -18,11 +18,11 @@ cors:
   trusted_origins:
     - "https://dashboard-pr-0.notifbuddy.com"
 
-# Same GitHub OAuth app as prod — callback is always auth.notifbuddy.com
+# Same Slack app as prod — callback is always auth.notifbuddy.com
 # (oAuthProxy); client id/secret must match production.
-github:
-  client_id: "${GITHUB_CLIENT_ID}"
-  client_secret: "${GITHUB_CLIENT_SECRET}"
+slack:
+  client_id: "${SLACK_CLIENT_ID}"
+  client_secret: "${SLACK_CLIENT_SECRET}"
 
 # Shared with prod: encrypts the profile handoff preview ↔ production.
 oauth_proxy:
@@ -37,6 +37,3 @@ email:
 
 device_auth:
   verification_url: "https://dashboard-pr-0.notifbuddy.com/device"
-
-featureflags:
-  github_oauth_login: true

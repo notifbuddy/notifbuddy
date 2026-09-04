@@ -1041,9 +1041,9 @@ components:
         profilePictureUrl:
           type: string
           description: >-
-            URL of the user's profile picture, if any. For GitHub logins this is
-            the user's GitHub avatar from sign-in.
-          example: https://avatars.githubusercontent.com/u/12345?v=4
+            URL of the user's profile picture, if any. For Slack logins this is
+            the user's Slack avatar from sign-in.
+          example: https://avatars.slack-edge.com/2024-01-01/1234567890_abcdef_512.png
         organizationId:
           type: string
           description: The ID of the organization the current session is scoped to, if any.
@@ -1369,8 +1369,8 @@ components:
         profilePictureUrl:
           type: string
           description: >-
-            URL of the member's profile picture, if any. For GitHub logins this
-            is the user's GitHub avatar from sign-in.
+            URL of the member's profile picture, if any. For Slack logins this
+            is the user's Slack avatar from sign-in.
       required:
         - id
         - userId

@@ -48,9 +48,9 @@ export const userStore = new UserStore();
 
 // Sign-in/out run against authd (Better Auth) directly; the backend only
 // consumes the resulting session cookie.
-export async function signInWithGithub() {
+export async function signInWithSlack() {
 	await authClient.signIn.social({
-		provider: 'github',
+		provider: 'slack',
 		callbackURL: `${window.location.origin}/`
 	});
 }
@@ -80,8 +80,8 @@ export function displayName(user: User): string {
 	return full || user.email;
 }
 
-// The user's profile picture URL (GitHub avatar for GitHub logins), or undefined
-// if WorkOS didn't capture one — callers pair it with an initials fallback.
+// The user's profile picture URL (Slack avatar for Slack logins), or undefined
+// if sign-in didn't capture one — callers pair it with an initials fallback.
 export function avatarUrl(user: User): string | undefined {
 	return user.profilePictureUrl || undefined;
 }

@@ -25,29 +25,29 @@ You need three things in place.
   the API, and the auth service on `app.`, `api.`, and `auth.` by default. The
   session cookie is issued on the parent domain so all three see it, so the
   chart refuses to install if the hostnames share no common parent.
-- **A GitHub OAuth app.** It's the only sign-in method.
+- **A Slack app.** Sign in with Slack is the only sign-in method.
 
-### Create the GitHub OAuth app
+### Create the Slack app
 
-Create the app first — the install command needs its credentials.
+Create the app first — the install command needs its credentials. If you plan
+to enable the Slack integration, use the same app for both.
 
-1. Go to [GitHub developer settings](https://github.com/settings/developers)
-   and select **New OAuth App**.
-2. Set the homepage URL to `https://app.example.com`.
-3. Set the authorization callback URL to
-   `https://auth.example.com/api/auth/callback/github`.
-4. Copy the client ID, then generate a client secret and copy that too.
+1. Go to [Slack apps](https://api.slack.com/apps) and select
+   **Create New App**.
+2. Under **OAuth & Permissions**, add the redirect URL
+   `https://auth.example.com/api/auth/callback/slack`.
+3. Copy the client ID and client secret from **Basic Information**.
 
 ## Install
 
-Install the chart with your domain and the GitHub credentials.
+Install the chart with your domain and the Slack credentials.
 
 ```bash
 helm install notifbuddy oci://ghcr.io/notifbuddy/charts/notifbuddy \
   --namespace notifbuddy --create-namespace \
   --set domain=example.com \
-  --set github.clientId=Ov23liExample \
-  --set github.clientSecret=<secret>
+  --set slack.clientId=1234567890.1234567890 \
+  --set slack.clientSecret=<secret>
 ```
 
 Point `app.example.com`, `api.example.com`, and `auth.example.com` at your
@@ -292,7 +292,7 @@ sensitive values yourself.
 </Callout>
 
 The Secret must carry `BETTER_AUTH_SECRET`, `INTEGRATION_ENC_KEY`,
-`GITHUB_CLIENT_SECRET`, `DATABASE_URL`, and `AUTHD_DATABASE_URL`, plus a key
+`SLACK_LOGIN_CLIENT_SECRET`, `DATABASE_URL`, and `AUTHD_DATABASE_URL`, plus a key
 for each integration you enable: `SLACK_CLIENT_SECRET`,
 `SLACK_SIGNING_SECRET`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`,
 `CF_API_TOKEN`, and `RESEND_API_KEY`. If you also keep the bundled PostgreSQL,

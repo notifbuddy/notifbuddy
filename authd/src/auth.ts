@@ -3,20 +3,16 @@
 // in dev, Neon in prod). The service is fully request-driven: no daemons, no
 // cron — safe to scale to zero (NOT-20).
 //
-// Sign-in is GitHub OAuth only (featureflags in config/authd). Preview uses oAuthProxy
-// so GitHub only ever callbacks to production auth.notifbuddy.com.
+// Sign-in is Slack OAuth (OIDC) only. Preview uses oAuthProxy so Slack only
+// ever callbacks to production auth.notifbuddy.com.
 import { betterAuth } from 'better-auth';
 import { bearer, deviceAuthorization, oAuthProxy, organization } from 'better-auth/plugins';
 import pg from 'pg';
-import { config, featureFlags } from './config.ts';
+import { config } from './config.ts';
 import { sendEmail } from './email.ts';
 import { inviteEmail, welcomeEmail } from './email-templates.ts';
 
 const pool = new pg.Pool({ connectionString: config.database.url });
-
-if (!featureFlags.github_oauth_login) {
-	throw new Error('authd: github_oauth_login must be enabled');
-}
 
 const plugins: Parameters<typeof betterAuth>[0]['plugins'] = [
 	bearer(),
@@ -104,9 +100,9 @@ export const auth = betterAuth({
 	},
 
 	socialProviders: {
-		github: {
-			clientId: config.github.client_id,
-			clientSecret: config.github.client_secret,
+		slack: {
+			clientId: config.slack.client_id,
+			clientSecret: config.slack.client_secret,
 		},
 	},
 

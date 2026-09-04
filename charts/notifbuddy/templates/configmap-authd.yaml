@@ -25,9 +25,9 @@ data:
       trusted_origins:
         - "https://{{ include "notifbuddy.host.dashboard" . }}"
 
-    github:
-      client_id: {{ required "notifbuddy: set `github.clientId` — GitHub OAuth is the only sign-in method" .Values.github.clientId | quote }}
-      client_secret: "${GITHUB_CLIENT_SECRET}"
+    slack:
+      client_id: {{ required "notifbuddy: set `slack.clientId` — Slack OAuth is the only sign-in method" .Values.slack.clientId | quote }}
+      client_secret: "${SLACK_LOGIN_CLIENT_SECRET}"
 
     email:
     {{- if .Values.integrations.email.enabled }}
@@ -48,7 +48,3 @@ data:
       # CLI device-flow login: the dashboard page where the user enters the
       # one-time code shown in their terminal.
       verification_url: "https://{{ include "notifbuddy.host.dashboard" . }}/device"
-
-    featureflags:
-      # GitHub is the only sign-in method; authd refuses to start without it.
-      github_oauth_login: true

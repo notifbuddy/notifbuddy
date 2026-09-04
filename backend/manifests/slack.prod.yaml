@@ -15,6 +15,7 @@ features:
 oauth_config:
   redirect_urls:
     - https://api.notifbuddy.com/integrations/slack/callback
+    - https://auth.notifbuddy.com/api/auth/callback/slack # authd Sign in with Slack (OIDC); preview goes via oAuthProxy
   scopes:
     user:
       - chat:write

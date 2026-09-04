@@ -21,13 +21,13 @@ anonTest.describe('signed-out entry', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Streamline your notifications' })
 		).toBeVisible();
-		await expect(page.getByRole('button', { name: /Continue with GitHub/i })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Continue with Slack/i })).toBeVisible();
 	});
 
 	anonTest('deep-link bounces to the login scene', async ({ page }) => {
 		await page.goto('/dashboard/linear');
 
 		await expect(page).toHaveURL(/\/$/);
-		await expect(page.getByRole('button', { name: /Continue with GitHub/i })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Continue with Slack/i })).toBeVisible();
 	});
 });

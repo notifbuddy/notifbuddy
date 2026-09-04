@@ -19,9 +19,10 @@ ingress controller.
 
 ## Before you start
 
-**A GitHub OAuth app.** It is the only sign-in method. Create one at
-<https://github.com/settings/developers> with the callback URL
-`https://auth.<domain>/api/auth/callback/github`.
+**A Slack app.** Sign in with Slack (OIDC) is the only sign-in method. Create
+one at <https://api.slack.com/apps> (or reuse the app you use for the Slack
+integration) and add the redirect URL
+`https://auth.<domain>/api/auth/callback/slack`.
 
 **Three hostnames under one parent domain.** The session cookie is issued on
 the parent so the dashboard and API can both see it. The chart refuses to
@@ -38,8 +39,8 @@ cert-manager at your issuer through `ingress.annotations`.
 | `hosts.dashboard` | `app.<domain>` | Dashboard hostname. |
 | `hosts.api` | `api.<domain>` | API hostname. |
 | `hosts.auth` | `auth.<domain>` | Auth service hostname. |
-| `github.clientId` | `""` | GitHub OAuth client ID. Required. |
-| `github.clientSecret` | `""` | GitHub OAuth client secret. Required unless `existingSecret` is set. |
+| `slack.clientId` | `""` | Slack app client ID (sign-in). Required. |
+| `slack.clientSecret` | `""` | Slack app client secret (sign-in). Required unless `existingSecret` is set. |
 | `existingSecret` | `""` | Secret you manage holding every sensitive value. **Required for GitOps** — see below. |
 | `postgresql.enabled` | `true` | Bundled PostgreSQL. Evaluation only. |
 | `database.url` | `""` | External application database. Setting it disables the bundled one. |
@@ -64,8 +65,8 @@ key and the token-encryption key. Everyone gets logged out and stored
 integration tokens stop decrypting.
 
 The Secret must carry `BETTER_AUTH_SECRET`, `INTEGRATION_ENC_KEY`,
-`GITHUB_CLIENT_SECRET`, `DATABASE_URL`, `AUTHD_DATABASE_URL`, plus a key for
-each integration you enable.
+`SLACK_LOGIN_CLIENT_SECRET`, `DATABASE_URL`, `AUTHD_DATABASE_URL`, plus a key
+for each integration you enable.
 
 ## The bundled PostgreSQL
 

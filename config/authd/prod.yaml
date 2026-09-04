@@ -23,11 +23,13 @@ cors:
     - "https://dashboard-pr-*.notifbuddy.com"
     - "https://auth-pr-*.notifbuddy.com"
 
-github:
-  # Prod GitHub OAuth app; callback https://auth.notifbuddy.com/api/auth/callback/github
+slack:
+  # Prod Slack app (shared with the backend integration; see
+  # backend/manifests/slack.prod.yaml). Callback
+  # https://auth.notifbuddy.com/api/auth/callback/slack
   # (also the only callback used by preview via oAuthProxy).
-  client_id: "${GITHUB_CLIENT_ID}"
-  client_secret: "${GITHUB_CLIENT_SECRET}" # SECRET
+  client_id: "${SLACK_CLIENT_ID}"
+  client_secret: "${SLACK_CLIENT_SECRET}" # SECRET
 
 # Shared with preview authd — encrypts OAuth profile handoff. Same value in
 # Infisical /auth for prod and preview Cloud Run.
@@ -45,6 +47,3 @@ email:
 
 device_auth:
   verification_url: "https://dashboard.notifbuddy.com/device" # dashboard page where the user enters the CLI code
-
-featureflags:
-  github_oauth_login: true

@@ -18,7 +18,7 @@ export interface Config {
 	};
 	database: { url: string };
 	cors: { trusted_origins: string[] };
-	github: { client_id: string; client_secret: string };
+	slack: { client_id: string; client_secret: string };
 	email: {
 		resend_api_key: string;
 		from: string;
@@ -34,11 +34,6 @@ export interface Config {
 	device_auth?: {
 		verification_url: string;
 	};
-	featureflags: FeatureFlags;
-}
-
-export interface FeatureFlags {
-	github_oauth_login: boolean;
 }
 
 function resolveEnvRefs(value: unknown): unknown {
@@ -73,18 +68,14 @@ function resolvePath(area: string, explicit?: string): string {
 const configFile = resolvePath('authd', process.env.CONFIG_FILE);
 
 export const config = resolveEnvRefs(parse(readFileSync(configFile, 'utf8'))) as Config;
-export const featureFlags = (config.featureflags ?? {}) as FeatureFlags;
 
 // Required settings fail at boot, never silently at first use.
 if (!config.database?.url) throw new Error('authd: database.url is required');
 if (!config.auth?.base_url) throw new Error('authd: auth.base_url is required');
 if (!config.auth?.secret) throw new Error('authd: auth.secret is required');
 
-if (!featureFlags.github_oauth_login) {
-	throw new Error('authd: github_oauth_login must be true (GitHub is the only sign-in method)');
-}
-if (!config.github?.client_id || !config.github?.client_secret) {
-	throw new Error('authd: github.client_id and github.client_secret are required');
+if (!config.slack?.client_id || !config.slack?.client_secret) {
+	throw new Error('authd: slack.client_id and slack.client_secret are required');
 }
 if (config.oauth_proxy?.secret && !config.oauth_proxy?.production_url) {
 	throw new Error('authd: oauth_proxy.production_url is required when oauth_proxy.secret is set');
