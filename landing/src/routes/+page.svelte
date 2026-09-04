@@ -201,7 +201,7 @@
 				</a>
 			</div>
 			<p class="text-muted-foreground/80 -mt-3 text-xs">
-				Free while in beta — no credit card, sign up and go.
+				No credit card required — sign up and go.
 			</p>
 		</section>
 
@@ -422,7 +422,7 @@ helm install notifbuddy \
 		>
 			Start syncing
 		</a>
-		<p class="text-muted-foreground/80 text-xs">Free while in beta — no credit card, sign up and go.</p>
+		<p class="text-muted-foreground/80 text-xs">No credit card required — sign up and go.</p>
 	</section>
 
 	<footer
