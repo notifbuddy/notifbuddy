@@ -70,10 +70,13 @@
 			aria-label="notifbuddy — dashboard"
 			class="text-foreground focus-visible:ring-ring flex items-center rounded-md outline-none focus-visible:ring-2"
 		>
-			<Logo size={26} />
+			<!-- Below sm the full lockup + switcher + nav can't share the row, so
+			     the mark stands alone (same convention as the marketing header). -->
+			<span class="hidden sm:block"><Logo size={26} /></span>
+			<span class="sm:hidden"><Logo size={26} wordmark={false} /></span>
 		</a>
 
-		<div class="bg-border mx-1 h-5 w-px" aria-hidden="true"></div>
+		<div class="bg-border mx-1 hidden h-5 w-px sm:block" aria-hidden="true"></div>
 
 		<!-- Org switcher -->
 		<DropdownMenu.Root>
@@ -91,7 +94,7 @@
 								<BuildingIcon class="size-3" />
 							</div>
 						{/if}
-						<span class="max-w-40 truncate font-medium">
+						<span class="max-w-24 truncate font-medium sm:max-w-40">
 							{activeOrg?.name ?? 'No organization'}
 						</span>
 						<ChevronsUpDownIcon class="text-muted-foreground size-4" />
@@ -120,19 +123,20 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 
-		<div class="bg-border mx-1 h-5 w-px" aria-hidden="true"></div>
+		<div class="bg-border mx-1 hidden h-5 w-px sm:block" aria-hidden="true"></div>
 
-		<!-- Primary nav -->
+		<!-- Primary nav: icon-only below sm, where the labels don't fit. -->
 		<nav class="flex items-center gap-1">
 			{#each NAV_LINKS as link (link.url)}
 				<Button
 					href={link.url}
 					variant="ghost"
 					size="sm"
+					aria-label={link.title}
 					class={cn('gap-2', isActive(link.url) ? 'text-foreground' : 'text-muted-foreground')}
 				>
 					<link.icon class="size-4" />
-					{link.title}
+					<span class="hidden sm:inline">{link.title}</span>
 				</Button>
 			{/each}
 		</nav>
@@ -141,19 +145,20 @@
 		     the divider's mx-1 = 12px a side, the same rhythm as the dividers
 		     on the left rail. -->
 		<div class="ms-auto flex items-center gap-2">
+		<!-- Docs moves into the profile menu below sm (see the sm:hidden item). -->
 		<Button
 			href="https://docs.notifbuddy.com"
 			target="_blank"
 			rel="noopener"
 			variant="ghost"
 			size="sm"
-			class="text-muted-foreground gap-2"
+			class="text-muted-foreground hidden gap-2 sm:inline-flex"
 		>
 			<BookOpenIcon class="size-4" />
 			Docs
 		</Button>
 
-		<div class="bg-border mx-1 mr-2 h-5 w-px" aria-hidden="true"></div>
+		<div class="bg-border mx-1 mr-2 hidden h-5 w-px sm:block" aria-hidden="true"></div>
 
 		<!-- Profile menu -->
 		{#if user}
@@ -208,6 +213,14 @@
 								<a href="/settings/billing" {...props}>
 									<CreditCardIcon />
 									Billing
+								</a>
+							{/snippet}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item class="sm:hidden">
+							{#snippet child({ props })}
+								<a href="https://docs.notifbuddy.com" target="_blank" rel="noopener" {...props}>
+									<BookOpenIcon />
+									Docs
 								</a>
 							{/snippet}
 						</DropdownMenu.Item>
