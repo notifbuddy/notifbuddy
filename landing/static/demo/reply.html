@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>notifbuddy — reply from Slack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+	:root {
+		--ink: #201f1c;
+		--ink-2: #26251f;
+		--paper: #f3f0e9;
+		--muted: #8a867c;
+		--hairline: #38362f;
+		--clay: oklch(0.7 0.06 48);
+		--clay-deep: oklch(0.64 0.058 45);
+	}
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	html, body { background: var(--ink); overflow: hidden; }
+	body {
+		font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+		color: var(--paper);
+		width: 1920px;
+		height: 1080px;
+	}
+	.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+	.frame {
+		position: absolute;
+		inset: 0;
+		width: 1920px;
+		height: 1080px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		opacity: 0;
+		transition: opacity 0.6s ease;
+		pointer-events: none;
+	}
+	.frame.active { opacity: 1; pointer-events: auto; }
+
+	.hook-line, .cta-line {
+		font-size: 168px;
+		font-weight: 650;
+		letter-spacing: -0.03em;
+		line-height: 1;
+	}
+	.hook-line .dim { color: var(--muted); }
+	.cta-line .clay { color: var(--clay); }
+	.cta-sub {
+		margin-top: 56px;
+		font-size: 30px;
+		letter-spacing: 0.14em;
+		color: var(--muted);
+	}
+
+	.card {
+		position: absolute;
+		top: 300px;
+		width: 660px;
+		border: 1.5px solid var(--hairline);
+		border-radius: 20px;
+		background: var(--ink-2);
+		overflow: hidden;
+	}
+	.card-linear { left: 160px; }
+	.card-slack { right: 160px; }
+	.card-head {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 22px 28px;
+		border-bottom: 1.5px solid var(--hairline);
+		font-size: 22px;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+	}
+	.card-head svg { flex: none; fill: var(--muted); }
+	.card-head .title {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.card-body { padding: 28px; display: flex; flex-direction: column; gap: 22px; }
+
+	.chip {
+		margin-left: auto;
+		padding: 6px 16px;
+		border-radius: 999px;
+		border: 1.5px solid var(--hairline);
+		font-size: 17px;
+		letter-spacing: 0.1em;
+		white-space: nowrap;
+	}
+	.chip-wrap { margin-left: auto; position: relative; }
+	.chip-wrap .chip { margin-left: 0; }
+	.chip-done {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-color: var(--clay-deep);
+		color: var(--clay);
+		opacity: 0;
+	}
+	.frame.active .chip-done { animation: appear 0.5s ease 5s both; }
+	.frame.active .chip-progress { animation: vanish 0.5s ease 5s both; }
+
+	.msg { display: flex; flex-direction: column; gap: 8px; }
+	.msg .who {
+		font-size: 17px;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	.msg .who b { color: var(--paper); font-weight: 500; }
+	.msg .text { font-size: 25px; line-height: 1.45; color: var(--paper); }
+	.msg .text.dim { color: var(--muted); }
+
+	.sync-comment { opacity: 0; }
+	.frame.active .sync-comment { animation: rise 0.6s ease 4.4s both; }
+	.sync-comment .who .tag { color: var(--clay); }
+
+	.sent-msg { opacity: 0; }
+	.frame.active .sent-msg { animation: rise 0.45s ease 2.4s both; }
+
+	.composer {
+		margin-top: 6px;
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		border: 1.5px solid var(--hairline);
+		border-radius: 14px;
+		padding: 18px 22px;
+		font-size: 23px;
+	}
+	.composer .typed {
+		display: inline-block;
+		max-width: 25ch;
+		width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+	}
+	.frame.active .composer .typed {
+		animation:
+			type 1.8s steps(25) 0.3s both,
+			vanish 0.2s linear 2.25s forwards;
+	}
+	.composer .caret {
+		width: 2px;
+		height: 28px;
+		background: var(--clay);
+		animation: blink 0.9s steps(1) infinite;
+	}
+
+	.rail-svg { position: absolute; left: 820px; top: 300px; }
+	.rail-svg .rail { stroke: var(--hairline); stroke-width: 1.5; stroke-dasharray: 4 6; fill: none; }
+	.buddy-mark { position: absolute; left: 934px; top: 604px; width: 52px; height: 52px; }
+	.buddy-label {
+		position: absolute;
+		left: 820px;
+		top: 674px;
+		width: 280px;
+		text-align: center;
+		font-size: 17px;
+		letter-spacing: 0.12em;
+		color: var(--muted);
+	}
+
+	.pip {
+		position: absolute;
+		width: 16px;
+		height: 16px;
+		border-radius: 999px;
+		background: var(--clay);
+		box-shadow: 0 0 24px var(--clay-deep);
+		offset-path: path('M1088 630 C1030 690 890 690 832 630');
+		offset-rotate: 0deg;
+		opacity: 0;
+	}
+	.frame.active .pip { animation: travel 1.5s cubic-bezier(0.45, 0, 0.25, 1) 2.8s both; }
+
+	.ripple {
+		position: absolute;
+		left: 770px;
+		top: 600px;
+		width: 60px;
+		height: 60px;
+		border-radius: 999px;
+		border: 2px solid var(--clay-deep);
+		opacity: 0;
+	}
+	.frame.active .ripple { animation: ripple 0.8s ease 4.3s both; }
+
+	.sync-badge {
+		position: absolute;
+		left: 820px;
+		top: 760px;
+		width: 280px;
+		text-align: center;
+		font-size: 19px;
+		letter-spacing: 0.14em;
+		color: var(--clay);
+		opacity: 0;
+	}
+	.frame.active .sync-badge { animation: appear 0.6s ease 5.6s both; }
+
+	@keyframes type { from { width: 0; } to { width: 25ch; } }
+	@keyframes blink { 50% { opacity: 0; } }
+	@keyframes rise { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
+	@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+	@keyframes vanish { from { opacity: 1; } to { opacity: 0; } }
+	@keyframes travel {
+		0% { opacity: 0; offset-distance: 0%; }
+		8% { opacity: 1; }
+		92% { opacity: 1; }
+		100% { opacity: 0; offset-distance: 100%; }
+	}
+	@keyframes ripple {
+		0% { opacity: 0.7; scale: 1; }
+		100% { opacity: 0; scale: 1.9; }
+	}
+
+	.hud {
+		position: absolute;
+		left: 56px;
+		bottom: 48px;
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		font-size: 22px;
+		color: var(--muted);
+		z-index: 10;
+	}
+	.hud .bar {
+		width: 220px;
+		height: 4px;
+		border-radius: 999px;
+		background: var(--hairline);
+		overflow: hidden;
+	}
+	.hud .bar i {
+		display: block;
+		height: 100%;
+		width: 0%;
+		border-radius: 999px;
+		background: var(--clay);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.frame { transition: none; }
+	}
+</style>
+</head>
+<body>
+
+<section class="frame active" data-duration="2400">
+	<h1 class="hook-line"><span class="dim">Reply in Slack.</span></h1>
+</section>
+<!-- frame:1 duration:2400 transition:fade -->
+
+<section class="frame" data-duration="9400">
+	<div class="card card-linear">
+		<div class="card-head mono">
+			<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+				<path d="M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z" />
+			</svg>
+			<span class="title">NOT-231 · Logo misaligns</span>
+			<span class="chip-wrap">
+				<span class="chip chip-progress">IN PROGRESS</span>
+				<span class="chip chip-done">DONE</span>
+			</span>
+		</div>
+		<div class="card-body">
+			<div class="msg">
+				<p class="who mono"><b>mara</b> · issue</p>
+				<p class="text dim">Logo drifts off-center below 420px — repro on iPhone SE.</p>
+			</div>
+			<div class="msg sync-comment">
+				<p class="who mono"><b>jonas</b> · <span class="tag">from slack · via notifbuddy</span></p>
+				<p class="text">Fixed — closing this out.</p>
+			</div>
+		</div>
+	</div>
+
+	<svg class="rail-svg" width="280" height="480" viewBox="0 0 280 480" aria-hidden="true">
+		<path class="rail" d="M268 330 C210 390 70 390 12 330" />
+	</svg>
+	<svg class="buddy-mark" viewBox="0 0 52 52" aria-hidden="true">
+		<circle cx="26" cy="26" r="24" fill="#f3f0e9" />
+		<circle cx="36" cy="16" r="8" fill="oklch(0.7 0.06 48)" stroke="#201f1c" stroke-width="3" />
+	</svg>
+	<p class="buddy-label mono">notifbuddy</p>
+	<div class="pip"></div>
+	<div class="ripple"></div>
+	<p class="sync-badge mono">synced ⇄ both ways</p>
+
+	<div class="card card-slack">
+		<div class="card-head mono">
+			<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+				<path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
+			</svg>
+			<span class="title">#not-231-logo-misaligns</span>
+			<span class="chip">VIA NOTIFBUDDY</span>
+		</div>
+		<div class="card-body">
+			<div class="msg">
+				<p class="who mono"><b>notifbuddy</b> · mirrored from linear</p>
+				<p class="text dim">NOT-231 moved to In Progress — assigned to jonas.</p>
+			</div>
+			<div class="msg sent-msg">
+				<p class="who mono"><b>jonas</b> · just now</p>
+				<p class="text">Fixed — closing this out.</p>
+			</div>
+			<div class="composer mono">
+				<span class="typed">Fixed — closing this out.</span>
+				<span class="caret"></span>
+			</div>
+		</div>
+	</div>
+</section>
+<!-- frame:2 duration:9400 transition:fade -->
+
+<section class="frame" data-duration="2800">
+	<h1 class="cta-line">It lands in Linear<span class="clay">.</span></h1>
+	<p class="cta-sub mono">two-way sync — open beta</p>
+</section>
+<!-- frame:3 duration:2800 transition:fade -->
+
+<div class="hud mono" aria-hidden="true">
+	<div class="bar"><i id="progress"></i></div>
+	<span id="counter">01 / 03</span>
+</div>
+
+<script>
+	const frames = [...document.querySelectorAll('.frame')];
+	const durs = frames.map((f) => +f.dataset.duration);
+	const total = durs.reduce((a, b) => a + b, 0);
+	const bar = document.getElementById('progress');
+	const counter = document.getElementById('counter');
+	let i = 0;
+	let started = performance.now();
+
+	function show(n) {
+		frames[i].classList.remove('active');
+		i = (n + frames.length) % frames.length;
+		frames[i].classList.add('active');
+		counter.textContent = `0${i + 1} / 0${frames.length}`;
+		started = performance.now();
+	}
+
+	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	if (reduced) {
+		show(1);
+	} else {
+		requestAnimationFrame(function tick(now) {
+			const elapsed = now - started;
+			if (elapsed >= durs[i]) show(i + 1);
+			const before = durs.slice(0, i).reduce((a, b) => a + b, 0);
+			bar.style.width = `${(100 * (before + Math.min(elapsed, durs[i]))) / total}%`;
+			requestAnimationFrame(tick);
+		});
+	}
+
+	addEventListener('click', () => show(i + 1));
+	addEventListener('keydown', (e) => {
+		if (e.key === 'ArrowRight') show(i + 1);
+		if (e.key === 'ArrowLeft') show(i - 1);
+	});
+</script>
+
+<!-- HYPERFRAMES_META: {"fps":30,"width":1920,"height":1080,"frames":[
+  {"frame":1,"duration":2400,"transition":"fade","sceneSummary":"Hook — 'Reply in Slack.' dim over ink."},
+  {"frame":2,"duration":9400,"transition":"fade","sceneSummary":"Reply scene — a reply is typed in the issue's Slack channel, sent, travels as a clay pip through the notifbuddy mark to the Linear issue card, lands as a comment, status flips to Done, synced badge."},
+  {"frame":3,"duration":2800,"transition":"fade","sceneSummary":"CTA — 'It lands in Linear.' with mono subline."}
+]} -->
+</body>
+</html>
