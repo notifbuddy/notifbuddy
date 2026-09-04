@@ -93,6 +93,7 @@ export type LinearSettings = {
 	creationMode: 'status' | 'manual' | 'condition';
 	triggerStatus?: string;
 	nameTemplate?: string;
+	topicTemplate?: string;
 	conditionExpr?: string;
 	archiveMode?: 'status' | 'manual' | 'condition';
 	archiveStatus?: string;
@@ -141,6 +142,7 @@ export type LinearSettingsState = {
 
 export type TemplateTestResult = {
 	name: string;
+	topic: string;
 	wouldCreate: boolean;
 	wouldArchive: boolean;
 	error?: string;
@@ -205,6 +207,7 @@ function linearError(error: unknown): string {
 // evaluated with the sync engine's exact rules.
 export async function testLinearTemplate(req: {
 	nameTemplate?: string;
+	topicTemplate?: string;
 	creationMode?: string;
 	triggerStatus?: string;
 	condition?: string;

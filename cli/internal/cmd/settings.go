@@ -29,6 +29,7 @@ func newSettingsCmd(a *app) *cobra.Command {
 func testReqFromSettings(s *api.LinearSettings) *api.TemplateTestRequest {
 	req := &api.TemplateTestRequest{
 		NameTemplate:     s.NameTemplate,
+		TopicTemplate:    s.TopicTemplate,
 		CreationMode:     optStr(string(s.CreationMode)),
 		TriggerStatus:    s.TriggerStatus,
 		Condition:        s.ConditionExpr,
@@ -44,6 +45,9 @@ func testReqFromSettings(s *api.LinearSettings) *api.TemplateTestRequest {
 func (f *settingsFlags) overlayTestReq(req *api.TemplateTestRequest, changed func(string) bool) {
 	if changed("name-template") {
 		req.NameTemplate = optStr(f.nameTemplate)
+	}
+	if changed("topic-template") {
+		req.TopicTemplate = optStr(f.topicTemplate)
 	}
 	if changed("creation-mode") {
 		req.CreationMode = optStr(f.creationMode)
@@ -88,6 +92,7 @@ type settingsFlags struct {
 	creationMode     string
 	triggerStatus    string
 	nameTemplate     string
+	topicTemplate    string
 	condition        string
 	archiveMode      string
 	archiveStatus    string
@@ -101,6 +106,7 @@ func (f *settingsFlags) register(cmd *cobra.Command) {
 	fl.StringVar(&f.creationMode, "creation-mode", "", "when to create channels: status | condition | manual")
 	fl.StringVar(&f.triggerStatus, "trigger-status", "", "workflow state name that triggers creation (status mode)")
 	fl.StringVar(&f.nameTemplate, "name-template", "", "channel name template, e.g. 'tkt-${{ linear.issue.identifier }}'")
+	fl.StringVar(&f.topicTemplate, "topic-template", "", "channel topic template backlinking the Linear issue (empty = built-in default)")
 	fl.StringVar(&f.condition, "condition", "", "creation condition expression (condition mode)")
 	fl.StringVar(&f.archiveMode, "archive-mode", "", "when to archive channels: status | condition | manual")
 	fl.StringVar(&f.archiveStatus, "archive-status", "", "workflow state name that triggers archiving (status mode)")
@@ -127,6 +133,9 @@ func (f *settingsFlags) apply(s *api.LinearSettings, changed func(string) bool) 
 	}
 	if changed("name-template") {
 		s.NameTemplate = optStr(f.nameTemplate)
+	}
+	if changed("topic-template") {
+		s.TopicTemplate = optStr(f.topicTemplate)
 	}
 	if changed("condition") {
 		s.ConditionExpr = optStr(f.condition)
@@ -300,6 +309,7 @@ func newSettingsTestCmd(a *app) *cobra.Command {
 type validateSampleResult struct {
 	SampleID     string `json:"sampleId"`
 	Name         string `json:"name"`
+	Topic        string `json:"topic"`
 	WouldCreate  bool   `json:"wouldCreate"`
 	WouldArchive bool   `json:"wouldArchive"`
 	Error        string `json:"error,omitempty"`
@@ -368,6 +378,7 @@ func newSettingsValidateCmd(a *app) *cobra.Command {
 					r.Samples = append(r.Samples, validateSampleResult{
 						SampleID:     sample.ID,
 						Name:         result.Name,
+						Topic:        result.Topic,
 						WouldCreate:  result.WouldCreate,
 						WouldArchive: result.WouldArchive,
 						Error:        result.Error.Value,

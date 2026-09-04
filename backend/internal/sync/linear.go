@@ -44,6 +44,7 @@ type linearIssueEntity struct {
 	ID         string `json:"id"`
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
+	URL        string `json:"url"`
 	State      struct {
 		Name string `json:"name"`
 	} `json:"state"`
@@ -211,7 +212,7 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 	// re-created; it can only be archived by the archive trigger. The trigger
 	// rules live in integrations.{Create,Archive}Triggered, shared with the
 	// settings test panel so "Run test" and the engine can never disagree.
-	switch _, err := e.store.ChannelForIssue(ctx, orgID, issueID); {
+	switch mapping, err := e.store.IssueChannelForIssue(ctx, orgID, issueID); {
 	case err == nil:
 		archive, err := integrations.ArchiveTriggered(e.tmpl, settings, stateName, evt)
 		if err != nil {
@@ -220,6 +221,17 @@ func (e *Engine) onLinearIssue(ctx context.Context, orgID string, p linearPayloa
 		}
 		if archive {
 			return e.closeChannel(ctx, orgID, issueID)
+		}
+		// Live-sync the topic backlink from issue updates (NOT-11): re-render
+		// and only call Slack when the topic actually changed. Best-effort —
+		// the event's real work is done.
+		if topic := e.channelTopic(ctx, settings, evt); topic != "" && topic != mapping.Topic {
+			token, err := e.intg.SlackBotToken(ctx, orgID)
+			if err != nil {
+				slog.WarnContext(ctx, "sync: topic update: slack token failed", "org_id", orgID, "error", err)
+				return nil
+			}
+			e.setChannelTopic(ctx, orgID, issueID, token, mapping.SlackChannelID, topic)
 		}
 		return nil
 	case errors.Is(err, store.ErrNotFound):

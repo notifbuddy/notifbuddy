@@ -92,6 +92,25 @@ func TestCreateChannel_ReturnsID(t *testing.T) {
 	}
 }
 
+func TestSetChannelTopic_SendsChannelAndTopic(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	if err := c.SetChannelTopic(context.Background(), "t", "C1", "SKO-1 • https://linear.app/x"); err != nil {
+		t.Fatalf("SetChannelTopic: %v", err)
+	}
+	if gotPath != "/conversations.setTopic" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotBody["channel"] != "C1" || gotBody["topic"] != "SKO-1 • https://linear.app/x" {
+		t.Errorf("body = %v", gotBody)
+	}
+}
+
 func TestCall_SurfacesSlackError(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"ok":false,"error":"name_taken"}`))

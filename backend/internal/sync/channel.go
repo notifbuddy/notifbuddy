@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"xolo/backend/internal/integrations"
+	"xolo/backend/internal/slackapi"
 	"xolo/backend/internal/store"
 	"xolo/backend/internal/template"
 )
@@ -84,6 +85,14 @@ func (e *Engine) ensureChannel(ctx context.Context, orgID, issueID string, setti
 		ChannelName:   name,
 		Trigger:       trigger,
 	})
+
+	// Backlink the channel to its Linear issue via the topic, and seed it with
+	// the ticket body (NOT-11). Best-effort: the channel already exists, so a
+	// failure must not redeliver.
+	if topic := e.channelTopic(ctx, settings, evt); topic != "" {
+		e.setChannelTopic(ctx, orgID, issueID, token, channelID, topic)
+	}
+	e.postChannelIntro(ctx, orgID, issueID, token, channelID)
 
 	// Invite configured AutoAddMembers plus Linear issue people (creator,
 	// assignee, profile @mentions) and any call-site extras. Best-effort:
@@ -182,6 +191,74 @@ func (e *Engine) closeChannel(ctx context.Context, orgID, issueID string) error 
 		SlackChannel:  channelID,
 	})
 	return nil
+}
+
+// slackTopicMaxLen is Slack's channel-topic length cap.
+const slackTopicMaxLen = 250
+
+// channelTopic renders the config's topic template (or the built-in default)
+// against the event, trimmed to Slack's topic cap. A render failure returns ""
+// (logged): a broken custom template must not block channel handling.
+func (e *Engine) channelTopic(ctx context.Context, settings integrations.LinearSettings, evt template.Event) string {
+	topic, err := e.tmpl.Render(settings.EffectiveTopicTemplate(), evt)
+	if err != nil {
+		slog.WarnContext(ctx, "sync: channel topic render failed", "error", err)
+		return ""
+	}
+	topic = strings.TrimSpace(topic)
+	if r := []rune(topic); len(r) > slackTopicMaxLen {
+		topic = string(r[:slackTopicMaxLen-1]) + "…"
+	}
+	return topic
+}
+
+// setChannelTopic sets the channel topic and records it, so the live-update
+// path can skip Slack when nothing changed. Both steps are best-effort.
+func (e *Engine) setChannelTopic(ctx context.Context, orgID, issueID, token, channelID, topic string) {
+	if err := e.slack.SetChannelTopic(ctx, token, channelID, topic); err != nil {
+		slog.ErrorContext(ctx, "sync: set channel topic failed", "org_id", orgID, "channel_id", channelID, "error", err)
+		return
+	}
+	if err := e.store.SetIssueChannelTopic(ctx, orgID, issueID, topic); err != nil {
+		slog.ErrorContext(ctx, "sync: record channel topic failed", "org_id", orgID, "issue_id", issueID, "error", err)
+	}
+}
+
+// introDescriptionMaxLen caps the ticket body quoted in the intro message
+// (Slack rejects text sections beyond ~3000 chars).
+const introDescriptionMaxLen = 2800
+
+// postChannelIntro posts the new channel's first message: a link back to the
+// Linear issue plus the ticket body, so the channel starts with the issue's
+// context. Best-effort — the channel exists, so failures only log.
+func (e *Engine) postChannelIntro(ctx context.Context, orgID, issueID, token, channelID string) {
+	issue, err := e.intg.LinearIssueByID(ctx, orgID, issueID)
+	if err != nil {
+		slog.WarnContext(ctx, "sync: channel intro: fetch issue failed", "org_id", orgID, "issue_id", issueID, "error", err)
+		return
+	}
+	title := strings.TrimSpace(issue.Title)
+	if title == "" {
+		title = issue.Identifier
+	}
+	if issue.Identifier == "" && title == "" {
+		return
+	}
+	head := fmt.Sprintf("*%s: %s*", issue.Identifier, title)
+	if issue.URL != "" {
+		head = fmt.Sprintf("*<%s|%s: %s>*", issue.URL, issue.Identifier, title)
+	}
+	body := strings.TrimSpace(issue.Description)
+	if r := []rune(body); len(r) > introDescriptionMaxLen {
+		body = string(r[:introDescriptionMaxLen-1]) + "…"
+	}
+	text := head
+	if body != "" {
+		text += "\n\n" + body
+	}
+	if _, err := e.slack.PostMessage(ctx, token, slackapi.PostOptions{ChannelID: channelID, Text: text}); err != nil {
+		slog.ErrorContext(ctx, "sync: channel intro: post failed", "org_id", orgID, "channel_id", channelID, "error", err)
+	}
 }
 
 // channelName renders the settings name template, falling back to a

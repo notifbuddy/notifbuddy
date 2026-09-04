@@ -1023,6 +1023,14 @@ export interface components {
              */
             nameTemplate?: string;
             /**
+             * @description GitHub-Actions-expression template for the channel topic. The topic
+             *     backlinks the channel to its Linear issue and is re-rendered on
+             *     issue updates. Empty means the built-in default (identifier, title,
+             *     status and issue URL).
+             * @example ${{ linear.issue.identifier }} • ${{ linear.issue.url }}
+             */
+            topicTemplate?: string;
+            /**
              * @description GitHub-Actions-expression that must be true for creation.
              * @example linear.action == 'update'
              */
@@ -1153,6 +1161,11 @@ export interface components {
             /** @example tkt-${{ linear.issue.identifier }} */
             nameTemplate?: string;
             /**
+             * @description The channel-topic template (empty = the built-in default).
+             * @example ${{ linear.issue.identifier }} • ${{ linear.issue.url }}
+             */
+            topicTemplate?: string;
+            /**
              * @description The creation trigger mode (status | manual | condition).
              * @example status
              */
@@ -1205,6 +1218,11 @@ export interface components {
             wouldCreate: boolean;
             /** @description Whether the archive trigger fires for this event (same rules). */
             wouldArchive: boolean;
+            /**
+             * @description The rendered channel topic (from topicTemplate, or the built-in
+             *     default when empty).
+             */
+            topic: string;
             /** @description A template/condition error, if any (shown inline by the UI). */
             error?: string;
         };

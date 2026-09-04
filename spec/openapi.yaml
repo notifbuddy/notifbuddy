@@ -1526,6 +1526,14 @@ components:
           type: string
           description: GitHub-Actions-expression template for the channel name.
           example: tkt-${{ linear.issue.identifier }}
+        topicTemplate:
+          type: string
+          description: |
+            GitHub-Actions-expression template for the channel topic. The topic
+            backlinks the channel to its Linear issue and is re-rendered on
+            issue updates. Empty means the built-in default (identifier, title,
+            status and issue URL).
+          example: "${{ linear.issue.identifier }} • ${{ linear.issue.url }}"
         conditionExpr:
           type: string
           description: GitHub-Actions-expression that must be true for creation.
@@ -1710,6 +1718,10 @@ components:
         nameTemplate:
           type: string
           example: tkt-${{ linear.issue.identifier }}
+        topicTemplate:
+          type: string
+          description: The channel-topic template (empty = the built-in default).
+          example: "${{ linear.issue.identifier }} • ${{ linear.issue.url }}"
         creationMode:
           type: string
           description: The creation trigger mode (status | manual | condition).
@@ -1759,11 +1771,17 @@ components:
         wouldArchive:
           type: boolean
           description: Whether the archive trigger fires for this event (same rules).
+        topic:
+          type: string
+          description: |
+            The rendered channel topic (from topicTemplate, or the built-in
+            default when empty).
         error:
           type: string
           description: A template/condition error, if any (shown inline by the UI).
       required:
         - name
+        - topic
         - wouldCreate
         - wouldArchive
     SupportChatResponse:

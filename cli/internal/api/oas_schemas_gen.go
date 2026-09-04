@@ -933,6 +933,10 @@ type LinearSettings struct {
 	TriggerStatus OptString `json:"triggerStatus"`
 	// GitHub-Actions-expression template for the channel name.
 	NameTemplate OptString `json:"nameTemplate"`
+	// GitHub-Actions-expression template for the channel topic. The topic backlinks the channel to its
+	// Linear issue and is re-rendered on issue updates. Empty means the built-in default (identifier,
+	// title, status and issue URL).
+	TopicTemplate OptString `json:"topicTemplate"`
 	// GitHub-Actions-expression that must be true for creation.
 	ConditionExpr OptString `json:"conditionExpr"`
 	// 'status' auto-archives the issue's channel when the issue reaches archiveStatus; 'condition'
@@ -967,6 +971,11 @@ func (s *LinearSettings) GetTriggerStatus() OptString {
 // GetNameTemplate returns the value of NameTemplate.
 func (s *LinearSettings) GetNameTemplate() OptString {
 	return s.NameTemplate
+}
+
+// GetTopicTemplate returns the value of TopicTemplate.
+func (s *LinearSettings) GetTopicTemplate() OptString {
+	return s.TopicTemplate
 }
 
 // GetConditionExpr returns the value of ConditionExpr.
@@ -1017,6 +1026,11 @@ func (s *LinearSettings) SetTriggerStatus(val OptString) {
 // SetNameTemplate sets the value of NameTemplate.
 func (s *LinearSettings) SetNameTemplate(val OptString) {
 	s.NameTemplate = val
+}
+
+// SetTopicTemplate sets the value of TopicTemplate.
+func (s *LinearSettings) SetTopicTemplate(val OptString) {
+	s.TopicTemplate = val
 }
 
 // SetConditionExpr sets the value of ConditionExpr.
@@ -2334,6 +2348,8 @@ func (*SyncSettingsUnauthorized) syncSettingsRes() {}
 // Ref: #/components/schemas/TemplateTestRequest
 type TemplateTestRequest struct {
 	NameTemplate OptString `json:"nameTemplate"`
+	// The channel-topic template (empty = the built-in default).
+	TopicTemplate OptString `json:"topicTemplate"`
 	// The creation trigger mode (status | manual | condition).
 	CreationMode OptString `json:"creationMode"`
 	// Workflow state name for creation status mode.
@@ -2355,6 +2371,11 @@ type TemplateTestRequest struct {
 // GetNameTemplate returns the value of NameTemplate.
 func (s *TemplateTestRequest) GetNameTemplate() OptString {
 	return s.NameTemplate
+}
+
+// GetTopicTemplate returns the value of TopicTemplate.
+func (s *TemplateTestRequest) GetTopicTemplate() OptString {
+	return s.TopicTemplate
 }
 
 // GetCreationMode returns the value of CreationMode.
@@ -2400,6 +2421,11 @@ func (s *TemplateTestRequest) GetEvent() OptString {
 // SetNameTemplate sets the value of NameTemplate.
 func (s *TemplateTestRequest) SetNameTemplate(val OptString) {
 	s.NameTemplate = val
+}
+
+// SetTopicTemplate sets the value of TopicTemplate.
+func (s *TemplateTestRequest) SetTopicTemplate(val OptString) {
+	s.TopicTemplate = val
 }
 
 // SetCreationMode sets the value of CreationMode.
@@ -2453,6 +2479,8 @@ type TemplateTestResponse struct {
 	WouldCreate bool `json:"wouldCreate"`
 	// Whether the archive trigger fires for this event (same rules).
 	WouldArchive bool `json:"wouldArchive"`
+	// The rendered channel topic (from topicTemplate, or the built-in default when empty).
+	Topic string `json:"topic"`
 	// A template/condition error, if any (shown inline by the UI).
 	Error OptString `json:"error"`
 }
@@ -2470,6 +2498,11 @@ func (s *TemplateTestResponse) GetWouldCreate() bool {
 // GetWouldArchive returns the value of WouldArchive.
 func (s *TemplateTestResponse) GetWouldArchive() bool {
 	return s.WouldArchive
+}
+
+// GetTopic returns the value of Topic.
+func (s *TemplateTestResponse) GetTopic() string {
+	return s.Topic
 }
 
 // GetError returns the value of Error.
@@ -2490,6 +2523,11 @@ func (s *TemplateTestResponse) SetWouldCreate(val bool) {
 // SetWouldArchive sets the value of WouldArchive.
 func (s *TemplateTestResponse) SetWouldArchive(val bool) {
 	s.WouldArchive = val
+}
+
+// SetTopic sets the value of Topic.
+func (s *TemplateTestResponse) SetTopic(val string) {
+	s.Topic = val
 }
 
 // SetError sets the value of Error.

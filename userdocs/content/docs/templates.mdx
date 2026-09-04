@@ -3,10 +3,10 @@ title: Templates
 description: Expression syntax for channel names and creation conditions.
 ---
 
-Channel names and creation conditions use **GitHub Actions expression syntax**, run against the incoming event.
+Channel names, channel topics, and creation conditions use **GitHub Actions expression syntax**, run against the incoming event.
 
 ```
-${{ linear.issue.identifier }}          # channel name
+${{ linear.issue.identifier }}          # channel name or topic
 linear.issue.state.name == 'Done'       # condition
 ```
 
@@ -89,4 +89,7 @@ contains(join(linear.issue.labels.*.name), 'bug')
 
 # name by identifier (the default channel-name template)
 tkt-${{ lowercase(linear.issue.identifier) }}
+
+# backlink topic (the default channel-topic template)
+${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}
 ```

@@ -27,6 +27,7 @@ import (
 // slackapi.Client, but declared here so the engine can be tested with a fake.
 type SlackActions interface {
 	CreateChannel(ctx context.Context, token, name string) (string, error)
+	SetChannelTopic(ctx context.Context, token, channelID, topic string) error
 	ArchiveChannel(ctx context.Context, token, channelID string) error
 	DeleteChannel(ctx context.Context, token, channelID string) error
 	InviteUsers(ctx context.Context, token, channelID string, userIDs []string) error
@@ -90,6 +91,8 @@ type Store interface {
 
 	UpsertIssueChannel(ctx context.Context, in store.IssueChannel) error
 	ChannelForIssue(ctx context.Context, orgID, linearIssueID string) (string, error)
+	IssueChannelForIssue(ctx context.Context, orgID, linearIssueID string) (store.IssueChannel, error)
+	SetIssueChannelTopic(ctx context.Context, orgID, linearIssueID, topic string) error
 	IssueForChannel(ctx context.Context, orgID, slackChannelID string) (string, error)
 	DeleteIssueChannel(ctx context.Context, orgID, linearIssueID string) error
 

@@ -2620,6 +2620,12 @@ func (s *LinearSettings) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.TopicTemplate.Set {
+			e.FieldStart("topicTemplate")
+			s.TopicTemplate.Encode(e)
+		}
+	}
+	{
 		if s.ConditionExpr.Set {
 			e.FieldStart("conditionExpr")
 			s.ConditionExpr.Encode(e)
@@ -2657,17 +2663,18 @@ func (s *LinearSettings) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfLinearSettings = [10]string{
-	0: "settingId",
-	1: "creationMode",
-	2: "triggerStatus",
-	3: "nameTemplate",
-	4: "conditionExpr",
-	5: "archiveMode",
-	6: "archiveStatus",
-	7: "archiveConditionExpr",
-	8: "autoAddMembers",
-	9: "teamId",
+var jsonFieldsNameOfLinearSettings = [11]string{
+	0:  "settingId",
+	1:  "creationMode",
+	2:  "triggerStatus",
+	3:  "nameTemplate",
+	4:  "topicTemplate",
+	5:  "conditionExpr",
+	6:  "archiveMode",
+	7:  "archiveStatus",
+	8:  "archiveConditionExpr",
+	9:  "autoAddMembers",
+	10: "teamId",
 }
 
 // Decode decodes LinearSettings from json.
@@ -2719,6 +2726,16 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"nameTemplate\"")
 			}
+		case "topicTemplate":
+			if err := func() error {
+				s.TopicTemplate.Reset()
+				if err := s.TopicTemplate.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"topicTemplate\"")
+			}
 		case "conditionExpr":
 			if err := func() error {
 				s.ConditionExpr.Reset()
@@ -2760,7 +2777,7 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"archiveConditionExpr\"")
 			}
 		case "autoAddMembers":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				s.AutoAddMembers = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -2780,7 +2797,7 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"autoAddMembers\"")
 			}
 		case "teamId":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := d.Str()
 				s.TeamId = string(v)
@@ -2802,7 +2819,7 @@ func (s *LinearSettings) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b00000010,
-		0b00000011,
+		0b00000110,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -5678,6 +5695,12 @@ func (s *TemplateTestRequest) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.TopicTemplate.Set {
+			e.FieldStart("topicTemplate")
+			s.TopicTemplate.Encode(e)
+		}
+	}
+	{
 		if s.CreationMode.Set {
 			e.FieldStart("creationMode")
 			s.CreationMode.Encode(e)
@@ -5727,16 +5750,17 @@ func (s *TemplateTestRequest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTemplateTestRequest = [9]string{
+var jsonFieldsNameOfTemplateTestRequest = [10]string{
 	0: "nameTemplate",
-	1: "creationMode",
-	2: "triggerStatus",
-	3: "condition",
-	4: "archiveMode",
-	5: "archiveStatus",
-	6: "archiveCondition",
-	7: "sampleId",
-	8: "event",
+	1: "topicTemplate",
+	2: "creationMode",
+	3: "triggerStatus",
+	4: "condition",
+	5: "archiveMode",
+	6: "archiveStatus",
+	7: "archiveCondition",
+	8: "sampleId",
+	9: "event",
 }
 
 // Decode decodes TemplateTestRequest from json.
@@ -5756,6 +5780,16 @@ func (s *TemplateTestRequest) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"nameTemplate\"")
+			}
+		case "topicTemplate":
+			if err := func() error {
+				s.TopicTemplate.Reset()
+				if err := s.TopicTemplate.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"topicTemplate\"")
 			}
 		case "creationMode":
 			if err := func() error {
@@ -5883,6 +5917,10 @@ func (s *TemplateTestResponse) encodeFields(e *jx.Encoder) {
 		e.Bool(s.WouldArchive)
 	}
 	{
+		e.FieldStart("topic")
+		e.Str(s.Topic)
+	}
+	{
 		if s.Error.Set {
 			e.FieldStart("error")
 			s.Error.Encode(e)
@@ -5890,11 +5928,12 @@ func (s *TemplateTestResponse) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTemplateTestResponse = [4]string{
+var jsonFieldsNameOfTemplateTestResponse = [5]string{
 	0: "name",
 	1: "wouldCreate",
 	2: "wouldArchive",
-	3: "error",
+	3: "topic",
+	4: "error",
 }
 
 // Decode decodes TemplateTestResponse from json.
@@ -5942,6 +5981,18 @@ func (s *TemplateTestResponse) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"wouldArchive\"")
 			}
+		case "topic":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Str()
+				s.Topic = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"topic\"")
+			}
 		case "error":
 			if err := func() error {
 				s.Error.Reset()
@@ -5962,7 +6013,7 @@ func (s *TemplateTestResponse) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

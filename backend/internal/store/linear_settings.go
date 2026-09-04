@@ -31,6 +31,7 @@ type LinearSettings struct {
 	CreationMode         string   // "status" | "manual" | "condition"
 	TriggerStatus        string   // workflow state name that triggers creation (status mode)
 	NameTemplate         string   // GHA-expression channel-name template
+	TopicTemplate        string   // GHA-expression channel-topic template ('' = built-in default)
 	ConditionExpr        string   // GHA-expression that must be true to create
 	ArchiveMode          string   // "status" | "manual" | "condition" — auto-archive trigger
 	ArchiveStatus        string   // workflow state name that triggers archiving (status mode)
@@ -39,7 +40,7 @@ type LinearSettings struct {
 }
 
 const linearSettingsCols = `setting_id, org_id, team_id, creation_mode,
-	trigger_status, name_template, condition_expr,
+	trigger_status, name_template, topic_template, condition_expr,
 	archive_mode, archive_status, archive_condition_expr, auto_add_members`
 
 // ListLinearSettings returns all of an org's configs, ordered by name. Returns
@@ -115,7 +116,7 @@ func scanLinearSettings(sc interface {
 	var out LinearSettings
 	var membersJSON []byte
 	if err := sc.Scan(&out.SettingID, &out.OrgID, &out.TeamID, &out.CreationMode,
-		&out.TriggerStatus, &out.NameTemplate, &out.ConditionExpr,
+		&out.TriggerStatus, &out.NameTemplate, &out.TopicTemplate, &out.ConditionExpr,
 		&out.ArchiveMode, &out.ArchiveStatus, &out.ArchiveConditionExpr, &membersJSON); err != nil {
 		return LinearSettings{}, err
 	}
@@ -164,12 +165,12 @@ func (s *Store) SaveLinearSetting(ctx context.Context, in LinearSettings) (setti
 	if settingID == "" {
 		err = s.pool.QueryRow(ctx, `
 			INSERT INTO linear_settings
-				(org_id, team_id, creation_mode, trigger_status, name_template, condition_expr,
+				(org_id, team_id, creation_mode, trigger_status, name_template, topic_template, condition_expr,
 				 archive_mode, archive_status, archive_condition_expr, auto_add_members)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING setting_id
 		`, in.OrgID, in.TeamID, in.CreationMode, in.TriggerStatus,
-			in.NameTemplate, in.ConditionExpr,
+			in.NameTemplate, in.TopicTemplate, in.ConditionExpr,
 			in.ArchiveMode, in.ArchiveStatus, in.ArchiveConditionExpr, membersJSON).Scan(&settingID)
 		if err != nil {
 			return "", wrapTeamConflict(err, in.TeamID, "insert linear setting")
@@ -183,15 +184,16 @@ func (s *Store) SaveLinearSetting(ctx context.Context, in LinearSettings) (setti
 			creation_mode          = $4,
 			trigger_status         = $5,
 			name_template          = $6,
-			condition_expr         = $7,
-			archive_mode           = $8,
-			archive_status         = $9,
-			archive_condition_expr = $10,
-			auto_add_members       = $11,
+			topic_template         = $7,
+			condition_expr         = $8,
+			archive_mode           = $9,
+			archive_status         = $10,
+			archive_condition_expr = $11,
+			auto_add_members       = $12,
 			updated_at             = now()
 		WHERE setting_id = $1 AND org_id = $2
 	`, settingID, in.OrgID, in.TeamID, in.CreationMode, in.TriggerStatus,
-		in.NameTemplate, in.ConditionExpr,
+		in.NameTemplate, in.TopicTemplate, in.ConditionExpr,
 		in.ArchiveMode, in.ArchiveStatus, in.ArchiveConditionExpr, membersJSON)
 	if err != nil {
 		return "", wrapTeamConflict(err, in.TeamID, "update linear setting")

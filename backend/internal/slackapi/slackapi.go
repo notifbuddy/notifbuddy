@@ -90,6 +90,9 @@ type Client interface {
 	// DeleteChannel permanently deletes a channel. Slack only exposes this to
 	// admin/org tokens; most callers should prefer ArchiveChannel.
 	DeleteChannel(ctx context.Context, token, channelID string) error
+	// SetChannelTopic sets a channel's topic (conversations.setTopic; needs the
+	// channels:manage scope the app already requests for channel creation).
+	SetChannelTopic(ctx context.Context, token, channelID, topic string) error
 	// InviteUsers adds the given user ids to a channel (used to auto-add bots on
 	// creation). Already-in-channel ids are not treated as an error.
 	InviteUsers(ctx context.Context, token, channelID string, userIDs []string) error
@@ -178,6 +181,14 @@ func (c *httpClient) ArchiveChannel(ctx context.Context, token, channelID string
 func (c *httpClient) DeleteChannel(ctx context.Context, token, channelID string) error {
 	var out slackOK
 	return c.callJSON(ctx, token, "conversations.delete", map[string]any{"channel": channelID}, &out)
+}
+
+func (c *httpClient) SetChannelTopic(ctx context.Context, token, channelID, topic string) error {
+	var out slackOK
+	return c.callJSON(ctx, token, "conversations.setTopic", map[string]any{
+		"channel": channelID,
+		"topic":   topic,
+	}, &out)
 }
 
 func (c *httpClient) InviteUsers(ctx context.Context, token, channelID string, userIDs []string) error {

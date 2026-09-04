@@ -25,6 +25,7 @@ type fakeStore struct {
 	slackPayloads  map[string]json.RawMessage
 	issueToChannel map[string]string // key: org|issue
 	channelToIssue map[string]string // key: org|channel
+	channelTopics  map[string]string // key: org|issue
 	linksBySlack   map[string]store.MirroredMessage
 	linksByLinear  map[string]store.MirroredMessage
 	recorded       []store.MirroredMessage
@@ -48,6 +49,7 @@ func newFakeStore() *fakeStore {
 		slackPayloads:  map[string]json.RawMessage{},
 		issueToChannel: map[string]string{},
 		channelToIssue: map[string]string{},
+		channelTopics:  map[string]string{},
 		linksBySlack:   map[string]store.MirroredMessage{},
 		linksByLinear:  map[string]store.MirroredMessage{},
 		assets:         map[string][]store.MirroredAsset{},
@@ -120,6 +122,21 @@ func (f *fakeStore) LockIssue(_ context.Context, _, _ string) (func(), error) {
 func (f *fakeStore) UpsertIssueChannel(_ context.Context, in store.IssueChannel) error {
 	f.issueToChannel[in.OrgID+"|"+in.LinearIssueID] = in.SlackChannelID
 	f.channelToIssue[in.OrgID+"|"+in.SlackChannelID] = in.LinearIssueID
+	f.channelTopics[in.OrgID+"|"+in.LinearIssueID] = in.Topic
+	return nil
+}
+func (f *fakeStore) IssueChannelForIssue(_ context.Context, org, issue string) (store.IssueChannel, error) {
+	c, ok := f.issueToChannel[org+"|"+issue]
+	if !ok {
+		return store.IssueChannel{}, store.ErrNotFound
+	}
+	return store.IssueChannel{
+		OrgID: org, LinearIssueID: issue, SlackChannelID: c,
+		Topic: f.channelTopics[org+"|"+issue],
+	}, nil
+}
+func (f *fakeStore) SetIssueChannelTopic(_ context.Context, org, issue, topic string) error {
+	f.channelTopics[org+"|"+issue] = topic
 	return nil
 }
 func (f *fakeStore) ChannelForIssue(_ context.Context, org, issue string) (string, error) {
@@ -170,6 +187,8 @@ type fakeSlack struct {
 	posted           []slackapi.PostOptions
 	postedTokens     []string
 	createdName      string
+	topics           []string // "channel|topic"
+	topicErr         error
 	archivedChannel  string
 	invited          []string
 	nextTS           string
@@ -192,6 +211,13 @@ func (s *fakeSlack) CreateChannel(_ context.Context, _, name string) (string, er
 		s.nextChannel = "C_NEW"
 	}
 	return s.nextChannel, nil
+}
+func (s *fakeSlack) SetChannelTopic(_ context.Context, _, channelID, topic string) error {
+	if s.topicErr != nil {
+		return s.topicErr
+	}
+	s.topics = append(s.topics, channelID+"|"+topic)
+	return nil
 }
 func (s *fakeSlack) ArchiveChannel(_ context.Context, _, channelID string) error {
 	s.archivedChannel = channelID
@@ -765,8 +791,10 @@ func TestOnLinearEvent_NotifBuddyCreateChannel(t *testing.T) {
 	if !pub.has(TopicChannelCreated) {
 		t.Errorf("expected channel.created topic, got %v", pub.topics)
 	}
-	if len(sl.posted) != 0 {
-		t.Errorf("command must short-circuit mirroring; got %d posts", len(sl.posted))
+	for _, p := range sl.posted {
+		if strings.Contains(p.Text, "@notifbuddy") {
+			t.Errorf("command must short-circuit mirroring; mirrored %q", p.Text)
+		}
 	}
 	// Manual path passes the comment body for mention scan + actor email.
 	if len(ig.inviteeBodies) != 1 || !strings.Contains(ig.inviteeBodies[0], "@notifbuddy") {

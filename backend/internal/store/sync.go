@@ -41,24 +41,58 @@ func fnvHash(s string) uint32 {
 }
 
 // IssueChannel is the one Slack channel mapped to a Linear issue for an org.
+// Topic is the last channel topic the sync engine set (empty until the first
+// successful set), kept so live updates only call Slack when it changed.
 type IssueChannel struct {
 	OrgID          string
 	LinearIssueID  string
 	SlackChannelID string
+	Topic          string
 }
 
 // UpsertIssueChannel records (or replaces) the channel for a Linear issue. The
 // mapping is one-channel-per-issue, so re-creating overwrites the prior row.
 func (s *Store) UpsertIssueChannel(ctx context.Context, in IssueChannel) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO issue_channels (org_id, linear_issue_id, slack_channel_id)
-		VALUES ($1, $2, $3)
+		INSERT INTO issue_channels (org_id, linear_issue_id, slack_channel_id, topic)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (org_id, linear_issue_id) DO UPDATE SET
 			slack_channel_id = EXCLUDED.slack_channel_id,
+			topic            = EXCLUDED.topic,
 			created_at       = now()
-	`, in.OrgID, in.LinearIssueID, in.SlackChannelID)
+	`, in.OrgID, in.LinearIssueID, in.SlackChannelID, in.Topic)
 	if err != nil {
 		return fmt.Errorf("store: upsert issue channel: %w", err)
+	}
+	return nil
+}
+
+// IssueChannelForIssue returns the full mapping row for a Linear issue
+// (channel id + last-set topic), or ErrNotFound.
+func (s *Store) IssueChannelForIssue(ctx context.Context, orgID, linearIssueID string) (IssueChannel, error) {
+	out := IssueChannel{OrgID: orgID, LinearIssueID: linearIssueID}
+	err := s.pool.QueryRow(ctx, `
+		SELECT slack_channel_id, topic FROM issue_channels
+		WHERE org_id = $1 AND linear_issue_id = $2
+	`, orgID, linearIssueID).Scan(&out.SlackChannelID, &out.Topic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return IssueChannel{}, ErrNotFound
+	}
+	if err != nil {
+		return IssueChannel{}, fmt.Errorf("store: issue channel for issue: %w", err)
+	}
+	return out, nil
+}
+
+// SetIssueChannelTopic records the topic that was just set on the issue's
+// channel, after the Slack call succeeded.
+func (s *Store) SetIssueChannelTopic(ctx context.Context, orgID, linearIssueID, topic string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE issue_channels SET topic = $3
+		WHERE org_id = $1 AND linear_issue_id = $2
+	`, orgID, linearIssueID, topic)
+	if err != nil {
+		return fmt.Errorf("store: set issue channel topic: %w", err)
 	}
 	return nil
 }

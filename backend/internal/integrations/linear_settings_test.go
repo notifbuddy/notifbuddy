@@ -93,6 +93,36 @@ func TestLinearSettingsTriggers(t *testing.T) {
 		}
 	})
 
+	t.Run("topic falls back to the default template", func(t *testing.T) {
+		evt := issueEvent("Todo", "unstarted")
+		issue := evt.Linear["issue"].(map[string]any)
+		issue["title"] = "Fix login"
+		issue["url"] = "https://linear.app/x/issue/SKO-9/fix-login"
+		res := s.TestLinearTemplate(evt, statusConfig)
+		want := "SKO-9: Fix login • Todo • https://linear.app/x/issue/SKO-9/fix-login"
+		if res.Topic != want {
+			t.Errorf("topic = %q, want %q", res.Topic, want)
+		}
+	})
+
+	t.Run("custom topic template overrides the default", func(t *testing.T) {
+		cfg := statusConfig
+		cfg.TopicTemplate = "see ${{ linear.issue.identifier }}"
+		res := s.TestLinearTemplate(issueEvent("Todo", "unstarted"), cfg)
+		if res.Topic != "see SKO-9" {
+			t.Errorf("topic = %q, want %q", res.Topic, "see SKO-9")
+		}
+	})
+
+	t.Run("bad topic template surfaces an error", func(t *testing.T) {
+		cfg := statusConfig
+		cfg.TopicTemplate = "${{ linear.issue. }}"
+		res := s.TestLinearTemplate(issueEvent("Todo", "unstarted"), cfg)
+		if res.Err == "" {
+			t.Fatal("expected a topic template error")
+		}
+	})
+
 	t.Run("bad archive expression surfaces an error", func(t *testing.T) {
 		res := s.TestLinearTemplate(issueEvent("Done", "completed"), LinearSettings{
 			CreationMode: "manual", ArchiveMode: "condition", ArchiveConditionExpr: "linear.issue. ==",

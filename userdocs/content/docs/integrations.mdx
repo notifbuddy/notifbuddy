@@ -13,4 +13,16 @@ description: Available today and coming soon.
 
 ## Linear channel rules
 
-Each Linear team gets one config: how channels open, the name template, an optional condition, and members to auto-add. Configure these on the dashboard.
+Each Linear team gets one config: how channels open, the name and topic templates, an optional condition, and members to auto-add. Configure these on the dashboard.
+
+## Channel topic backlink
+
+Every channel NotifBuddy opens gets a topic that links back to its Linear issue. The topic re-renders on issue updates, so a status change in Linear shows up in the Slack channel's topic.
+
+The default topic shows the issue identifier, title, status, and URL:
+
+```
+${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}
+```
+
+Set your own template in the config's **Channel topic** field to override it. Leave the field empty to keep the default. See [Templates](/templates) for the expression syntax.
