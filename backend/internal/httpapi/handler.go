@@ -475,6 +475,7 @@ func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRe
 	}
 	res := h.integrations.TestLinearTemplate(evt, integrations.LinearSettings{
 		NameTemplate:         req.NameTemplate.Or(""),
+		TopicTemplate:        req.TopicTemplate.Or(""),
 		CreationMode:         req.CreationMode.Or("manual"),
 		TriggerStatus:        req.TriggerStatus.Or(""),
 		ConditionExpr:        req.Condition.Or(""),
@@ -484,6 +485,7 @@ func (h Handler) TestLinearTemplate(ctx context.Context, req *api.TemplateTestRe
 	})
 	out := &api.TemplateTestResponse{
 		Name:         res.Name,
+		Topic:        res.Topic,
 		WouldCreate:  res.WouldCreate,
 		WouldArchive: res.WouldArchive,
 	}
@@ -545,6 +547,7 @@ func fromAPILinearSettings(req *api.LinearSettings) integrations.LinearSettings 
 		CreationMode:         string(req.CreationMode),
 		TriggerStatus:        req.TriggerStatus.Or(""),
 		NameTemplate:         req.NameTemplate.Or(""),
+		TopicTemplate:        req.TopicTemplate.Or(""),
 		ConditionExpr:        req.ConditionExpr.Or(""),
 		ArchiveMode:          string(req.ArchiveMode.Or("manual")),
 		ArchiveStatus:        req.ArchiveStatus.Or(""),
@@ -568,6 +571,9 @@ func toAPILinearSettings(s integrations.LinearSettings) api.LinearSettings {
 	}
 	if s.NameTemplate != "" {
 		out.NameTemplate = api.NewOptString(s.NameTemplate)
+	}
+	if s.TopicTemplate != "" {
+		out.TopicTemplate = api.NewOptString(s.TopicTemplate)
 	}
 	if s.ConditionExpr != "" {
 		out.ConditionExpr = api.NewOptString(s.ConditionExpr)

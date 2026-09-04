@@ -24,12 +24,19 @@ type LinearSettings struct {
 	CreationMode         string   `json:"creationMode"`  // "status" | "manual" | "condition"
 	TriggerStatus        string   `json:"triggerStatus"` // workflow state name (status mode)
 	NameTemplate         string   `json:"nameTemplate"`
+	TopicTemplate        string   `json:"topicTemplate"` // '' = DefaultTopicTemplate
 	ConditionExpr        string   `json:"conditionExpr"`
 	ArchiveMode          string   `json:"archiveMode"`   // "status" | "manual" | "condition"
 	ArchiveStatus        string   `json:"archiveStatus"` // workflow state name (status mode)
 	ArchiveConditionExpr string   `json:"archiveConditionExpr"`
 	AutoAddMembers       []string `json:"autoAddMembers"` // Slack member ids (bots + people)
 }
+
+// DefaultTopicTemplate is the channel-topic backlink new configs start with
+// (autofilled on create and by the migration for pre-existing rows): the
+// issue reference, title, and current status, plus the Linear URL Slack
+// renders as a clickable backlink. An emptied template disables the topic.
+const DefaultTopicTemplate = "${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}"
 
 // LinearSyncReady reports whether the org can actually run the Linear → Slack
 // channel sync: it needs BOTH Linear and Slack connected at the workspace level
@@ -93,6 +100,11 @@ func (s *Service) SaveLinearSetting(ctx context.Context, orgID string, in Linear
 	if err := s.validateLinearSettings(in); err != nil {
 		return LinearSettings{}, err
 	}
+	// New configs start on the default topic backlink; an existing config with
+	// an emptied template stays empty (topic deliberately disabled).
+	if in.SettingID == "" && strings.TrimSpace(in.TopicTemplate) == "" {
+		in.TopicTemplate = DefaultTopicTemplate
+	}
 	settingID, err := s.store.SaveLinearSetting(ctx, store.LinearSettings{
 		SettingID:            in.SettingID,
 		OrgID:                orgID,
@@ -100,6 +112,7 @@ func (s *Service) SaveLinearSetting(ctx context.Context, orgID string, in Linear
 		CreationMode:         in.CreationMode,
 		TriggerStatus:        in.TriggerStatus,
 		NameTemplate:         in.NameTemplate,
+		TopicTemplate:        in.TopicTemplate,
 		ConditionExpr:        in.ConditionExpr,
 		ArchiveMode:          orDefault(in.ArchiveMode, "manual"),
 		ArchiveStatus:        in.ArchiveStatus,
@@ -162,6 +175,11 @@ func (s *Service) validateLinearSettings(in LinearSettings) error {
 			return fmt.Errorf("name template: %w", err)
 		}
 	}
+	if in.TopicTemplate != "" {
+		if _, err := s.tmpl.Render(in.TopicTemplate, empty); err != nil {
+			return fmt.Errorf("topic template: %w", err)
+		}
+	}
 	if in.ConditionExpr != "" {
 		if _, err := s.tmpl.Evaluate(in.ConditionExpr, empty); err != nil {
 			return fmt.Errorf("condition: %w", err)
@@ -183,6 +201,7 @@ func fromStoreLinearSettings(r store.LinearSettings) LinearSettings {
 		CreationMode:         orDefault(r.CreationMode, "manual"),
 		TriggerStatus:        r.TriggerStatus,
 		NameTemplate:         r.NameTemplate,
+		TopicTemplate:        r.TopicTemplate,
 		ConditionExpr:        r.ConditionExpr,
 		ArchiveMode:          orDefault(r.ArchiveMode, "manual"),
 		ArchiveStatus:        r.ArchiveStatus,
@@ -314,6 +333,7 @@ func EventStateName(evt template.Event) string {
 // Err carries the first failure (parse/eval) for display.
 type TemplateTestResult struct {
 	Name         string `json:"name"`
+	Topic        string `json:"topic"`
 	WouldCreate  bool   `json:"wouldCreate"`
 	WouldArchive bool   `json:"wouldArchive"`
 	Err          string `json:"error,omitempty"`
@@ -332,6 +352,14 @@ func (s *Service) TestLinearTemplate(evt template.Event, in LinearSettings) Temp
 			return res
 		}
 		res.Name = name
+	}
+	if in.TopicTemplate != "" {
+		topic, err := s.tmpl.Render(in.TopicTemplate, evt)
+		if err != nil {
+			res.Err = "topic template: " + err.Error()
+			return res
+		}
+		res.Topic = topic
 	}
 	stateName := EventStateName(evt)
 	wouldCreate, err := CreateTriggered(s.tmpl, in, stateName, evt)

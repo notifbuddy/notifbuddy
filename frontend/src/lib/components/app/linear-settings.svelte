@@ -103,6 +103,11 @@
 	// so the two never drift. lowercase() is one of our hbs-style helpers.
 	const DEFAULT_NAME_TEMPLATE = 'tkt-${{ lowercase(linear.issue.identifier) }}';
 
+	// Default topic template new configs start with (the backend autofills the
+	// same on create; a cleared field disables the topic).
+	const DEFAULT_TOPIC_TEMPLATE =
+		'${{ linear.issue.identifier }}: ${{ linear.issue.title }} • ${{ linear.issue.state.name }} • ${{ linear.issue.url }}';
+
 	function toDraft(s: LinearSettings): Draft {
 		return {
 			key: nextKey(),
@@ -111,6 +116,7 @@
 			creationMode: s.creationMode,
 			triggerStatus: s.triggerStatus ?? '',
 			nameTemplate: s.nameTemplate ?? '',
+			topicTemplate: s.topicTemplate ?? '',
 			conditionExpr: s.conditionExpr ?? '',
 			archiveMode: s.archiveMode ?? 'manual',
 			archiveStatus: s.archiveStatus ?? '',
@@ -184,6 +190,7 @@
 				creationMode: 'manual',
 				triggerStatus: '',
 				nameTemplate: DEFAULT_NAME_TEMPLATE,
+				topicTemplate: DEFAULT_TOPIC_TEMPLATE,
 				conditionExpr: '',
 				archiveMode: 'manual',
 				archiveStatus: '',
@@ -225,6 +232,7 @@
 			creationMode: d.creationMode,
 			triggerStatus: d.triggerStatus || undefined,
 			nameTemplate: d.nameTemplate || undefined,
+			topicTemplate: d.topicTemplate || undefined,
 			conditionExpr: d.conditionExpr || undefined,
 			archiveMode: d.archiveMode ?? 'manual',
 			archiveStatus: d.archiveStatus || undefined,
@@ -274,6 +282,7 @@
 		// would this event do?" with the engine's exact rules.
 		const triggers = {
 			nameTemplate: d.nameTemplate,
+			topicTemplate: d.topicTemplate,
 			creationMode: d.creationMode,
 			triggerStatus: d.triggerStatus,
 			condition: d.conditionExpr,
@@ -703,6 +712,22 @@
 
 							<Field.FieldSeparator />
 
+							<Field.Field>
+								<Field.FieldLabel>Channel topic</Field.FieldLabel>
+								<Input
+									bind:value={d.topicTemplate}
+									class="font-mono text-xs"
+									placeholder={DEFAULT_TOPIC_TEMPLATE}
+									oninput={() => markEdited(d)}
+								/>
+								<Field.FieldDescription>
+									Template for the channel's topic — the backlink to the Linear issue. It re-renders on
+									issue updates, so status changes stay in sync. Clear it to disable the topic.
+								</Field.FieldDescription>
+							</Field.Field>
+
+							<Field.FieldSeparator />
+
 							{@render memberPicker(d)}
 						</Field.FieldGroup>
 
@@ -763,6 +788,10 @@
 										<div class="flex items-center gap-2">
 											<span class="text-muted-foreground text-xs">Channel name</span>
 											<code class="font-mono text-xs">{r.name || '(empty)'}</code>
+										</div>
+										<div class="flex items-center gap-2">
+											<span class="text-muted-foreground text-xs">Channel topic</span>
+											<code class="font-mono text-xs">{r.topic || '(empty)'}</code>
 										</div>
 										<div class="flex items-center gap-2">
 											<span class="text-muted-foreground text-xs">Would create channel</span>

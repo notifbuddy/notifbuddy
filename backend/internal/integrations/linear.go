@@ -660,11 +660,13 @@ func (s *Service) HandleLinearAssetProxy(w http.ResponseWriter, r *http.Request)
 // LinearIssue is the subset of a Linear issue the sync engine needs (for
 // channel naming/status checks and resolving which team's config applies).
 type LinearIssue struct {
-	ID         string
-	Identifier string // e.g. "SKO-178"
-	Title      string
-	StateName  string // workflow state name (e.g. "Done")
-	TeamID     string // owning team's id (resolves the applicable config)
+	ID          string
+	Identifier  string // e.g. "SKO-178"
+	Title       string
+	Description string // issue body markdown (for the channel intro message)
+	URL         string // canonical Linear issue URL (for backlinks)
+	StateName   string // workflow state name (e.g. "Done")
+	TeamID      string // owning team's id (resolves the applicable config)
 }
 
 // linearIssueQuery fetches the fields templates and sync need when injecting
@@ -761,7 +763,11 @@ func (s *Service) LinearIssueByID(ctx context.Context, orgID, issueID string) (L
 	if err != nil {
 		return LinearIssue{}, err
 	}
-	return LinearIssue{ID: i.ID, Identifier: i.Identifier, Title: i.Title, StateName: i.State.Name, TeamID: i.Team.ID}, nil
+	return LinearIssue{
+		ID: i.ID, Identifier: i.Identifier, Title: i.Title,
+		Description: i.Description, URL: i.URL,
+		StateName: i.State.Name, TeamID: i.Team.ID,
+	}, nil
 }
 
 // LinearIssueMapByID fetches an issue and returns a map shaped like Linear's
