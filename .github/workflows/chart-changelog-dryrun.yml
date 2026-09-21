@@ -1,0 +1,52 @@
+name: Chart changelog dry run
+
+# Manual check for the "Set artifacthub.io/changes from the release notes"
+# step in release.yml (NOT-82) — lets you verify that step against a real,
+# already-published GitHub Release's notes without cutting a new tag. Builds
+# nothing, pushes nothing: just mutates a throwaway checkout of Chart.yaml
+# the same way release.yml would, then confirms the result still parses.
+#
+# Keep this step's shell in sync with the one in release.yml — it's a
+# deliberate copy, not a shared script, so it stays a faithful dry run of
+# exactly what ships there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to pull notes from, e.g. v0.20.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+
+      - name: Set artifacthub.io/changes from the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_VERSION: ${{ inputs.tag }}
+        run: |
+          body=$(gh release view "$APP_VERSION" --repo "${{ github.repository }}" --json body -q .body | tr -d '\r')
+          items=$(printf '%s\n' "$body" | grep -E '^[*-] ' | sed -E 's/^[*-][[:space:]]+//')
+          if [ -z "$items" ]; then
+            echo "::notice::no changelog bullets in the $APP_VERSION release notes — skipping artifacthub.io/changes"
+            exit 0
+          fi
+          {
+            echo "  artifacthub.io/changes: |"
+            while IFS= read -r line; do
+              printf '    - "%s"\n' "$(printf '%s' "$line" | sed 's/"/\\"/g')"
+            done <<<"$items"
+          } >>charts/notifbuddy/Chart.yaml
+
+      - name: Show the resulting annotation
+        run: sed -n '/annotations:/,$p' charts/notifbuddy/Chart.yaml
+
+      - name: Confirm Chart.yaml still parses
+        run: helm show chart charts/notifbuddy

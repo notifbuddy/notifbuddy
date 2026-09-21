@@ -275,7 +275,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          body=$(gh release view "$APP_VERSION" --repo "${{ github.repository }}" --json body -q .body)
+          # GitHub's API returns the release body with CRLF line endings. Left
+          # in, the trailing \r lands inside the double-quoted YAML scalar
+          # below and breaks the parse ("could not find expected ':'").
+          body=$(gh release view "$APP_VERSION" --repo "${{ github.repository }}" --json body -q .body | tr -d '\r')
           items=$(printf '%s\n' "$body" | grep -E '^[*-] ' | sed -E 's/^[*-][[:space:]]+//')
           if [ -z "$items" ]; then
             echo "::notice::no changelog bullets in the $APP_VERSION release notes — skipping artifacthub.io/changes"
