@@ -40,6 +40,9 @@ image:
   registry: ghcr.io/notifbuddy
   # -- Image tag. Defaults to the chart's appVersion.
   tag: ""
+  # @schema
+  # enum: [Always, IfNotPresent, Never]
+  # @schema
   pullPolicy: IfNotPresent
   # -- Image pull secrets, if you mirror the images somewhere private.
   pullSecrets: []
@@ -75,6 +78,9 @@ postgresql:
   # -- Pull policy for the Postgres image. Separate from `image.pullPolicy`,
   # which applies to notifbuddy's own images: setting that to Never (to use
   # side-loaded images) must not stop Kubernetes pulling this one.
+  # @schema
+  # enum: [Always, IfNotPresent, Never]
+  # @schema
   pullPolicy: IfNotPresent
   # -- Volume size for the bundled Postgres.
   storage: 8Gi
@@ -129,8 +135,14 @@ dashboard:
 
 logging:
   # -- text or json.
+  # @schema
+  # enum: [text, json]
+  # @schema
   format: json
   # -- debug, info, warn or error.
+  # @schema
+  # enum: [debug, info, warn, error]
+  # @schema
   level: info
   # Ship every backend log record to Axiom in addition to stdout. Off by
   # default: stdout is the source of truth, and a self-hosted install has no
