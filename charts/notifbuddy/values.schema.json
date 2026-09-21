@@ -1,0 +1,638 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "affinity": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "affinity",
+      "type": "object"
+    },
+    "authd": {
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "default": 1,
+          "title": "replicas",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "default": "100m",
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "128Mi",
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "authd",
+      "type": "object"
+    },
+    "backend": {
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "default": 1,
+          "title": "replicas",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "default": "100m",
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "128Mi",
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "backend",
+      "type": "object"
+    },
+    "dashboard": {
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "default": 1,
+          "title": "replicas",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "default": "50m",
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "64Mi",
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "dashboard",
+      "type": "object"
+    },
+    "database": {
+      "additionalProperties": false,
+      "properties": {
+        "authUrl": {
+          "default": "",
+          "description": "External Postgres URL for the auth database. Auth data is kept in its\nown database so it never shares a schema with application data.",
+          "title": "authUrl",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "description": "External Postgres URL for the application database. Setting this\ndisables the bundled Postgres.",
+          "title": "url",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "database",
+      "type": "object"
+    },
+    "domain": {
+      "default": "",
+      "description": "Parent domain everything is served under. Required unless every entry in\n`hosts` is set explicitly.\n\nThe session cookie is issued on this domain so the dashboard, API and auth\nservice all see it — which is why the three hostnames must share a parent.",
+      "title": "domain",
+      "type": "string"
+    },
+    "existingSecret": {
+      "default": "",
+      "description": "Name of a Secret you manage yourself, holding every sensitive value.\n\n**Set this if you deploy with ArgoCD, Flux, or anything else that renders\nwith `helm template`.** Left empty, the chart generates the secrets it needs\non first install and reads them back on upgrade — but a GitOps renderer has\nno cluster access, so it cannot read them back and will generate fresh values\non every sync. That silently rotates the session key and the integration\nencryption key: everyone gets logged out and stored integration tokens stop\ndecrypting.\n\nKeys read from it, when set: BETTER_AUTH_SECRET, INTEGRATION_ENC_KEY,\nSLACK_LOGIN_CLIENT_SECRET, DATABASE_URL, AUTHD_DATABASE_URL, AXIOM_TOKEN and\nBETTER_STACK_OTLP_ENDPOINT/BETTER_STACK_SOURCE_TOKEN when the observability\nsinks below are on, CHATWOOT_HMAC_TOKEN when support identity validation is\non, and any integration secrets you enable below.",
+      "title": "existingSecret",
+      "type": "string"
+    },
+    "global": {
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "hosts": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "default": "",
+          "description": "API hostname. Defaults to api.\u003cdomain\u003e.",
+          "title": "api",
+          "type": "string"
+        },
+        "auth": {
+          "default": "",
+          "description": "Auth service hostname. Defaults to auth.\u003cdomain\u003e.",
+          "title": "auth",
+          "type": "string"
+        },
+        "dashboard": {
+          "default": "",
+          "description": "Dashboard hostname. Defaults to app.\u003cdomain\u003e.",
+          "title": "dashboard",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "hosts",
+      "type": "object"
+    },
+    "image": {
+      "additionalProperties": false,
+      "properties": {
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ],
+          "required": [],
+          "title": "pullPolicy"
+        },
+        "pullSecrets": {
+          "description": "Image pull secrets, if you mirror the images somewhere private.",
+          "items": {
+            "required": []
+          },
+          "title": "pullSecrets",
+          "type": "array"
+        },
+        "registry": {
+          "default": "ghcr.io/notifbuddy",
+          "description": "Registry and org holding the three images.",
+          "title": "registry",
+          "type": "string"
+        },
+        "tag": {
+          "default": "",
+          "description": "Image tag. Defaults to the chart's appVersion.",
+          "title": "tag",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "image",
+      "type": "object"
+    },
+    "ingress": {
+      "additionalProperties": false,
+      "properties": {
+        "annotations": {
+          "additionalProperties": false,
+          "description": "Annotations applied to the Ingress. Point cert-manager at your issuer\nhere, e.g. cert-manager.io/cluster-issuer: letsencrypt-prod",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "className": {
+          "default": "",
+          "description": "IngressClass name, e.g. nginx or traefik.",
+          "title": "className",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "tls": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "secretName": {
+              "default": "",
+              "description": "Secret holding the certificate. Empty lets cert-manager create\n\u003crelease\u003e-tls from the annotations above.",
+              "title": "secretName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "tls",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "ingress",
+      "type": "object"
+    },
+    "integrations": {
+      "additionalProperties": false,
+      "description": "Optional integrations. Each is off until its credentials are set, and the\napp reports it as \"not configured\" rather than failing.",
+      "properties": {
+        "cloudflare": {
+          "additionalProperties": false,
+          "description": "Cloudflare Workers AI parses\nmention resolves to \"no action\" — the rest of the product still works.",
+          "properties": {
+            "accountId": {
+              "default": "",
+              "title": "accountId",
+              "type": "string"
+            },
+            "apiToken": {
+              "default": "",
+              "title": "apiToken",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "model": {
+              "default": "@cf/meta/llama-3.1-8b-instruct",
+              "title": "model",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "cloudflare",
+          "type": "object"
+        },
+        "email": {
+          "additionalProperties": false,
+          "description": "Transactional email, used for organisation invitations. Without it,\ninvitations are logged by the auth service instead of sent.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "from": {
+              "default": "",
+              "title": "from",
+              "type": "string"
+            },
+            "resendApiKey": {
+              "default": "",
+              "title": "resendApiKey",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "email",
+          "type": "object"
+        },
+        "linear": {
+          "additionalProperties": false,
+          "properties": {
+            "clientId": {
+              "default": "",
+              "title": "clientId",
+              "type": "string"
+            },
+            "clientSecret": {
+              "default": "",
+              "title": "clientSecret",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "webhookSecret": {
+              "default": "",
+              "description": "Required when Linear is enabled, for the same reason as Slack's.",
+              "title": "webhookSecret",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "linear",
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "properties": {
+            "clientId": {
+              "default": "",
+              "title": "clientId",
+              "type": "string"
+            },
+            "clientSecret": {
+              "default": "",
+              "title": "clientSecret",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "signingSecret": {
+              "default": "",
+              "description": "Required when Slack is enabled: the app refuses to start without it,\nbecause the webhook handler fails closed and would drop every event.",
+              "title": "signingSecret",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "slack",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "integrations",
+      "type": "object"
+    },
+    "logging": {
+      "additionalProperties": false,
+      "properties": {
+        "axiom": {
+          "additionalProperties": false,
+          "description": "Ship every backend log record to Axiom in addition to stdout. Off by\ndefault: stdout is the source of truth, and a self-hosted install has no\nreason to point at somebody else's Axiom account. The notifbuddy cloud\ndeployment turns it on from iac/helmfile/values.yaml.",
+          "properties": {
+            "dataset": {
+              "default": "backend",
+              "description": "Axiom dataset records are ingested into.",
+              "title": "dataset",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Enable Axiom log shipping. Requires `token` and `dataset`.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "token": {
+              "default": "",
+              "description": "Axiom ingest token. Ignored when `existingSecret` is set, which must\nthen carry AXIOM_TOKEN.",
+              "title": "token",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "axiom",
+          "type": "object"
+        },
+        "format": {
+          "default": "json",
+          "description": "text or json.",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "required": [],
+          "title": "format"
+        },
+        "level": {
+          "default": "info",
+          "description": "debug, info, warn or error.",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "required": [],
+          "title": "level"
+        }
+      },
+      "required": [],
+      "title": "logging",
+      "type": "object"
+    },
+    "nodeSelector": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "nodeSelector",
+      "type": "object"
+    },
+    "otel": {
+      "additionalProperties": false,
+      "description": "OpenTelemetry trace export over OTLP/HTTP. Same posture as Axiom: off by\ndefault, on for the notifbuddy cloud deployment.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable trace export. Requires `endpoint` and `token`.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "default": "",
+          "description": "OTLP HTTP ingest base URL with no signal path, e.g.\nhttps://in.example.betterstackdata.com — the exporter appends /v1/traces.\nIgnored when `existingSecret` is set, which must then carry\nBETTER_STACK_OTLP_ENDPOINT.",
+          "title": "endpoint",
+          "type": "string"
+        },
+        "serviceName": {
+          "default": "notifbuddy-backend",
+          "description": "The service.name resource attribute on exported spans.",
+          "title": "serviceName",
+          "type": "string"
+        },
+        "token": {
+          "default": "",
+          "description": "Ingest source token, sent as `Authorization: Bearer`. Ignored when\n`existingSecret` is set, which must then carry BETTER_STACK_SOURCE_TOKEN.",
+          "title": "token",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "otel",
+      "type": "object"
+    },
+    "podAnnotations": {
+      "additionalProperties": false,
+      "description": "Extra pod annotations, applied to all three workloads.",
+      "required": [],
+      "title": "podAnnotations",
+      "type": "object"
+    },
+    "postgresql": {
+      "additionalProperties": false,
+      "description": "Bundled Postgres.\n\n**Evaluation only.** It is a single replica with no backups, no failover and\nno supported major-version upgrade path — bumping the image tag over an\nexisting volume leaves Postgres refusing to start, with no pg_upgrade step\nto get you across. For anything you care about, run\nPostgres separately (CloudNativePG is the usual answer on Kubernetes) and\nset `database.url` / `database.authUrl` below, which switches this off.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "image": {
+          "default": "postgres:16",
+          "title": "image",
+          "type": "string"
+        },
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "description": "Pull policy for the Postgres image. Separate from `image.pullPolicy`,\nwhich applies to notifbuddy's own images: setting that to Never (to use\nside-loaded images) must not stop Kubernetes pulling this one.",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ],
+          "required": [],
+          "title": "pullPolicy"
+        },
+        "resources": {
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "default": "100m",
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "256Mi",
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        },
+        "storage": {
+          "default": "8Gi",
+          "description": "Volume size for the bundled Postgres.",
+          "title": "storage",
+          "type": "string"
+        },
+        "storageClass": {
+          "default": "",
+          "description": "StorageClass. Empty uses the cluster default.",
+          "title": "storageClass",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "postgresql",
+      "type": "object"
+    },
+    "slack": {
+      "additionalProperties": false,
+      "description": "Slack OAuth (Sign in with Slack / OIDC) — the only sign-in method, so this\nis required. Typically the same Slack app as `integrations.slack` below;\nadd the redirect URL https://\u003cauth host\u003e/api/auth/callback/slack to the\napp at https://api.slack.com/apps.",
+      "properties": {
+        "clientId": {
+          "default": "",
+          "description": "Slack app client ID.",
+          "title": "clientId",
+          "type": "string"
+        },
+        "clientSecret": {
+          "default": "",
+          "description": "Slack app client secret. Ignored when `existingSecret` is set.",
+          "title": "clientSecret",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "slack",
+      "type": "object"
+    },
+    "support": {
+      "additionalProperties": false,
+      "description": "In-app support widget. Off by default: it points customers at *our* support\ninbox, which is not what you want on your own install — enable it only with\nyour own Chatwoot inbox.",
+      "properties": {
+        "chatwoot": {
+          "additionalProperties": false,
+          "properties": {
+            "baseUrl": {
+              "default": "https://app.chatwoot.com",
+              "description": "Chatwoot origin. Leave as Cloud, or point at your own instance.",
+              "title": "baseUrl",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Enable the Chatwoot support widget on the dashboard.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hmacToken": {
+              "default": "",
+              "description": "Identity validation token from Inboxes → Settings → Configuration.\nWithout it the reported identity is unverified. Ignored when\n`existingSecret` is set, which must then carry CHATWOOT_HMAC_TOKEN.",
+              "title": "hmacToken",
+              "type": "string"
+            },
+            "websiteToken": {
+              "default": "",
+              "description": "Website inbox token. Public: it ships to the browser.",
+              "title": "websiteToken",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "chatwoot",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "support",
+      "type": "object"
+    },
+    "tolerations": {
+      "items": {
+        "required": []
+      },
+      "title": "tolerations",
+      "type": "array"
+    }
+  },
+  "required": [],
+  "type": "object"
+}

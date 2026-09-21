@@ -1,0 +1,49 @@
+name: Helm values schema
+
+# Checks that charts/notifbuddy/values.schema.json is what helm-schema would
+# generate from values.yaml right now — fails if someone edited one without
+# the other. Manual (workflow_dispatch) for now while this is new; once
+# proven out this should switch to triggering automatically, scoped to only
+# the files that can make the schema stale:
+#
+#   on:
+#     pull_request:
+#       paths:
+#         - "charts/notifbuddy/values.yaml"
+#         - "charts/notifbuddy/values.schema.json"
+#         - "charts/notifbuddy/Chart.yaml"
+#         - ".github/workflows/chart-schema.yml"
+#
+# To regenerate locally after editing values.yaml (needs helm-schema from
+# https://github.com/dadav/helm-schema):
+#
+#   helm-schema -c charts/notifbuddy -k required -a
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HELM_SCHEMA_VERSION: "0.23.5"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install helm-schema
+        run: |
+          curl -sSfL "https://github.com/dadav/helm-schema/releases/download/${HELM_SCHEMA_VERSION}/helm-schema_${HELM_SCHEMA_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C /usr/local/bin helm-schema
+
+      # -k required: this chart's requiredness is conditional (domain-or-hosts,
+      # slack unless existingSecret, ...) and enforced at template time — see
+      # the "Misconfiguration is refused" step in chart-ci.yml — not something
+      # plain JSON Schema `required` can express, so it's left off entirely
+      # rather than generated wrong.
+      - name: Check values.schema.json is current
+        run: |
+          helm-schema -c charts/notifbuddy -k required -a --check

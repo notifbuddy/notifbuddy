@@ -144,6 +144,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.image }}
+          # org.opencontainers.image.licenses drives Artifact Hub's per-image
+          # license display — the repo is Apache-2.0 (see LICENSE), same as
+          # the chart's artifacthub.io/license annotation.
+          labels: |
+            org.opencontainers.image.licenses=Apache-2.0
 
       # Pushed by digest with no tag: tagging happens once, in the manifest job,
       # so a half-finished release never leaves :latest pointing at one arch.
@@ -235,12 +240,15 @@ jobs:
 
   # The chart publishes only after every image manifest is in place: a chart
   # that references images which do not exist yet is worse than no chart.
+  # Also needs cli, which is what actually creates the GitHub Release whose
+  # body backs the artifacthub.io/changes annotation below.
   chart:
-    needs: manifest
+    needs: [manifest, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: azure/setup-helm@v5
+      - uses: sigstore/cosign-installer@v3
 
       - name: Log in to GHCR
         run: |
@@ -258,6 +266,27 @@ jobs:
           tag="${{ github.ref_name }}"
           echo "CHART_VERSION=${tag#v}" >>"$GITHUB_ENV"
           echo "APP_VERSION=$tag" >>"$GITHUB_ENV"
+
+      # Artifact Hub reads artifacthub.io/changes as the release's changelog.
+      # cli already created a GitHub Release for this tag with goreleaser's
+      # generated notes, so reuse those instead of maintaining a second copy —
+      # every bullet in the release body becomes one changes entry.
+      - name: Set artifacthub.io/changes from the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(gh release view "$APP_VERSION" --repo "${{ github.repository }}" --json body -q .body)
+          items=$(printf '%s\n' "$body" | grep -E '^[*-] ' | sed -E 's/^[*-][[:space:]]+//')
+          if [ -z "$items" ]; then
+            echo "::notice::no changelog bullets in the $APP_VERSION release notes — skipping artifacthub.io/changes"
+            exit 0
+          fi
+          {
+            echo "  artifacthub.io/changes: |"
+            while IFS= read -r line; do
+              printf '    - "%s"\n' "$(printf '%s' "$line" | sed 's/"/\\"/g')"
+            done <<<"$items"
+          } >>charts/notifbuddy/Chart.yaml
 
       # Re-running a release, or moving a tag, would otherwise republish over
       # a version people have already pinned and silently change what it
@@ -290,6 +319,16 @@ jobs:
         run: |
           helm push "/tmp/chart/notifbuddy-${CHART_VERSION}.tgz" \
             "oci://${{ env.REGISTRY }}/charts"
+
+      # Keyless: signs with the job's own OIDC identity (id-token: write,
+      # already granted at workflow level) rather than a managed private key.
+      # Artifact Hub shows the chart as "Signed" once it finds this in the
+      # registry, no extra annotation needed.
+      - name: Sign the chart
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign --yes "${{ env.REGISTRY }}/charts/notifbuddy:$CHART_VERSION"
 
       - name: Verify what landed in the registry
         run: |
