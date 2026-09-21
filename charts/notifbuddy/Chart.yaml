@@ -32,7 +32,7 @@ maintainers:
     url: https://github.com/notifbuddy
 
 annotations:
-  artifacthub.io/license: MIT
+  artifacthub.io/license: Apache-2.0
   # Artifact Hub scans these for vulnerabilities, so the tags have to be the
   # ones this chart actually deploys. The placeholder below is rewritten to
   # the release tag at package time, alongside version and appVersion.
