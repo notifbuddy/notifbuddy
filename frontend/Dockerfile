@@ -14,7 +14,7 @@
 # Pinned to the build platform: the output is static files, identical whatever
 # the target architecture, so there is no reason to run npm under emulation
 # when building the arm64 image.
-FROM --platform=$BUILDPLATFORM node:25-bookworm-slim AS build
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim AS build
 WORKDIR /app/frontend
 
 # Deps first, for layer caching.
